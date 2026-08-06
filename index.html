@@ -25,9 +25,9 @@
   html,body{height:100%}
   body{background:var(--paper);color:var(--ink);overflow:hidden;
     font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
-    -webkit-font-smoothing:antialiased;font-size:14px}
-  .app{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative;
-    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+    -webkit-font-smoothing:antialiased;font-size:14px;
+    padding-top:var(--safe-top); box-sizing:border-box}
+  .app{height:calc(100dvh - var(--safe-top));display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative}
   .tabs{display:flex;border:1px solid var(--ink)}
   .tabs button{font-family:inherit;font-size:12.5px;padding:5px 14px;background:var(--paper);
     border:none;cursor:pointer;color:var(--muted);white-space:nowrap;letter-spacing:.05em}
@@ -184,8 +184,7 @@
   #fontState.ok{color:var(--ok)} #fontState.err{color:var(--grid)}
 
   .modal{position:fixed;inset:0;background:rgba(22,19,13,.55);display:none;z-index:50;
-    align-items:center;justify-content:center;
-    padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))}
+    align-items:center;justify-content:center;padding:24px}
   .modal.on{display:flex}
   .sheet{background:var(--paper);border:1px solid var(--ink);width:min(900px,100%);
     max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(22,19,13,.3)}
@@ -211,8 +210,7 @@
 
 
   /* ---------- 展示分頁 ---------- */
-  #showcase{position:absolute;left:0;right:0;top:calc(50px + env(safe-area-inset-top));
-    bottom:env(safe-area-inset-bottom);display:none;
+  #showcase{position:absolute;left:0;right:0;top:50px;bottom:0;display:none;
     grid-template-rows:auto minmax(0,1fr) auto;background:var(--sbg,#f1ece1)}
   #showcase.on{display:grid}
   .scbar{display:flex;align-items:center;gap:13px;padding:0 14px;height:46px;
@@ -947,8 +945,6 @@ function makeSegs(pts,bend,fillet,cv){
      以前把它們當折線轉圓角，辶、之、廴 這類部件就會歪掉 */
   if(cv==="cubic"&&pts.length===4)
     return [{c3:1,a:pts[0],c1:pts[1],c2:pts[2],b:pts[3]}];
-  if(cv==="quad"&&pts.length===3)
-    return [{q:1,a:pts[0],c:pts[1],b:pts[2]}];
   if(cv==="lineQuad"&&pts.length===4)
     return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c:pts[2],b:pts[3]}];
   if(pts.length===2){
@@ -994,93 +990,70 @@ function sampleSkeleton(pts,bend,fillet,N,cv){
   return out;
 }
 const widths=f=>{const hw=f.weight*2/(1+f.contrast);return{hw,sw:hw*f.contrast};};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /* KAGE 的每一筆都帶「頭形狀 a2」「尾形狀 a3」，以前我只用了鉤、其他靠方向猜。
    個位數就是形狀：2 接續、3 腳跟、4 鉤、5 彎、7 左出鋒、8 右出鋒、0 開放。
    h/e 有值時就照它畫，沒有才退回舊的靠筆種猜。 */
-function kageExpression(f){
-  /* KAGE 的黑體原樣本來是等寬骨架。只有明體／手寫程度升高時，
-     才逐漸加入撇捺粗細與尖端，避免黑體被畫成毛筆字。 */
-  return Math.max(0,Math.min(1,Math.max(f.hand||0,(f.finish||0)*0.86,Math.max(0,(f.contrast||1)-1)*0.48)));
-}
 function endFactor(kind,x,f,st,isTail){ /* x=0 在該端點，x=1 在另一端 */
-  const kg=!!st.kage, expr=kg?kageExpression(f):1;
-  if(kg && expr<0.12) return 1;       /* KAGE Gothic：端點代碼 7/8 不代表尖端 */
-  let v=1;
+  /* 撇、捺、提本身已經有筆型粗細曲線，KAGE 的出鋒代碼只補端點，避免二次收尖。 */
+  if(isTail && ((kind==="taperL"&&(st.t==="pie"||st.t==="ti")) ||
+                (kind==="taperR"&&st.t==="na"))) return 1;
   switch(kind){
-    case "taperL":
-      /* 只有撇／提等斜筆才收尖；橫、豎、折不再莫名變三角形。 */
-      if(!(st.t==="pie"||st.t==="ti"||st.t==="dian")) return 1;
-      v=Math.max(0.20,1-0.80*Math.pow(1-x,1.18)); break;
-    case "taperR":
-      if(!(st.t==="na"||st.t==="dian")) return 1;
-      v=Math.max(0.24,Math.pow(x,0.62))*(1+0.12*(1-x)*(1-x)); break;
+    case "taperL": return Math.max(0.10,1-0.90*Math.pow(1-x,1.22));
+    case "taperR": return Math.max(0.14,Math.pow(x,0.58))*(1+0.20*(1-x)*(1-x));
     case "point":{
+      /* 黑體保持飽滿；只有明體程度升高時才逐漸形成尖起筆。 */
       const g=Math.min(1,(f&&f.finish!==undefined?f.finish:0)/0.72);
       if(g<=0.02) return 1;
-      v=1-g*(1-Math.max(0.32,Math.pow(x,0.66))); break;
+      return 1-g*(1-Math.max(0.24,Math.pow(x,0.62)));
     }
-    /* hook／bend 已經用真正的尾段幾何處理，不再只把筆寬硬縮成尖頭。 */
-    case "hook": case "bend": case "conn": case "kakato": default: return 1;
-  }
-  return kg ? 1-expr*(1-v) : v;
-}
-function expressiveWidthAt(st,t,tan,f){
-  const {hw,sw}=widths(f),k=st.w||1;
-  switch(st.t){
-    case "heng":return hw*k;
-    case "shu": return sw*k;
-    case "zhe":{const q=Math.abs(tan[1])/Math.max(1e-6,len(tan));
-      return (hw+(sw-hw)*q)*k;}
-    case "pie": return sw*k*Math.max(0.22,1-0.78*Math.pow(t,1.24));
-    case "na":  return sw*k*1.03*Math.max(0.28,0.28+0.72*Math.pow(t,0.82))*(1+f.finish*0.20*smooth(0.72,1,t));
-    case "dian":return sw*k*(0.54+0.46*Math.pow(t,0.72));
-    case "ti":  return sw*k*1.05*Math.max(0.22,1-0.78*Math.pow(t,1.12));
-    default:{const q=Math.abs(tan[1])/Math.max(1e-6,len(tan));return (hw+(sw-hw)*q)*k;}
+    case "hook":   return Math.max(0.18,1-0.86*Math.pow(1-x,2.05));
+    case "bend":   return 0.68+0.32*Math.pow(x,0.55);  /* 彎尾略收，但不畫成鉤 */
+    case "kakato": return 1+0.10*Math.pow(1-x,2);      /* 腳跟靠端點微微加厚 */
+    default:       return 1;
   }
 }
 function baseWidthAt(st,t,tan,f){
-  const {hw,sw}=widths(f),k=st.w||1;
-  if(st.kage){
-    const q=Math.abs(tan[1])/Math.max(1e-6,len(tan));
-    const gothic=(hw+(sw-hw)*q)*k;    /* KAGE Gothic 的基本邏輯：沿整筆等寬 */
-    const expr=kageExpression(f);
-    if(expr<0.015) return gothic;
-    const styled=expressiveWidthAt(st,t,tan,f);
-    return gothic+(styled-gothic)*expr;
+  const {hw,sw}=widths(f),k=st.w||1,isK=!!st.kage;
+  switch(st.t){
+    case "heng":return hw*k;
+    case "shu": return sw*k;
+    case "zhe":{const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
+      return (hw+(sw-hw)*s)*k;}
+    case "pie": return sw*k*Math.max(isK?0.15:0.09,1-(isK?0.82:0.90)*Math.pow(t,isK?1.18:1.30));
+    case "na":  return sw*k*(isK?1.00:1.06)*Math.max(isK?0.19:0.13,Math.pow(t,isK?0.88:0.80))*(1+f.finish*(isK?0.18:0.30)*smooth(0.72,1,t));
+    case "dian":return sw*k*((isK?0.44:0.34)+(isK?0.58:0.72)*Math.pow(t,isK?0.78:0.70));
+    case "ti":  return sw*k*(isK?1.03:1.12)*Math.max(isK?0.16:0.10,1-Math.pow(t,isK?1.03:1.15));
+    default:{
+      const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
+      return (hw+(sw-hw)*s)*k;
+    }
   }
-  return expressiveWidthAt(st,t,tan,f);
 }
 function widthAt(st,t,tan,f){
   let w=baseWidthAt(st,t,tan,f);
+  /* KAGE 頭尾語意是修飾層，不再取代撇／捺／點／提本身的粗細邏輯。 */
   if(st.h) w*=endFactor(st.h,t,f,st,false);
   if(st.e) w*=endFactor(st.e,1-t,f,st,true);
+  if(st.kage){
+    const {hw,sw}=widths(f),k=st.w||1;
+    const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
+    const mono=(hw+(sw-hw)*s)*k;
+    let mix=({heng:0.10,shu:0.10,zhe:0.22,pie:0.18,na:0.16,ti:0.14,dian:0.10}[st.t]||0.12);
+    mix*=1-Math.min(0.75,(f.finish||0)*0.65);
+    w=w*(1-mix)+mono*mix;
+  }
   return w;
 }
-function capForKage(kind,st,f,isTail){
-  const r=f.round;
-  const expr=kageExpression(f);
-  if(kind==="conn"||kind==="kakato") return 0;       /* 接續端是平切矩形 */
-  if((kind==="taperL"||kind==="taperR") && expr>0.20){
-    const ok=kind==="taperL"?(st.t==="pie"||st.t==="ti"||st.t==="dian")
-                              :(st.t==="na"||st.t==="dian");
-    if(ok) return "pt";
-  }
-  if(kind==="point" && f.finish>0.32) return "pt";
-  /* hook／bend 的末端已另加尾段，這裡只做普通端帽。 */
-  return r;
-}
+const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"pt",
+              conn:"flat",kakato:"kakato",bend:"bend"};
 function caps(st,f){
   const r=f.round;
-  if(st.kage){
-    const uroko=f.finish>0.45&&st.t==="heng"&&(!st.e||st.e==="open");
-    return {a:capForKage(st.h||"open",st,f,false),
-            b:uroko?"uroko":capForKage(st.e||"open",st,f,true)};
-  }
   if(st.h||st.e){
-    const uroko=f.finish>0.45&&st.t==="heng"&&(!st.e||st.e==="open");
-    const map={taperL:"pt",taperR:"pt",point:"pt",hook:"pt"};
-    const ha=(st.h==="point"&&f.finish<=0.3)?r:(map[st.h]||r);
-    return {a:ha,b:uroko?"uroko":(map[st.e]||r)};
+    /* 明體：橫畫開放的收筆長出三角（うろこ） */
+    const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
+    const ha = (st.h==="point" && f.finish<=0.3) ? r : (CAP_OF[st.h] || r);
+    return {a: ha, b: uroko ? "uroko" : (CAP_OF[st.e] || r)};
   }
   switch(st.t){
     case "pie": return {a:r,b:"pt"};
@@ -1092,21 +1065,34 @@ function caps(st,f){
   }
 }
 function capCmds(kind,tip,T,w,dir,to,out,f){
+  if(kind==="flat"){out.push(["L",to[0],to[1]]);return;}
+  if(kind==="kakato"){
+    /* 腳跟是短而平的外伸，不再和接續端使用同一個半筆寬延伸。 */
+    const last=out[out.length-1];
+    const from=last[0]==="Q"?[last[3],last[4]]:[last[1],last[2]];
+    const ex=w*0.30;
+    out.push(["L",from[0]+T[0]*ex*dir,from[1]+T[1]*ex*dir]);
+    out.push(["L",to[0]+T[0]*ex*dir,to[1]+T[1]*ex*dir]);
+    out.push(["L",to[0],to[1]]);return;
+  }
+  if(kind==="bend"){
+    /* 彎尾保留圓潤延伸，但比一般圓頭短，避免變成水管頭。 */
+    out.push(["Q",tip[0]+T[0]*w*0.62*dir,tip[1]+T[1]*w*0.62*dir,to[0],to[1]]);return;
+  }
   if(kind==="uroko"){
+    /* 明體橫畫尾端的三角（うろこ）：先往外上方頂出一個角，再收回另一側 */
     const g=(f&&f.finish!==undefined?f.finish:1);
     const nx=-T[1],ny=T[0];
-    const ex=tip[0]+T[0]*w*0.30*dir,ey=tip[1]+T[1]*w*0.30*dir;
-    out.push(["L",ex-nx*w*1.15*g,ey-ny*w*1.15*g]);
-    out.push(["L",ex+T[0]*w*1.05*g*dir,ey+T[1]*w*1.05*g*dir]);
-    out.push(["L",to[0],to[1]]);return;
+    const ex=tip[0]+T[0]*w*0.30*dir, ey=tip[1]+T[1]*w*0.30*dir;
+    out.push(["L", ex-nx*w*1.15*g, ey-ny*w*1.15*g]);
+    out.push(["L", ex+T[0]*w*1.05*g*dir, ey+T[1]*w*1.05*g*dir]);
+    out.push(["L", to[0], to[1]]); return;
   }
-  if(kind==="pt"){
-    out.push(["L",tip[0]+T[0]*w*0.48*dir,tip[1]+T[1]*w*0.48*dir]);
-    out.push(["L",to[0],to[1]]);return;
-  }
+  if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
+    out.push(["L",to[0],to[1]]);return;}
   const k=typeof kind==="number"?kind:0;
   if(k<0.02){out.push(["L",to[0],to[1]]);return;}
-  out.push(["Q",tip[0]+T[0]*w*1.18*k*dir,tip[1]+T[1]*w*1.18*k*dir,to[0],to[1]]);
+  out.push(["Q",tip[0]+T[0]*w*1.28*k*dir,tip[1]+T[1]*w*1.28*k*dir,to[0],to[1]]);
 }
 function contourArea(c){
   const p=c.map(x=>x[0]==="Q"?[x[3],x[4]]:[x[1],x[2]]);
@@ -1160,48 +1146,28 @@ function rdp(pts,tol){
   return out;
 }
 function strokeOutline(st,f,wScale,NS){
-  const {hw}=widths(f);
-  let fillet=hw*(0.10+0.62*f.round)*(st.fr||1);
-  if(st.kage&&st.t==="zhe"){
-    /* KAGE 的 3/4/7 類型在原引擎會以 kMage 做真正的轉彎，半徑約一個筆寬。
-       舊版只留 3px 小圓角，折筆會像破裂的箭頭。 */
-    fillet=hw*(0.68+0.46*f.round)*(st.ka===4?1.18:1);
-  }
-  let SP=st.p.map(q=>q.slice());
-  const firstTan=()=>[SP[1][0]-SP[0][0],SP[1][1]-SP[0][1]];
-  const lastTan=()=>{const m=SP.length-1;return[SP[m][0]-SP[m-1][0],SP[m][1]-SP[m-1][1]];};
-
-  /* Gothic 原引擎：2 延伸半筆寬，3（kakato）延伸三個半筆寬；
-     都是平切，不是三角端帽。 */
-  if(st.kage&&(st.h==="conn"||st.h==="kakato")){
-    const tan=firstTan(),full=widthAt(st,0,tan,f)*wScale;
-    const ext=full*(st.h==="conn"?0.50:1.42),d=unit([-tan[0],-tan[1]]);
-    SP[0]=[SP[0][0]+d[0]*ext,SP[0][1]+d[1]*ext];
-  }
-  if(st.kage&&(st.e==="conn"||st.e==="kakato")){
-    const m=SP.length-1,tan=lastTan(),full=widthAt(st,1,tan,f)*wScale;
-    const ext=full*(st.e==="conn"?0.50:1.42),d=unit(tan);
-    SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
-  }
-
-  /* KAGE 4/5 不是「尖端種類」，而是要額外畫出鉤／彎尾。 */
-  if(st.kage&&(st.e==="hook"||st.e==="bend")&&SP.length>=2){
-    const m=SP.length-1,E=SP[m].slice(),tan=lastTan(),d=unit(tan);
-    const full=widthAt(st,1,tan,f)*wScale,mage=Math.max(7,full*0.92);
-    const base=[E[0]-d[0]*mage,E[1]-d[1]*mage];
-    SP[m]=base;
-    if(st.e==="hook"){
-      SP.push(E,[E[0]-mage*1.85,E[1]+mage*0.48]);
-    }else{
-      SP.push(E,[E[0]+mage*0.92,E[1]],[E[0]+mage*1.42,E[1]+mage*1.86]);
+  const {hw}=widths(f),fillet=hw*(0.10+0.62*f.round)*(st.fr||1);
+  let SP=st.p;
+  if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"){
+    SP=st.p.map(q=>q.slice());
+    /* 延伸量按該筆、該端和部件縮放計算；舊版固定用全域半筆寬，小偏旁會突出。 */
+    if(st.h==="conn"||st.h==="kakato"){
+      const tan=[SP[1][0]-SP[0][0],SP[1][1]-SP[0][1]];
+      const ext=widthAt(st,0,tan,f)*wScale*(st.h==="conn"?0.46:0.16);
+      const d=unit([-tan[0],-tan[1]]);
+      SP[0]=[SP[0][0]+d[0]*ext,SP[0][1]+d[1]*ext];
     }
-    fillet=Math.max(fillet,mage*0.48);
+    if(st.e==="conn"||st.e==="kakato"){
+      const m=SP.length-1,tan=[SP[m][0]-SP[m-1][0],SP[m][1]-SP[m-1][1]];
+      const ext=widthAt(st,1,tan,f)*wScale*(st.e==="conn"?0.46:0.16);
+      const d=unit(tan);
+      SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
+    }
   }
-
   const S=sampleSkeleton(SP,st.bend||0,fillet,NS||30,st.cv),n=S.length-1;
   const L=[],R=[];
   for(let i=0;i<=n;i++){
-    const t=i/n,s=S[i],tl=Math.max(1e-6,len(s.t));
+    const t=i/n,s=S[i],tl=len(s.t);
     const nx=-s.t[1]/tl,ny=s.t[0]/tl;
     const w=widthAt(st,t,s.t,f)*wScale/2;
     let up=0;
@@ -1211,12 +1177,13 @@ function strokeOutline(st,f,wScale,NS){
   }
   const C=caps(st,f),T0=unit(S[0].t),T1=unit(S[n].t);
   const w0=widthAt(st,0,S[0].t,f)*wScale/2,w1=widthAt(st,1,S[n].t,f)*wScale/2;
+  /* 兩側各自化簡（頭尾一定保留，端點造型才接得上） */
   const tol=f.simp===undefined?1.5:f.simp;
-  const La=rdp(L,tol),Ra=rdp(R,tol);
+  const La=rdp(L,tol), Ra=rdp(R,tol);
   const cmds=[["M",La[0][0],La[0][1]]];
-  for(let i=1;i<La.length;i++)cmds.push(["L",La[i][0],La[i][1]]);
+  for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
   capCmds(C.b,S[n].p,T1,w1,+1,Ra[Ra.length-1],cmds,f);
-  for(let i=Ra.length-1;i>=0;i--)cmds.push(["L",Ra[i][0],Ra[i][1]]);
+  for(let i=Ra.length-1;i>=0;i--) cmds.push(["L",Ra[i][0],Ra[i][1]]);
   capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds,f);
   return orient(cmds,-1);
 }
@@ -1282,9 +1249,13 @@ function opticalWeightScale(id,sx,sy){
   const minDim=Math.min(ax,ay),area=Math.sqrt(ax*ay);
   const geometric=0.72*minDim+0.28*area;
   const n=estimateStrokeCount(id);
+  const narrow=ax<0.62||ay<0.62;
   /* 複雜部件要比簡單偏旁更敢縮細，否則糹、金、馬、門塞進半格會糊成一團。 */
-  const floor=n>=12?0.46:n>=9?0.50:n>=6?0.55:n>=4?0.60:0.66;
-  return Math.min(1,Math.max(floor,Math.pow(geometric,0.82)));
+  let floor=n>=12?0.44:n>=9?0.49:n>=6?0.54:n>=4?0.60:0.66;
+  if(narrow&&n>=8) floor-=0.03;
+  if(narrow&&n>=12) floor-=0.03;
+  if(/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹)$/.test(id)) floor-=0.03;
+  return Math.min(1,Math.max(clamp(floor,0.36,0.72),Math.pow(geometric,0.82)));
 }
 function collect(id,box,wScale,out,seed,variant,depth){
   const g=G[id]; if(!g||(depth||0)>8) return;
@@ -1293,7 +1264,7 @@ function collect(id,box,wScale,out,seed,variant,depth){
   const ws=opticalWeightScale(id,sx,sy);
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
-    h:st.h,e:st.e,kh:st.kh,ke:st.ke,ka:st.ka,kage:st.kage,r:st.r,rk:st.rk,ws,
+    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,r:st.r,rk:st.rk,ws,
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
@@ -1942,7 +1913,7 @@ function snapshot(){
     edits[id]=e;
   }
   const ax={}; for(const k of AXKEYS) ax[k]=F[k];
-  return {v:22,renderer:"kage-gothic-2",family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,edits};
+  return {v:19,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,edits};
 }
 function restore(data){
   if(!data) return;
@@ -2040,48 +2011,49 @@ $("fileIn").addEventListener("change",e=>{
    ========================================================================== */
 let KAGE_EXACT=false;      /* 批次載入時打開：99 引用一律用 GlyphWiki 原名 */
 const KX=x=>x*5, KY=y=>(200-y)*5;
-const KVAR={ "01":"left", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
+const KVAR={ "01":"left", "02":"top", "03":"right", "04":"bottom", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
 
 /* KAGE 頭尾形狀代碼 → 端點造型。看個位數就好（22、32、12 都是接續） */
 function kageEnd(code,isTail){
-  const d=Math.abs(code|0)%100;
-  /* Gothic 實際只把 2/3 當成幾何延伸；7/8 在黑體並不是尖端。
-     仍保留 7/8 語意，供明體／手寫設計軸漸進使用。 */
-  switch(d%10){
-    case 2:return "conn";
-    case 3:return "kakato";
-    case 4:return "hook";
-    case 5:return "bend";
-    case 7:return isTail?"taperL":"point";
-    case 8:return isTail?"taperR":"point";
-    default:return "open";
+  const d=Math.abs(code|0)%10;
+  switch(d){
+    case 2: return "conn";                       /* 接續：延伸一點填實接縫 */
+    case 3: return "kakato";                     /* 腳跟 */
+    case 4: return "hook";                       /* 鉤 */
+    case 5: return "bend";                       /* 彎 */
+    case 7: return isTail?"taperL":"point";      /* 尾=左出鋒(撇)；頭=尖起筆 */
+    case 8: return isTail?"taperR":"point";      /* 尾=右出鋒(捺) */
+    default: return "open";
   }
 }
+/* 筆種只用來決定粗細家族（橫細豎粗），端點造型一律看 a2/a3 */
 function kageClassify(pts,a3,nseg,a2,a1t){
   const A=pts[0],B=pts[pts.length-1];
-  const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1;
+  const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);
   const h=kageEnd(a2===undefined?0:a2,false),e=kageEnd(a3,true);
   let t;
+  /* 3/4/7 是有明確轉折結構的筆；6 是單一三次曲線，不能因為有四個點就一律當折。 */
   const structural=(a1t===3||a1t===4||a1t===7);
-  if(structural&&nseg>2)t="zhe";
+  const ax=Math.abs(dx),ay=Math.abs(dy);
+  const horiz=ax/Math.max(1,L), vert=ay/Math.max(1,L);
+  const shortDominant=L<170 && (ax>115&&ay<L*0.20 || ay>115&&ax<L*0.20);
+  if(structural&&nseg>2) t="zhe";
+  else if(L<170 && !shortDominant) t="dian";
   else{
-    const ax=Math.abs(dx),ay=Math.abs(dy);
-    /* 先看方向、最後才看長度。舊版把所有短橫短豎都判成「點」，
-       雨、立、言等內部短畫因此變成三角碎片。 */
-    if(ay<L*0.24)t="heng";
-    else if(ax<L*0.24)t="shu";
-    else if(L<145)t="dian";
-    else if(dy>0&&dx>0)t="ti";
-    else if(dy<0&&dx<0)t="pie";
-    else if(dy<0&&dx>0)t="na";
+    if(vert<0.28) t="heng";
+    else if(horiz<0.28) t="shu";
+    else if(dy>0&&dx>0) t="ti";
+    else if(dy<0&&dx<0) t="pie";
+    else if(dy<0&&dx>0) t="na";
     else t="shu";
   }
-  return {t,h,e,kh:a2|0,ke:a3|0,ka:a1t|0,kage:1};
+  return {t,h,e,kh:a2|0,ke:a3|0,kage:1};
 }
 function kageBend(A,C,B){
   const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1;
   const mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2;
-  return ((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
+  const v=((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
+  return clamp(v,-0.58,0.58);
 }
 /* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
    u6728      → 木（純字）
@@ -2135,18 +2107,16 @@ function kageToGlyph(data){
                                   [KX(n(c[7])),KY(n(c[8]))],[KX(n(c[9])),KY(n(c[10]))]];
     else { skipped.push(raw); continue; }
 
-    if(a1t===2){
-      /* KAGE 類型 2 的中點是「真正的二次貝茲控制點」。舊版只存垂直 bend，
-         會丟掉控制點沿弦方向的位置，女、心、糹、犭因此嚴重變形。 */
+    if(a1t===2){                       /* 二次曲線的控制點 → 本系統的 bend（精確可逆） */
       const st=kageClassify([P[0],P[2]],a3,2,a2,a1t);
-      strokes.push({...st,p:P,cv:"quad"});
+      strokes.push({...st,p:[P[0],P[2]],bend:kageBend(P[0],P[1],P[2])});
     } else if(a1t===1){
       strokes.push({...kageClassify(P,a3,2,a2,a1t),p:P});
     } else {
       const st=kageClassify(P,a3,P.length,a2,a1t);
       if(a1t===6)      strokes.push({...st,p:P,cv:"cubic"});     /* 三次貝茲 */
       else if(a1t===7) strokes.push({...st,p:P,cv:"lineQuad"});  /* 直線＋二次曲線 */
-      else             strokes.push({...st,p:P});
+      else             strokes.push({...st,p:P,fr:a1t===3?0.48:1.15});
     }
   }
   return {strokes,parts,skipped};
@@ -2381,7 +2351,6 @@ async function loadPack(json,keepMine,quiet){
   /* 目標字 → 一層滿框引用，指向該字的來源字形（優先台灣字形） */
   busy(true,undefined,"對應到字…",60);
   let mapped=0,usedT=0;
-  const mappedChars=new Set();
   for(const name of names){
     const m=/^u([0-9a-f]{4,5})$/.exec(name); if(!m) continue;
     const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
@@ -2392,30 +2361,7 @@ async function loadPack(json,keepMine,quiet){
     if(src===t) usedT++;
     G[ch]={u:cp,c:[{r:src,box:[0,0,EM,EM]}]};
     if(!ALL.includes(ch)) ALL.push(ch);
-    mappedChars.add(ch); mapped++;
-  }
-  /* 有些台灣偏旁只有 uXXXX-t，沒有無字尾的 uXXXX；舊版第二圈完全看不到它們，
-     因此辶等仍沿用早期手畫骨架。這裡把「只有 -t」的字也補進來。 */
-  for(const name of names){
-    const m=/^u([0-9a-f]{4,5})-t$/.exec(name); if(!m||!G[name]) continue;
-    const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
-    const ch=String.fromCodePoint(cp);
-    if(mine.has(ch)||mappedChars.has(ch)) continue;
-    G[ch]={u:cp,c:[{r:name,box:[0,0,EM,EM]}]};
-    if(!ALL.includes(ch)) ALL.push(ch);
-    mappedChars.add(ch); mapped++; usedT++;
-  }
-  /* Unicode 沒有獨立台灣字形的常用偏旁，選 GlyphWiki 的位置變體取代粗略手畫版。 */
-  const radicalFallback={
-    "氵":"u6c35-01","亻":"u4ebb-01","忄":"u5fc4-t01","扌":"u624c-t01",
-    "衤":"u8864-01","艹":"u8279-t03","糹":"u7cf9-h01","犭":"u72ad-01"
-  };
-  for(const [ch,src] of Object.entries(radicalFallback)){
-    if(mine.has(ch)||!G[src]) continue;
-    const cp=ch.codePointAt(0);
-    G[ch]={u:cp,c:[{r:src,box:[0,0,EM,EM]}]};
-    if(!ALL.includes(ch)) ALL.push(ch);
-    if(!mappedChars.has(ch)){mappedChars.add(ch);mapped++;}
+    mapped++;
   }
   KAGE_EXACT=false;
   /* 保留下來的那些字，仍然算「已修改」（基準線是 KAGE，不是他的版本） */
