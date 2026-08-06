@@ -1487,10 +1487,47 @@ function opticalWeightScale(id,sx,sy,optic){
 /* 部件母版：把某些字形改成指向另一個字形。
    純資料、可逐條開關、存在專案檔裡 —— 不是寫死在程式裡的特例。 */
 let MASTERS={};                 /* { 來源字形名: 母版字形名 } */
+/* 找不到引用的字形時，依序退階。三種情況都靠這一條解掉：
+   1) 相容漢字（U+F900–FAFF、U+2F800–2FA1D）—— 那是重複碼位，正規化就回到一般漢字
+   2) 擴充區的字（U+20000 以上）—— 它們在字庫裡是以 uXXXXX 這種名字存在
+   3) 字尾太細的變體（u3687-jv）—— 一節一節剝掉，再退到 -t / 無字尾 / -j
+   實測：96 次缺件 100% 補上，缺部件的字 96 → 0 */
+const FB_CACHE=new Map();
+function resolveFallback(id){
+  if(G[id]) return id;
+  if(FB_CACHE.has(id)) return FB_CACHE.get(id);
+  let hit=null;
+  if([...id].length===1){
+    const nfc=id.normalize("NFC");
+    if(nfc!==id && G[nfc]) hit=nfc;
+    if(!hit){
+      const cp=(nfc!==id?nfc:id).codePointAt(0);
+      const hex="u"+cp.toString(16).toLowerCase();
+      for(const c of [hex+"-t",hex,hex+"-j"]) if(G[c]){ hit=c; break; }
+    }
+  }
+  if(!hit){
+    const m=/^u([0-9a-f]{4,6})(?:-(.+))?$/i.exec(id);
+    if(m&&m[2]){
+      const hex="u"+m[1].toLowerCase(), parts=m[2].split("-");
+      for(let i=parts.length-1;i>=1&&!hit;i--){
+        const c=hex+"-"+parts.slice(0,i).join("-"); if(G[c]) hit=c;
+      }
+      if(!hit) for(const c of [hex+"-t",hex,hex+"-j"]) if(G[c]){ hit=c; break; }
+      if(!hit){
+        const cp=parseInt(m[1],16);
+        if(cp>=0x3400&&cp<=0x9fff){ const ch=String.fromCodePoint(cp); if(G[ch]) hit=ch; }
+      }
+    }
+  }
+  FB_CACHE.set(id,hit);
+  return hit;
+}
 function masterOf(id){
   let cur=id, hops=0;
   while(MASTERS[cur] && MASTERS[cur]!==cur && hops++<4) cur=MASTERS[cur];
-  return G[cur]?cur:id;         /* 母版不存在就退回原本的 */
+  if(G[cur]) return cur;
+  return resolveFallback(cur) || (G[id]?id:(resolveFallback(id)||id));
 }
 function collect(id,box,wScale,out,seed,variant,depth,optic){
   id=masterOf(id);
@@ -2381,7 +2418,10 @@ function kageToGlyph(data){
     if(a1t===99){
       const nm=kageName(c[7]);
       if(!nm){ skipped.push(raw); continue; }
-      const key = KAGE_EXACT ? nm.key
+      /* KAGE_EXACT 就是「照原名」：裸名 uXXXX 不可以被換成該字，
+         否則「掉→u6389-t→(別名)u6389→掉」會繞成死圈，整個字畫不出來。 */
+      const rawName=(c[7]||"").trim().split("@")[0];
+      const key = KAGE_EXACT ? (rawName||nm.key)
                 : (G[nm.key] ? nm.key : (nm.ch && G[nm.ch] ? nm.ch : nm.key));
       const q={r:key, box:[KX(n(c[3])),KY(n(c[6])),KX(n(c[5])),KY(n(c[4]))]};
       if(nm.ch && key===nm.ch && nm.v && G[nm.ch] && G[nm.ch].v && G[nm.ch].v[nm.v]) q.v=nm.v;
@@ -3371,7 +3411,7 @@ function usesOf(id){
   }
   return USES[id]||0;
 }
-function invalidateUses(){ USES=null; }
+function invalidateUses(){ USES=null; FB_CACHE.clear(); }
 function siblingsOf(id){
   const hex=baseHexOf(id); if(!hex) return [];
   const out=[];
