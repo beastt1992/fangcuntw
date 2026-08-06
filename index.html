@@ -26,8 +26,8 @@
   body{background:var(--paper);color:var(--ink);overflow:hidden;
     font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;font-size:14px;
-    padding-top:var(--safe-top); box-sizing:border-box}
-  .app{height:calc(100dvh - var(--safe-top));display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative}
+    padding-top:var(--safe-top); padding-bottom:var(--safe-bottom); box-sizing:border-box}
+  .app{height:calc(100dvh - var(--safe-top) - var(--safe-bottom));display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative}
   .tabs{display:flex;border:1px solid var(--ink)}
   .tabs button{font-family:inherit;font-size:12.5px;padding:5px 14px;background:var(--paper);
     border:none;cursor:pointer;color:var(--muted);white-space:nowrap;letter-spacing:.05em}
@@ -924,7 +924,7 @@ const CXED=["白","石","貝","古","胡","自","頁","舌",
 const PUNCT=["　","。","、","，","：","；","！","？","「","」","（","）"];
 const ORDER=[...COMP,...CXED];
 const ALL=[...ORDER,...PUNCT];
-const VNAME={left:"左偏旁",top:"置頂",bottom:"墊底",enclose:"包圍"};
+const VNAME={left:"左偏旁",right:"右偏旁",top:"置頂",bottom:"墊底",enclose:"包圍"};
 const BASE=JSON.parse(JSON.stringify(G));
 
 /* ==========================================================================
@@ -936,6 +936,7 @@ const mul=(a,k)=>[a[0]*k,a[1]*k];
 const len=a=>Math.hypot(a[0],a[1])||1e-6;
 const unit=a=>mul(a,1/len(a));
 const dist=(a,b)=>len(sub(a,b));
+const lerp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
 const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a||1e-6)));return t*t*(3-2*t);};
 
 function makeSegs(pts,bend,fillet,cv){
@@ -943,10 +944,16 @@ function makeSegs(pts,bend,fillet,cv){
   /* KAGE 類型 6 是三次貝茲：中間兩點是控制點，不是經過點
      KAGE 類型 7 是「直線接二次曲線」：p1→p2 直線，再以 p3 為控制點彎到 p4
      以前把它們當折線轉圓角，辶、之、廴 這類部件就會歪掉 */
-  if(cv==="cubic"&&pts.length===4)
-    return [{c3:1,a:pts[0],c1:pts[1],c2:pts[2],b:pts[3]}];
-  if(cv==="lineQuad"&&pts.length===4)
-    return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c:pts[2],b:pts[3]}];
+  if(cv==="cubic"&&pts.length===4){
+    /* KAGE 三次曲線保留形狀，但將控制點輕微拉回弦線，避免父、又、火之類過度飄。 */
+    const r1=lerp(pts[0],pts[3],1/3), r2=lerp(pts[0],pts[3],2/3);
+    const c1=lerp(pts[1],r1,0.16), c2=lerp(pts[2],r2,0.16);
+    return [{c3:1,a:pts[0],c1,c2,b:pts[3]}];
+  }
+  if(cv==="lineQuad"&&pts.length===4){
+    const mc=lerp(pts[1],pts[3],0.5), c=lerp(pts[2],mc,0.12);
+    return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c,b:pts[3]}];
+  }
   if(pts.length===2){
     const [A,B]=pts;
     if(bend){const d=sub(B,A),L=len(d);
@@ -1005,11 +1012,11 @@ function endFactor(kind,x,f,st,isTail){ /* x=0 在該端點，x=1 在另一端 *
       /* 黑體保持飽滿；只有明體程度升高時才逐漸形成尖起筆。 */
       const g=Math.min(1,(f&&f.finish!==undefined?f.finish:0)/0.72);
       if(g<=0.02) return 1;
-      return 1-g*(1-Math.max(0.24,Math.pow(x,0.62)));
+      return 1-g*(1-Math.max(0.30,Math.pow(x,0.68)));
     }
-    case "hook":   return Math.max(0.18,1-0.86*Math.pow(1-x,2.05));
-    case "bend":   return 0.68+0.32*Math.pow(x,0.55);  /* 彎尾略收，但不畫成鉤 */
-    case "kakato": return 1+0.10*Math.pow(1-x,2);      /* 腳跟靠端點微微加厚 */
+    case "hook":   return Math.max(0.20,1-0.82*Math.pow(1-x,1.92));
+    case "bend":   return 0.74+0.26*Math.pow(x,0.60);  /* 彎尾略收，但不畫成鉤 */
+    case "kakato": return 1+0.08*Math.pow(1-x,2);      /* 腳跟靠端點微微加厚 */
     default:       return 1;
   }
 }
@@ -1039,13 +1046,13 @@ function widthAt(st,t,tan,f){
     const {hw,sw}=widths(f),k=st.w||1;
     const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
     const mono=(hw+(sw-hw)*s)*k;
-    let mix=({heng:0.10,shu:0.10,zhe:0.22,pie:0.18,na:0.16,ti:0.14,dian:0.10}[st.t]||0.12);
-    mix*=1-Math.min(0.75,(f.finish||0)*0.65);
+    let mix=({heng:0.12,shu:0.12,zhe:0.26,pie:0.22,na:0.20,ti:0.18,dian:0.14}[st.t]||0.14);
+    mix*=1-Math.min(0.72,(f.finish||0)*0.60);
     w=w*(1-mix)+mono*mix;
   }
   return w;
 }
-const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"pt",
+const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"hook",
               conn:"flat",kakato:"kakato",bend:"bend"};
 function caps(st,f){
   const r=f.round;
@@ -1077,7 +1084,14 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
   }
   if(kind==="bend"){
     /* 彎尾保留圓潤延伸，但比一般圓頭短，避免變成水管頭。 */
-    out.push(["Q",tip[0]+T[0]*w*0.62*dir,tip[1]+T[1]*w*0.62*dir,to[0],to[1]]);return;
+    out.push(["Q",tip[0]+T[0]*w*0.56*dir,tip[1]+T[1]*w*0.56*dir,to[0],to[1]]);return;
+  }
+  if(kind==="hook"){
+    /* 鉤尾做成短促的小喙狀，不再只是一般尖頭。 */
+    const nx=-T[1], ny=T[0];
+    const cx=tip[0]+T[0]*w*0.42*dir-nx*w*0.18;
+    const cy=tip[1]+T[1]*w*0.42*dir-ny*w*0.18;
+    out.push(["Q",cx,cy,to[0],to[1]]);return;
   }
   if(kind==="uroko"){
     /* 明體橫畫尾端的三角（うろこ）：先往外上方頂出一個角，再收回另一側 */
@@ -1251,11 +1265,11 @@ function opticalWeightScale(id,sx,sy){
   const n=estimateStrokeCount(id);
   const narrow=ax<0.62||ay<0.62;
   /* 複雜部件要比簡單偏旁更敢縮細，否則糹、金、馬、門塞進半格會糊成一團。 */
-  let floor=n>=12?0.44:n>=9?0.49:n>=6?0.54:n>=4?0.60:0.66;
-  if(narrow&&n>=8) floor-=0.03;
-  if(narrow&&n>=12) floor-=0.03;
-  if(/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹)$/.test(id)) floor-=0.03;
-  return Math.min(1,Math.max(clamp(floor,0.36,0.72),Math.pow(geometric,0.82)));
+  let floor=n>=12?0.42:n>=9?0.47:n>=6?0.53:n>=4?0.60:0.66;
+  if(narrow&&n>=8) floor-=0.04;
+  if(narrow&&n>=12) floor-=0.04;
+  if(/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹|月|用|冊|網|西|目|日|田|白|酉)$/.test(id)) floor-=0.04;
+  return Math.min(1,Math.max(clamp(floor,0.34,0.72),Math.pow(geometric,0.82)));
 }
 function collect(id,box,wScale,out,seed,variant,depth){
   const g=G[id]; if(!g||(depth||0)>8) return;
@@ -2011,7 +2025,7 @@ $("fileIn").addEventListener("change",e=>{
    ========================================================================== */
 let KAGE_EXACT=false;      /* 批次載入時打開：99 引用一律用 GlyphWiki 原名 */
 const KX=x=>x*5, KY=y=>(200-y)*5;
-const KVAR={ "01":"left", "02":"top", "03":"right", "04":"bottom", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
+const KVAR={ "01":"left", "02":"top", "03":"right", "04":"bottom", "05":"enclose", "08":"top", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
 
 /* KAGE 頭尾形狀代碼 → 端點造型。看個位數就好（22、32、12 都是接續） */
 function kageEnd(code,isTail){
@@ -2053,7 +2067,7 @@ function kageBend(A,C,B){
   const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1;
   const mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2;
   const v=((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
-  return clamp(v,-0.58,0.58);
+  return clamp(v,-0.46,0.46);
 }
 /* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
    u6728      → 木（純字）
