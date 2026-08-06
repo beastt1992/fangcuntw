@@ -429,6 +429,7 @@
       <button data-p="hei">黑體</button><button data-p="yuan">圓體</button
       ><button data-p="ming">明體</button><button data-p="hand">手寫</button
       ><button data-p="title">標題黑</button
+      ><button data-p="kai" title="依全字庫正楷體實測校準">楷書</button
       ><button data-p="kage" title="貼近 GlyphWiki 原始資料的樣子">原樣</button>
     </div>
     <span class="spacer"></span>
@@ -692,11 +693,11 @@ const EM=1000, ASC=880, DESC=-120;
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
-         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,
+         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
-               'width','slant','taper','hook','dun','press'];
+               'width','slant','taper','hook','dun','press','rise'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1232,17 +1233,31 @@ const tp=(f,v)=>1+(v-1)*(f.taper===undefined?1:f.taper);
      豎 頓起 → 中段略提 → 垂露
      撇 頓起後漸提出鋒；捺 輕入漸按再出鋒
    ========================================================================== */
+/* 橫與豎的曲線是從全字庫正楷體（TW-Kai，教育部 CNS11643 官方楷書）
+   實測出來的：沿中心線每 5% 量一次垂直厚度，除以中位數。
+   不是我編的公式 —— 之前編的版本起筆頓在 t=0（實際在 10%）、
+   中段做到 0.80（實際 0.90），都錯。 */
+const KAI_HENG=[1.27,1.27,1.20,1.09,1.02,0.95,0.91,0.90,0.90,0.90,0.91,
+                0.92,0.93,0.95,0.98,1.02,1.09,1.19,1.30,1.29,1.04];
+const KAI_SHU =[1.38,1.11,1.01,1.01,1.01,1.01,1.01,1.01,1.01,1.02,1.01,
+                0.99,0.98,0.97,0.96,0.95,0.94,0.92,0.89,0.80,0.66];
+function lut(tab,t){
+  const x=Math.max(0,Math.min(1,t))*(tab.length-1);
+  const i=Math.floor(x), f2=x-i;
+  return tab[i]+(tab[Math.min(tab.length-1,i+1)]-tab[i])*f2;
+}
 function pressAt(type,t,f){
   const g=(f.press===undefined?0:f.press);
   if(g<=0.001) return 1;
-  const s=Math.sin(Math.PI*t);
   let v=1;
   switch(type){
-    case "heng": v=1+0.16*Math.pow(1-t,2)-0.26*s+0.32*Math.pow(t,4); break;
-    case "shu":  v=1+0.20*Math.pow(1-t,2.5)-0.18*s+0.10*Math.pow(t,3); break;
-    case "zhe":  v=1+0.14*Math.pow(1-t,2)-0.16*s+0.18*Math.pow(t,4); break;
-    case "pie":  v=1+0.26*Math.pow(1-t,3); break;      /* 起筆頓，尾端交給出鋒 */
-    case "na":   v=1-0.18*Math.pow(1-t,2.4); break;    /* 輕入 */
+    case "heng": v=lut(KAI_HENG,t); break;
+    case "shu":  v=lut(KAI_SHU,t);  break;
+    /* 折是橫豎的混合，取兩表平均並收斂一半 */
+    case "zhe":  v=1+((lut(KAI_HENG,t)+lut(KAI_SHU,t))/2-1)*0.6; break;
+    /* 撇捺提本來就有粗細曲線，這裡只補起筆的頓（楷書樣本字抓不到，用書寫慣例） */
+    case "pie":  v=1+0.26*Math.pow(1-t,3); break;
+    case "na":   v=1-0.18*Math.pow(1-t,2.4); break;
     case "ti":   v=1+0.20*Math.pow(1-t,2.6); break;
     default: return 1;
   }
@@ -1459,9 +1474,10 @@ function strokeOutline(st,f,wScale,NS){
     const nx=-s.t[1]/tl,ny=s.t[0]/tl;
     let w=widthAt(st,t,s.t,f)*wScale/2;
     if(dunAt){
-      const span=Math.max(2,n*0.13);
+      /* 實測標楷體「口」的折角：往下約 22% 才回到基準（原本只做 13%） */
+      const span=Math.max(2,n*0.22);
       const k=Math.max(0,1-Math.abs(i-dunAt.i)/span);
-      w*=1+dunAt.amt*0.42*k*k;
+      w*=1+dunAt.amt*0.75*Math.pow(k,1.4);
     }
     let up=0;
     if(st.t==="heng"&&f.finish>0) up=f.finish*hw*0.62*smooth(0.80,1,t)*wScale;
@@ -1664,6 +1680,14 @@ function warpStroke(st,f){
   const source=orthogonalizeKagePoints(st.p,st);
   let p=source.map(([x,y])=>ptWarp(x,y,f));
   let bend=st.bend||0, hp=null;
+  /* 斜勢：楷書的橫畫往右上斜。實測全字庫正楷體「一」＝6.5°，
+     黑體 0.0°、明體 2.6°。這是骨架的性質，筆寬曲線做不出來。
+     繞自身中點旋轉，所以字面位置不跑掉，也完全可逆。 */
+  if(st.t==="heng" && f.rise && Math.abs(f.rise)>0.0005 && p.length>1){
+    const a=f.rise, ca=Math.cos(a), sa=Math.sin(a);
+    const c=[p.reduce((s,q)=>s+q[0],0)/p.length, p.reduce((s,q)=>s+q[1],0)/p.length];
+    p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa, c[1]+(x-c[0])*sa+(y-c[1])*ca]);
+  }
   if(st.t==="heng"&&f.finish>0&&p.length===2) p[1]=[p[1][0],p[1][1]+f.finish*13];
   if(f.hand>0&&p.length>1){
     const a=rnd(st.seed)*f.hand*0.05;
@@ -1686,6 +1710,14 @@ function unwarpPoint(w,st,f,pi){
     x=hp.c[0]+dx*ca+dy*sa; y=hp.c[1]-dx*sa+dy*ca;
   }
   if(st.t==="heng"&&f.finish>0&&st.p.length===2&&pi===1) y-=f.finish*13;
+  if(st.t==="heng" && f.rise && Math.abs(f.rise)>0.0005 && st.p.length>1){
+    /* 反轉斜勢：中點要用「旋轉前」的點算，所以重跑一次 ptWarp */
+    const q=orthogonalizeKagePoints(st.p,st).map(([X,Y])=>ptWarp(X,Y,f));
+    const c=[q.reduce((s,z)=>s+z[0],0)/q.length, q.reduce((s,z)=>s+z[1],0)/q.length];
+    const a=f.rise, ca=Math.cos(a), sa=Math.sin(a);
+    const dx=x-c[0], dy=y-c[1];
+    x=c[0]+dx*ca+dy*sa; y=c[1]-dx*sa+dy*ca;
+  }
   return ptUnwarp(x,y,f);
 }
 const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
@@ -1899,19 +1931,21 @@ const AXES=[
   {k:"taper",   n:"出鋒",  en:"TAPER",   min:0,   max:1.6, step:0.02,lo:"等寬",hi:"收尖",f:v=>v.toFixed(2)},
   {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
   {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)},
-  {k:"press",   n:"提按",  en:"PRESSURE",min:0,   max:1.4, step:0.02,lo:"等粗",hi:"書法",f:v=>v.toFixed(2)}
+  {k:"press",   n:"提按",  en:"PRESSURE",min:0,   max:1.4, step:0.02,lo:"等粗",hi:"書法",f:v=>v.toFixed(2)},
+  {k:"rise",    n:"斜勢",  en:"RISE",    min:0, max:0.16, step:0.002,lo:"水平",hi:"右上",f:v=>((+v)*57.3).toFixed(1)+"°"}
 ];
 const PRESETS={
-  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
-  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
+  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
+  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25,rise:0.045},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95,rise:0.100},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00}
+  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.60,dun:1.00,press:1.00,rise:0.114},
+  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00}
 };
-const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
-const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
+const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
+const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
 const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
 
 let current="木",showSkel=false,editMode=false,presetKey="hei",varSel=null,qaOnly=false;
@@ -3395,7 +3429,7 @@ $("subGo").addEventListener("click",()=>{
    ========================================================================== */
 const ENGINE_REF={weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
                   gravity:1.00,face:1.00,hand:0.00,finish:0.00,
-                  width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00};
+                  width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
