@@ -270,7 +270,8 @@
     <div class="presets" id="presets">
       <button data-p="hei">黑體</button><button data-p="yuan">圓體</button
       ><button data-p="ming">明體</button><button data-p="hand">手寫</button
-      ><button data-p="title">標題黑</button>
+      ><button data-p="title">標題黑</button
+      ><button data-p="kage" title="貼近 GlyphWiki 原始資料的樣子">原樣</button>
     </div>
     <span class="spacer"></span>
     <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
@@ -988,8 +989,33 @@ function sampleSkeleton(pts,bend,fillet,N,cv){
   return out;
 }
 const widths=f=>{const hw=f.weight*2/(1+f.contrast);return{hw,sw:hw*f.contrast};};
+/* KAGE 的每一筆都帶「頭形狀 a2」「尾形狀 a3」，以前我只用了鉤、其他靠方向猜。
+   個位數就是形狀：2 接續、3 腳跟、4 鉤、5 彎、7 左出鋒、8 右出鋒、0 開放。
+   h/e 有值時就照它畫，沒有才退回舊的靠筆種猜。 */
+function endFactor(kind,x,f){        /* x = 距離該端點的比例，0 在端點上、1 在另一端 */
+  switch(kind){
+    case "taperL": return Math.max(0.07,1-0.93*Math.pow(1-x,1.25));   /* 撇：收成尖 */
+    case "taperR": return Math.max(0.11,Math.pow(x,0.55))*(1+0.26*(1-x)*(1-x)); /* 捺：先脹後收 */
+    case "point":{
+      /* KAGE 黑體其實完全不理會這個代碼（只有 2、3 會延伸），
+         是明體才把它畫成尖起筆。所以效果綁在「明體程度」上 */
+      const g=Math.min(1,(f&&f.finish!==undefined?f.finish:0)/0.6);
+      if(g<=0.02) return 1;
+      return 1-g*(1-Math.max(0.20,Math.pow(x,0.60)));
+    }
+    case "hook":   return Math.max(0.16,1-0.90*Math.pow(1-x,2.2));    /* 鉤：末端縮 */
+    default:       return 1;                                          /* 開放/接續/腳跟：滿寬 */
+  }
+}
 function widthAt(st,t,tan,f){
   const {hw,sw}=widths(f),k=st.w||1;
+  if(st.h||st.e){
+    const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
+    const base=(hw+(sw-hw)*s)*k;                 /* 橫細豎粗，斜筆按角度內插 */
+    let w=base*endFactor(st.h,t,f)*endFactor(st.e,1-t,f);
+    if(st.e==="taperR") w*= (1+f.finish*0.26*smooth(0.72,1,t));
+    return w;
+  }
   switch(st.t){
     case "heng":return hw*k;
     case "shu": return sw*k;
@@ -1002,8 +1028,15 @@ function widthAt(st,t,tan,f){
     default:    return sw*k;
   }
 }
+const CAP_OF={taperL:"pt", taperR:"pt", point:"pt", hook:"pt"};
 function caps(st,f){
   const r=f.round;
+  if(st.h||st.e){
+    /* 明體：橫畫開放的收筆長出三角（うろこ） */
+    const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
+    const ha = (st.h==="point" && f.finish<=0.3) ? r : (CAP_OF[st.h] || r);
+    return {a: ha, b: uroko ? "uroko" : (CAP_OF[st.e] || r)};
+  }
   switch(st.t){
     case "pie": return {a:r,b:"pt"};
     case "na":  return {a:"pt",b:Math.min(r,0.25)};
@@ -1013,7 +1046,16 @@ function caps(st,f){
     default:    return {a:r,b:r};
   }
 }
-function capCmds(kind,tip,T,w,dir,to,out){
+function capCmds(kind,tip,T,w,dir,to,out,f){
+  if(kind==="uroko"){
+    /* 明體橫畫尾端的三角（うろこ）：先往外上方頂出一個角，再收回另一側 */
+    const g=(f&&f.finish!==undefined?f.finish:1);
+    const nx=-T[1],ny=T[0];
+    const ex=tip[0]+T[0]*w*0.30*dir, ey=tip[1]+T[1]*w*0.30*dir;
+    out.push(["L", ex-nx*w*1.15*g, ey-ny*w*1.15*g]);
+    out.push(["L", ex+T[0]*w*1.05*g*dir, ey+T[1]*w*1.05*g*dir]);
+    out.push(["L", to[0], to[1]]); return;
+  }
   if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
     out.push(["L",to[0],to[1]]);return;}
   const k=typeof kind==="number"?kind:0;
@@ -1073,7 +1115,21 @@ function rdp(pts,tol){
 }
 function strokeOutline(st,f,wScale,NS){
   const {hw}=widths(f),fillet=hw*(0.10+0.62*f.round)*(st.fr||1);
-  const S=sampleSkeleton(st.p,st.bend||0,fillet,NS||30,st.cv),n=S.length-1;
+  let SP=st.p;
+  if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"){
+    /* 標成「接續」的那一端往外延伸半個筆寬，讓交叉處填實（KAGE 也是這麼做） */
+    SP=st.p.map(q=>q.slice());
+    const ext=(hw)*0.5;
+    if(st.h==="conn"||st.h==="kakato"){
+      const d=unit([SP[0][0]-SP[1][0],SP[0][1]-SP[1][1]]);
+      SP[0]=[SP[0][0]+d[0]*ext,SP[0][1]+d[1]*ext];
+    }
+    if(st.e==="conn"||st.e==="kakato"){
+      const m=SP.length-1,d=unit([SP[m][0]-SP[m-1][0],SP[m][1]-SP[m-1][1]]);
+      SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
+    }
+  }
+  const S=sampleSkeleton(SP,st.bend||0,fillet,NS||30,st.cv),n=S.length-1;
   const L=[],R=[];
   for(let i=0;i<=n;i++){
     const t=i/n,s=S[i],tl=len(s.t);
@@ -1091,9 +1147,9 @@ function strokeOutline(st,f,wScale,NS){
   const La=rdp(L,tol), Ra=rdp(R,tol);
   const cmds=[["M",La[0][0],La[0][1]]];
   for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
-  capCmds(C.b,S[n].p,T1,w1,+1,Ra[Ra.length-1],cmds);
+  capCmds(C.b,S[n].p,T1,w1,+1,Ra[Ra.length-1],cmds,f);
   for(let i=Ra.length-1;i>=0;i--) cmds.push(["L",Ra[i][0],Ra[i][1]]);
-  capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds);
+  capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds,f);
   return orient(cmds,-1);
 }
 function strokeContours(st,f,wScale,NS){
@@ -1147,7 +1203,7 @@ function collect(id,box,wScale,out,seed,variant,depth){
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
   const ws=wScale*Math.min(1,Math.max(0.72,(sx+sy)/2));
   const S=resolveStrokes(g,variant);
-  if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,r:st.r,rk:st.rk,ws,
+  if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,h:st.h,e:st.e,r:st.r,rk:st.rk,ws,
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
@@ -1372,10 +1428,12 @@ const PRESETS={
   yuan:{weight:88,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0},
   ming:{weight:62,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95},
   hand:{weight:58,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34},
-  title:{weight:135,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0}
+  title:{weight:135,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0},
+  /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
+  kage:{weight:52,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0}
 };
-const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑"};
-const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display"};
+const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
+const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
 const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
 
 let current="木",showSkel=false,editMode=false,presetKey="hei",varSel=null,qaOnly=false;
@@ -1894,19 +1952,37 @@ let KAGE_EXACT=false;      /* 批次載入時打開：99 引用一律用 GlyphWi
 const KX=x=>x*5, KY=y=>(200-y)*5;
 const KVAR={ "01":"left", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
 
-function kageClassify(pts,a3,nseg){
+/* KAGE 頭尾形狀代碼 → 端點造型。看個位數就好（22、32、12 都是接續） */
+function kageEnd(code,isTail){
+  const d=Math.abs(code|0)%10;
+  switch(d){
+    case 2: return "conn";                       /* 接續：延伸一點填實接縫 */
+    case 3: return "kakato";                     /* 腳跟 */
+    case 4: return "hook";                       /* 鉤 */
+    case 5: return "bend";                       /* 彎 */
+    case 7: return isTail?"taperL":"point";      /* 尾=左出鋒(撇)；頭=尖起筆 */
+    case 8: return isTail?"taperR":"point";      /* 尾=右出鋒(捺) */
+    default: return "open";
+  }
+}
+/* 筆種只用來決定粗細家族（橫細豎粗），端點造型一律看 a2/a3 */
+function kageClassify(pts,a3,nseg,a2){
   const A=pts[0],B=pts[pts.length-1];
   const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);
-  const hook=(a3%100)===4;
-  if(nseg>2) return {t:"zhe",end:hook?"hook":undefined};
-  if(L<170) return {t:"dian"};
-  const ax=Math.abs(dx),ay=Math.abs(dy);
-  if(ay<L*0.28) return {t:"heng"};
-  if(ax<L*0.28) return hook?{t:"zhe",end:"hook"}:{t:"shu"};
-  if(dy>0&&dx>0) return {t:"ti"};
-  if(dy<0&&dx<0) return {t:"pie"};
-  if(dy<0&&dx>0) return {t:"na"};
-  return {t:"shu"};
+  const h=kageEnd(a2===undefined?0:a2,false), e=kageEnd(a3,true);
+  let t;
+  if(nseg>2) t="zhe";
+  else if(L<170) t="dian";
+  else{
+    const ax=Math.abs(dx),ay=Math.abs(dy);
+    if(ay<L*0.28) t="heng";
+    else if(ax<L*0.28) t="shu";
+    else if(dy>0&&dx>0) t="ti";
+    else if(dy<0&&dx<0) t="pie";
+    else if(dy<0&&dx>0) t="na";
+    else t="shu";
+  }
+  return {t,h,e};
 }
 function kageBend(A,C,B){
   const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1;
@@ -1945,7 +2021,7 @@ function kageToGlyph(data){
   for(const raw of String(data).trim().split("$")){
     const c=raw.trim().split(":").map(v=>v.trim());
     if(c.length<3) continue;
-    const a1=parseInt(c[0],10)||0, a3=parseInt(c[2],10)||0, a1t=a1%100;
+    const a1=parseInt(c[0],10)||0, a2=parseInt(c[1],10)||0, a3=parseInt(c[2],10)||0, a1t=a1%100;
     const n=v=>parseFloat(v)||0;
     if(a1t===99){
       const nm=kageName(c[7]);
@@ -1966,12 +2042,12 @@ function kageToGlyph(data){
     else { skipped.push(raw); continue; }
 
     if(a1t===2){                       /* 二次曲線的控制點 → 本系統的 bend（精確可逆） */
-      const st=kageClassify([P[0],P[2]],a3,2);
+      const st=kageClassify([P[0],P[2]],a3,2,a2);
       strokes.push({...st,p:[P[0],P[2]],bend:kageBend(P[0],P[1],P[2])});
     } else if(a1t===1){
-      strokes.push({...kageClassify(P,a3,2),p:P});
+      strokes.push({...kageClassify(P,a3,2,a2),p:P});
     } else {
-      const st=kageClassify(P,a3,P.length);
+      const st=kageClassify(P,a3,P.length,a2);
       if(a1t===6)      strokes.push({...st,p:P,cv:"cubic"});     /* 三次貝茲 */
       else if(a1t===7) strokes.push({...st,p:P,cv:"lineQuad"});  /* 直線＋二次曲線 */
       else             strokes.push({...st,p:P,fr: a1t===3?0.6:2});
