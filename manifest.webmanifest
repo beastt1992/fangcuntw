@@ -1,0 +1,22 @@
+{
+  "name": "方寸 — 中文字型工作室",
+  "short_name": "方寸",
+  "description": "用骨架與參數設計整套繁體中文字型。13,000 字內建，離線可用，可匯出真正的 OTF。",
+  "id": "/fangcun/",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f2e9",
+  "theme_color": "#16130d",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "categories": ["design", "graphics", "productivity"],
+  "icons": [
+    { "src": "icon.svg",          "sizes": "any",     "type": "image/svg+xml" },
+    { "src": "icon-192.png",      "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png",      "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-mask-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-mask-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
