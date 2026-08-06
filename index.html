@@ -435,6 +435,7 @@
     <span class="spacer"></span>
     <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
     <button class="btn ghost sm" id="btnSubset" type="button">挑字匯出</button>
+    <button class="btn ghost sm" id="btnSVG2" type="button">向量匯出</button>
     <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
     <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
@@ -566,6 +567,43 @@
   </section>
 
 
+
+
+  <div class="modal" id="svgmodal">
+    <div class="sheet" style="width:min(820px,100%)">
+      <header><b>向量匯出</b><span>SVG FOR ILLUSTRATOR</span>
+        <button class="btn ghost sm" id="svClose" type="button" style="margin-left:auto">關閉</button></header>
+      <div class="body">
+        <p class="tip">給 Illustrator、Inkscape、Figma、雷射切割、CNC 用的向量檔。<br>
+          直接開啟就是可編輯的路徑，不需要安裝字型。</p>
+        <textarea id="svTxt" spellcheck="false" placeholder="春日書店"></textarea>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="g"><label style="font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)">拆法</label>
+            <div class="seg" id="svMode">
+              <button data-k="glyph" class="on">每字一個路徑</button
+              ><button data-k="stroke">每筆一個路徑</button>
+            </div></div>
+          <div class="g"><label style="font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)">字高</label>
+            <input type="number" id="svSize" value="50" min="1" max="2000" step="1"
+              style="width:74px;font-family:var(--mono);font-size:12px;padding:5px 7px;
+                     background:var(--paper);border:1px solid var(--line-2);color:var(--ink)">
+            <select id="svUnit" style="font-family:inherit;font-size:12px;padding:5px;
+              background:var(--paper);border:1px solid var(--line-2);color:var(--ink)">
+              <option value="mm">mm</option><option value="cm">cm</option>
+              <option value="px">px</option><option value="pt">pt</option>
+            </select></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="svRows" checked>長文自動換行</label>
+        </div>
+        <p class="tip" id="svNote">—</p>
+        <div class="prev" id="svPrev" style="grid-template-columns:1fr"></div>
+      </div>
+      <footer>
+        <span class="tip">「每筆一個路徑」是這套系統獨有的 —— 一般字型轉外框拿不到分筆。</span>
+        <button class="btn grow" id="svGo" type="button" disabled>下載 SVG</button>
+      </footer>
+    </div>
+  </div>
 
   <div class="modal" id="qamodal">
     <div class="sheet" style="width:min(880px,100%)">
@@ -3670,6 +3708,111 @@ function drawMasters(){
     body.appendChild(clr);
   }
 }
+
+
+/* ==========================================================================
+   向量匯出（SVG，給 Illustrator / Inkscape / Figma / 雷切 / CNC）
+   兩種拆法：
+     每字一個路徑 —— 一般用途，跟字型轉外框一樣
+     每筆一個路徑 —— 這套系統獨有。一般字型的輪廓早就合併了，拿不回分筆
+   單位用實體尺寸（mm/cm/pt），開進 Illustrator 就是正確大小，不用再縮放。
+   ========================================================================== */
+const SV_UNIT={mm:3.7795275591, cm:37.795275591, px:1, pt:1.3333333333};
+let svMode="glyph", svList=[];
+
+function svScan(){
+  const raw=[...$("svTxt").value];
+  const seen=new Set(), have=[], miss=[];
+  for(const ch of raw){
+    if(ch==="\n"){ have.push("\n"); continue; }
+    if(!ch.trim() && ch!=="\u3000") continue;
+    if(ch!=="\u3000" && seen.has(ch)) {}
+    if(G[ch]&&(G[ch].s||G[ch].c)) have.push(ch);
+    else { if(!seen.has(ch)) miss.push(ch); seen.add(ch); }
+  }
+  svList=have;
+  const n=have.filter(c=>c!=="\n").length;
+  $("svNote").innerHTML = n
+    ? "<b>"+n+"</b> 個字"+(miss.length?"　·　字庫沒有："+miss.slice(0,10).join(" "):"")
+    : ($("svTxt").value.trim()? "這些字字庫裡都沒有" : "貼上文字");
+  $("svGo").disabled = n===0;
+  /* 預覽 */
+  const wrap=$("svPrev"); wrap.textContent="";
+  if(!n) return;
+  const {svg}=svBuild(true);
+  const box=document.createElement("div");
+  box.style.cssText="border:1px solid var(--line-2);background:var(--paper);padding:10px;overflow:auto";
+  box.innerHTML=svg;
+  const el2=box.querySelector("svg");
+  if(el2){ el2.removeAttribute("width"); el2.removeAttribute("height");
+           el2.style.cssText="max-width:100%;height:auto;max-height:34vh;display:block;margin:0 auto"; }
+  wrap.appendChild(box);
+}
+
+function svBuild(preview){
+  const size=Math.max(1,+$("svSize").value||50);
+  const unit=$("svUnit").value;
+  const perEm=size;                        /* 一個字面盒 = size 個單位 */
+  const gap=0.10, wrapAt=$("svRows").checked?14:1e9;
+  /* 排版 */
+  const rows=[[]];
+  for(const ch of svList){
+    if(ch==="\n"){ rows.push([]); continue; }
+    if(rows[rows.length-1].length>=wrapAt) rows.push([]);
+    rows[rows.length-1].push(ch);
+  }
+  const cols=Math.max(1,...rows.map(r=>r.length));
+  const W=cols*(1+gap)-gap, H=rows.length*(1+gap)-gap;
+  const f=FA();
+  let body="", idn=0;
+  rows.forEach((row,ri)=>row.forEach((ch,ci)=>{
+    const ox=ci*(1+gap), oy=ri*(1+gap);
+    let cs=[]; try{ cs=glyphContours(ch,f,null,30); }catch(e){}
+    if(!cs.length) return;
+    const tr='translate('+fx2(ox)+','+fx2(oy)+') scale('+fx2(1/EM)+')';
+    const nm=ch==="\u3000"?"space":("U"+ch.codePointAt(0).toString(16).toUpperCase());
+    if(svMode==="stroke"){
+      body+='<g id="'+nm+"_"+(++idn)+'" transform="'+tr+'">';
+      cs.forEach((c,i)=>{ body+='<path id="'+nm+"_"+idn+"_s"+(i+1)+'" d="'+svgD(c)+'"/>'; });
+      body+='</g>';
+    } else {
+      body+='<path id="'+nm+"_"+(++idn)+'" transform="'+tr+'" d="'+cs.map(svgD).join(" ")+'"/>';
+    }
+  }));
+  const pad=0.06;
+  const vb=[-pad,-pad,W+pad*2,H+pad*2].map(fx2).join(" ");
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" version="1.1"'+
+    ' width="'+fx2((W+pad*2)*perEm)+unit+'" height="'+fx2((H+pad*2)*perEm)+unit+'"'+
+    ' viewBox="'+vb+'">'+
+    '<title>'+svList.filter(c=>c!=="\n").join("").replace(/[<>&]/g,"")+'</title>'+
+    '<g fill="#000000" fill-rule="nonzero">'+body+'</g></svg>';
+  return {svg, cols, rows:rows.length};
+}
+const fx2=v=>(Math.round(v*1e4)/1e4);
+
+$("btnSVG2").addEventListener("click",()=>{
+  $("svgmodal").classList.add("on");
+  if(!$("svTxt").value) $("svTxt").value=[...($("specIn").value||"方寸")].filter(c=>G[c]).join("");
+  svScan(); $("svTxt").focus();
+});
+$("svClose").addEventListener("click",()=>$("svgmodal").classList.remove("on"));
+$("svgmodal").addEventListener("click",e=>{ if(e.target===$("svgmodal")) $("svgmodal").classList.remove("on"); });
+$("svTxt").addEventListener("input",svScan);
+$("svSize").addEventListener("input",svScan);
+$("svUnit").addEventListener("change",svScan);
+$("svRows").addEventListener("change",svScan);
+$("svMode").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-k]"); if(!b) return;
+  document.querySelectorAll("#svMode button").forEach(x=>x.classList.toggle("on",x===b));
+  svMode=b.dataset.k; svScan();
+});
+$("svGo").addEventListener("click",()=>{
+  const {svg}=svBuild(false);
+  const txt=svList.filter(c=>c!=="\n").join("").slice(0,12).replace(/[^\u4e00-\u9fff\w]/g,"")||"fangcun";
+  download(new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+svg],{type:"image/svg+xml"}),
+           txt+(svMode==="stroke"?"-分筆":"")+".svg");
+  $("svgmodal").classList.remove("on");
+});
 
 /* ---- 分頁切換 ---- */
 let MODE="work";
