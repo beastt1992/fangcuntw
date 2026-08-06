@@ -460,6 +460,15 @@
   .usage .u svg{width:100%;height:100%;display:block}
   .usage-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin-bottom:7px}
   @media (pointer:coarse){ .usage{grid-template-columns:repeat(auto-fill,minmax(54px,1fr))} }
+
+  .famrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .famrow:last-child{border-bottom:none}
+  .famrow input[type=checkbox]{width:15px;height:15px;accent-color:var(--skel);flex:none}
+  .famrow b{width:74px;font-weight:400;font-size:12.5px}
+  .famrow code{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:none;width:64px}
+  .famrow input[type=range]{flex:1;min-width:70px}
+  .famrow em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink);width:34px;text-align:right}
+  @media (pointer:coarse){ .famrow{padding:9px 0} .famrow input[type=checkbox]{width:20px;height:20px} }
 </style>
 </head>
 <body>
@@ -485,6 +494,7 @@
     <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
     <button class="btn ghost sm" id="btnSubset" type="button">挑字匯出</button>
     <button class="btn ghost sm" id="btnSVG2" type="button">向量匯出</button>
+    <button class="btn ghost sm" id="btnFam" type="button">匯出字族</button>
     <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
     <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
@@ -637,6 +647,10 @@
         <div class="sclay-g"><label>隨機</label>
           <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
           <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
+        <div class="sclay-g"><label>單字</label>
+          <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
+          <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
+          <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
         <div class="sclay-g"><label>搬字</label>
           <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
           <button class="btn ghost sm" id="scMoveClr" type="button">歸位</button></div>
@@ -679,7 +693,26 @@
       </div>
       <footer>
         <span class="tip">「每筆一個路徑」是這套系統獨有的 —— 一般字型轉外框拿不到分筆。</span>
+        <button class="btn ghost sm" id="svAnim" type="button" disabled>筆順動畫 SVG</button>
         <button class="btn grow" id="svGo" type="button" disabled>下載 SVG</button>
+      </footer>
+    </div>
+  </div>
+
+
+  <div class="modal" id="fammodal">
+    <div class="sheet" style="width:min(700px,100%)">
+      <header><b>匯出字族</b><span>FAMILY</span>
+        <button class="btn ghost sm" id="famClose" type="button" style="margin-left:auto">關閉</button></header>
+      <div class="body">
+        <p class="tip">一次做出多個字重，name 表寫成同一個家族。<br>
+          裝好之後在 Word、InDesign 裡會併成一個字型，直接切粗細，不是四個獨立字型。</p>
+        <div id="famList"></div>
+        <p class="tip" id="famStat">—</p>
+      </div>
+      <footer>
+        <span class="tip">字型名稱用左欄那兩格。每個字重都是完整字集，會跑一陣子。</span>
+        <button class="btn grow" id="famGo" type="button">開始匯出</button>
       </footer>
     </div>
   </div>
@@ -2513,8 +2546,8 @@ const scheduleSlow=()=>{clearTimeout(slowTimer);
    ========================================================================== */
 const HAS_OT=typeof opentype!=="undefined";
 function buildFont(){
-  const styleTW=presetKey?PNAME[presetKey]:"Regular";
-  const styleEN=presetKey?PNAME_EN[presetKey]:"Regular";
+  const styleTW=over?over.styleTW:(presetKey?PNAME[presetKey]:"Regular");
+  const styleEN=over?over.styleEN:(presetKey?PNAME_EN[presetKey]:"Regular");
   const fam=(FAMILY||"").trim()||"方寸黑體";
   const lat=asciiSafe(LATIN)||"FangcunHei";
   const notdef=new opentype.Glyph({name:".notdef",unicode:0,advanceWidth:EM,path:new opentype.Path()});
@@ -2715,7 +2748,12 @@ function buildShowAxes(){
     const v=document.createElement("b"); v.id="scaxv_"+a.k; v.textContent=a.f(F[a.k]);
     row.appendChild(v);
     r.addEventListener("input",e=>{
-      F[a.k]=+e.target.value; v.textContent=a.f(F[a.k]);
+      const val=+e.target.value;
+      if(scAxMode&&scAxKey){                      /* 只改這個字 */
+        (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={}))[a.k]=val;
+        v.textContent=a.f(val); scAxLabel(); scDraw(); saveLocal(); return;
+      }
+      F[a.k]=val; v.textContent=a.f(F[a.k]);
       presetKey=null;
       document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
       scDraw(); scheduleSlow(); saveLocal();
@@ -2727,11 +2765,12 @@ function syncShowAxes(){
   if($("scWt")) $("scWt").value=F.weight;
   if($("scRd")) $("scRd").value=F.round;
   buildShowAxes();
+  const src=(scAxMode&&scAxKey)? {...F,...(scAxOvr[scAxKey]||{})} : F;
   for(const a of AXES){
     if(SCMORE_SKIP.has(a.k)) continue;
     const r=$("scax_"+a.k), v=$("scaxv_"+a.k);
-    if(r) r.value=F[a.k];
-    if(v) v.textContent=a.f(F[a.k]);
+    if(r) r.value=src[a.k];
+    if(v) v.textContent=a.f(src[a.k]);
   }
 }
 const SCMORE_KEY="fangcun-scmore-open";
@@ -3179,6 +3218,8 @@ $("packIn").addEventListener("change",e=>{
 
 /* ---- 背景建置：輪廓在主執行緒分批算，序列化丟給 Worker ---- */
 const WORKER_SRC=`
+function asciiSafe2(x){return String(x).replace(/[^\x20-\x7E]/g,"").replace(/\s+/g,"")||"Font";}
+
 /* ==========================================================================
    把 opentype.js 產出的 cmap 換掉
    它每個字產生一個 segment、從不合併連續範圍，
@@ -3307,7 +3348,21 @@ onmessage=function(e){
     font.tables.os2=Object.assign({},font.tables.os2,{
       ulUnicodeRange1:0, ulUnicodeRange2:(1<<27)|(1<<16), ulUnicodeRange3:(1<<3),
       ulUnicodeRange4:0, ulCodePageRange1:(1<<20)>>>0, ulCodePageRange2:0,
-      fsType:0, achVendID:"DBST"});
+      fsType:0, achVendID:"DBST",
+    usWeightClass: d.usWeight||400});
+  /* fontSubfamily 只認 Regular/Bold/Italic/Bold Italic，其餘字重要靠
+     usWeightClass ＋ typographic family（name ID 16/17）才會正確歸成一家。 */
+  font.names.preferredFamily   ={en:d.lat,"zh-TW":d.fam};
+  font.names.preferredSubfamily={en:d.styleEN,"zh-TW":d.styleTW};
+  /* Windows 的 name ID 2 只認 Regular / Bold / Italic / Bold Italic。
+     其他字重要把樣式名併進 name ID 1，name ID 2 填 Regular，
+     真正的家族關係交給 16／17 —— 這樣新舊系統都認得。 */
+  if(["Regular","Bold","Italic","Bold Italic"].indexOf(d.styleEN)<0){
+    font.names.fontFamily   ={en:d.lat+" "+d.styleEN, "zh-TW":d.fam+" "+d.styleTW};
+    font.names.fontSubfamily={en:"Regular", "zh-TW":"Regular"};
+    font.names.fullName     ={en:d.lat+" "+d.styleEN, "zh-TW":d.fam+" "+d.styleTW};
+    font.names.postScriptName={en:asciiSafe2(d.lat+"-"+d.styleEN)};
+  }
     var buf=font.toArrayBuffer();
     /* opentype.js 的 cmap 每個字一個 segment、不合併連續範圍，
        超過約 8,180 字就撐爆 format 4 的 uint16 length → 整個檔案作廢。
@@ -3342,17 +3397,26 @@ function cmdsOf(id,NS){
      五千多字的指令有六百萬個數字，用一般陣列會吃掉幾百 MB */
   return Float32Array.from(out);
 }
-async function buildFontBig(chars,NS){
+function cmdsOfF(id,NS,f){
+  const out=[];
+  for(const c of glyphContours(id,f,null,NS)){
+    for(const k of c){
+      if(k[0]==="M")out.push(0,k[1],k[2]); else if(k[0]==="L")out.push(1,k[1],k[2]);
+      else out.push(2,k[1],k[2],k[3],k[4]);
+    } out.push(3);
+  } return Float32Array.from(out);
+}
+async function buildFontBig(chars,NS,over){
   const pack=[];
   for(let i=0;i<chars.length;i++){
     const id=chars[i]; if(!G[id]||!G[id].u) continue;
-    pack.push({u:G[id].u,cmds:cmdsOf(id,NS)});
+    pack.push({u:G[id].u,cmds:(over?cmdsOfF(id,NS,over.f):cmdsOf(id,NS))});
     if(i%150===0){ busy(true,undefined,"產生輪廓 "+i.toLocaleString()+" / "+chars.length.toLocaleString(),
                        i/chars.length*45); await yield_(); }
   }
   busy(true,undefined,"編碼字型檔（背景執行，畫面不會卡）…",50);
-  const styleTW=presetKey?PNAME[presetKey]:"Regular";
-  const styleEN=presetKey?PNAME_EN[presetKey]:"Regular";
+  const styleTW=over?over.styleTW:(presetKey?PNAME[presetKey]:"Regular");
+  const styleEN=over?over.styleEN:(presetKey?PNAME_EN[presetKey]:"Regular");
   const smp=[...(($("specIn")&&$("specIn").value)||"")].filter(ch=>G[ch]).join("")||"這是好天，早上看星。";
   return new Promise((res,rej)=>{
     const w=getWorker();
@@ -3363,7 +3427,7 @@ async function buildFontBig(chars,NS){
     w.onerror=er=>{ clearInterval(iv); w.terminate(); rej(new Error("Worker 失敗："+er.message)); };
     w.postMessage({glyphs:pack, em:EM, asc:ASC, desc:DESC,
       fam:(FAMILY||"").trim()||"方寸黑體", lat:asciiSafe(LATIN)||"FangcunHei",
-      styleTW, styleEN, ver:"Version 1.0", sample:smp},
+      styleTW, styleEN, ver:"Version 1.0", sample:smp, usWeight:over?over.usWeight:400},
       pack.map(g=>g.cmds.buffer));
   });
 }
@@ -3528,7 +3592,7 @@ function scDraw(){
     /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
     const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
-    let cs=[]; try{ cs=glyphContours(ch,FA()); }catch(e){}
+    let cs=[]; try{ cs=glyphContours(ch,scAxesFor(key0)); }catch(e){}
     const n=Math.max(1,cs.length), key=key0, ov=scOvr[key], cust=scCustom[key];
     let ref=null;
     if((scCol==="charGrad"||scCol==="pageGrad") && !cust){
@@ -3558,6 +3622,7 @@ function scDraw(){
 $("scArt").addEventListener("click",e=>{
   if(scMoveMode||scDragging) return;                 /* 搬字模式不換色 */
   const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  if(scAxMode){ scAxKey=k; scAxLabel(); syncShowAxes(); scDraw(); return; }
   if(scPickMode){ scCustom[k]=$("scPick").value; scDraw(); return; }
   delete scCustom[k];                                /* 換回調色盤就清掉自訂色 */
   scOvr[k]=((scOvr[k]===undefined?-1:scOvr[k])+1)%scPal.c.length; scDraw();
@@ -4155,6 +4220,182 @@ function drawUsage(){
     box.appendChild(cell);
   }
 }
+
+
+/* ==========================================================================
+   匯出字族 —— 一次做出多個字重，name 表寫成同一個家族
+   關鍵在 usWeightClass 和 fontSubfamily：寫對了作業系統才會把它們併成一個
+   字型、在 Word 裡直接切粗細，而不是四個各自獨立的字型。
+   ========================================================================== */
+const FAMILY_STYLES=[
+  {k:"Thin",       tw:"極細", w:100, mul:0.46, on:false},
+  {k:"Light",      tw:"細",   w:300, mul:0.70, on:true },
+  {k:"Regular",    tw:"標準", w:400, mul:1.00, on:true },
+  {k:"Medium",     tw:"中黑", w:500, mul:1.22, on:false},
+  {k:"Bold",       tw:"粗",   w:700, mul:1.55, on:true },
+  {k:"Black",      tw:"特粗", w:900, mul:2.00, on:true }
+];
+function famBuildUI(){
+  const box=$("famList"); if(!box||box.childElementCount) return;
+  for(const st of FAMILY_STYLES){
+    const row=document.createElement("div"); row.className="famrow";
+    const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=st.on;
+    cb.addEventListener("change",()=>{ st.on=cb.checked; famStat(); });
+    row.appendChild(cb);
+    const b=document.createElement("b"); b.textContent=st.tw; row.appendChild(b);
+    const c=document.createElement("code"); c.textContent=st.k; row.appendChild(c);
+    const r=document.createElement("input");
+    r.type="range"; r.min=0.30; r.max=2.6; r.step=0.02; r.value=st.mul;
+    const em=document.createElement("em");
+    const upd=()=>{ em.textContent=Math.round(F.weight*st.mul); };
+    r.addEventListener("input",e=>{ st.mul=+e.target.value; upd(); });
+    row.appendChild(r); upd(); row.appendChild(em);
+    box.appendChild(row);
+  }
+  famStat();
+}
+function famStat(){
+  const n=FAMILY_STYLES.filter(s=>s.on).length;
+  const chars=ALL.filter(id=>G[id]&&G[id].u).length;
+  $("famStat").innerHTML = n
+    ? "選了 <b>"+n+"</b> 個字重 × "+chars.toLocaleString()+" 字。滑桿是相對目前字重（"+F.weight+"）的倍率。"
+    : "至少選一個字重";
+  $("famGo").disabled = n===0;
+}
+$("btnFam").addEventListener("click",()=>{ $("fammodal").classList.add("on"); famBuildUI(); famStat(); });
+$("famClose").addEventListener("click",()=>$("fammodal").classList.remove("on"));
+$("fammodal").addEventListener("click",e=>{ if(e.target===$("fammodal")) $("fammodal").classList.remove("on"); });
+
+async function famExport(){
+  const picked=FAMILY_STYLES.filter(s=>s.on);
+  if(!picked.length||!HAS_OT) return;
+  const ids=ALL.filter(id=>G[id]&&G[id].u);
+  const fam=(FAMILY||"").trim()||"方寸黑體";
+  const lat=asciiSafe(LATIN)||"FangcunHei";
+  $("fammodal").classList.remove("on");
+  const done=[];
+  for(let i=0;i<picked.length;i++){
+    const st=picked[i];
+    busy(true,"匯出字族",st.tw+"（"+(i+1)+"/"+picked.length+"）…",Math.round(i/picked.length*100));
+    await yield_();
+    const f={...F,weight:Math.max(8,Math.round(F.weight*st.mul))};
+    const buf=await buildFontBig(ids,30,{f,styleTW:st.tw,styleEN:st.k,usWeight:st.w});
+    const h=new Uint8Array(buf,0,4);
+    if(buf.byteLength<2000||!(h[0]===0x4F&&h[1]===0x54&&h[2]===0x54&&h[3]===0x4F)){
+      alert(st.tw+" 產出的檔案不完整，跳過"); continue;
+    }
+    download(new Blob([buf],{type:"font/otf"}), lat+"-"+st.k+".otf");
+    done.push(st.tw);
+    await new Promise(r=>setTimeout(r,1200));   /* 讓瀏覽器把上一個下載處理完 */
+  }
+  busy(false);
+  setTimeout(()=>alert("字族匯出完成\n\n"+done.join("、")+"\n\n"+
+    "全部安裝之後，Word 或 InDesign 的字型清單裡只會看到一個「"+fam+
+    "」，粗細用一般的字重選單切換。"),400);
+}
+$("famGo").addEventListener("click",()=>famExport().catch(e=>{busy(false);alert("匯出失敗："+e.message);}));
+
+
+/* ==========================================================================
+   單字調軸 —— 十六根軸原本是全域的，做標準字時需要「這個字粗一點」
+   scAxOvr[key] 只存被改過的那幾根，其餘沿用全域 F
+   ========================================================================== */
+let scAxMode=false, scAxKey=null, scAxOvr={};
+function scAxesFor(key){
+  const o=scAxOvr[key];
+  return o? {...FA(), ...o} : FA();
+}
+function scAxLabel(){
+  const n=Object.keys(scAxOvr).length;
+  $("scAxWho").textContent = scAxMode
+    ? (scAxKey? "調整中：" + scAxKey.split("|")[2] + (n>1?"（共 "+n+" 字有調過）":"")
+              : "點一個字來選它")
+    : (n? n+" 個字有單獨設定" : "—");
+}
+function scSetAxMode(on){
+  scAxMode=on;
+  $("scAxOn").setAttribute("aria-pressed",on?"true":"false");
+  $("scAxOn").textContent=on?"單字模式中":"只調這個字";
+  if(on){ if(scMoveMode) scSetMove(false);
+          if(scPickMode){ scPickMode=false;
+            $("scPickOn").setAttribute("aria-pressed","false"); $("scPickOn").textContent="點字上色"; } }
+  else scAxKey=null;
+  scAxLabel(); syncShowAxes(); scDraw();
+}
+$("scAxOn").addEventListener("click",()=>scSetAxMode(!scAxMode));
+$("scAxClr").addEventListener("click",()=>{
+  if(scAxMode&&scAxKey) delete scAxOvr[scAxKey]; else scAxOvr={};
+  scAxLabel(); syncShowAxes(); scDraw(); saveLocal();
+});
+
+
+/* ==========================================================================
+   筆順動畫 SVG
+   一般字型辦不到 —— 輪廓早就合併了，拿不回「哪一筆先寫」。
+   做法：每一筆用自己的骨架當遮罩，dasharray 從 0 長到滿，就是「寫出來」。
+   純 SVG + SMIL，丟進瀏覽器直接會動，也可以嵌在網頁裡。
+   ========================================================================== */
+function svAnimate(){
+  const size=Math.max(1,+$("svSize").value||50);
+  const unit=$("svUnit").value;
+  const list=svList.filter(c=>c!=="\n");
+  if(!list.length) return;
+  const f=FA();
+  const gap=0.12, cols=list.length;
+  const W=cols*(1+gap)-gap, H=1, PAD=0.08;
+  const perStroke=0.34, overlap=0.10;          /* 每筆 0.34 秒，稍微重疊 */
+  let total=0, body="", defs="", idn=0;
+  list.forEach((ch,ci)=>{
+    const ox=ci*(1+gap);
+    let cs=[], sk=[];
+    try{ cs=glyphContours(ch,f,null,30); sk=glyphSkeleton(ch,f,null); }catch(e){}
+    if(!cs.length) return;
+    const n=Math.max(cs.length,sk.length);
+    const gid="g"+(++idn);
+    body+='<g transform="translate('+fx2(ox)+',0) scale('+fx2(1/EM)+')">';
+    for(let i=0;i<cs.length;i++){
+      const t0=total+i*(perStroke-overlap);
+      const mid="m"+gid+"_"+i;
+      const path=sk[i]||null;
+      if(path){
+        /* 用骨架當遮罩，加粗到蓋得住整筆，再讓虛線從 0 長到滿 */
+        defs+='<mask id="'+mid+'" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1400">'+
+              '<path d="'+path+'" fill="none" stroke="#fff" stroke-width="320" '+
+              'stroke-linecap="round" stroke-linejoin="round" '+
+              'pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1">'+
+              '<animate attributeName="stroke-dashoffset" from="1" to="0" '+
+              'begin="'+t0.toFixed(2)+'s" dur="'+perStroke.toFixed(2)+'s" fill="freeze"/>'+
+              '</path></mask>';
+        body+='<path d="'+svgD(cs[i])+'" mask="url(#'+mid+')"/>';
+      }else{
+        /* 沒有骨架（圓點之類）就用淡入 */
+        body+='<path d="'+svgD(cs[i])+'" opacity="0">'+
+              '<animate attributeName="opacity" from="0" to="1" '+
+              'begin="'+t0.toFixed(2)+'s" dur="0.14s" fill="freeze"/></path>';
+      }
+    }
+    body+='</g>';
+    total+=n*(perStroke-overlap);
+  });
+  const dur=(total+0.9).toFixed(2);
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" version="1.1"'+
+    ' width="'+fx2((W+PAD*2)*size)+unit+'" height="'+fx2((H+PAD*2)*size)+unit+'"'+
+    ' viewBox="'+[-PAD,-PAD,W+PAD*2,H+PAD*2].map(fx2).join(" ")+'">'+
+    '<title>'+list.join("").replace(/[<>&]/g,"")+' 筆順</title>'+
+    '<defs>'+defs+
+    /* 整段播完之後重來 */
+    '<animate id="loop" attributeName="x" begin="0s;loop.end+0.6s" dur="'+dur+'s"/>'+
+    '</defs>'+
+    '<g fill="#000000" fill-rule="nonzero">'+body+'</g></svg>';
+  const txt=list.slice(0,10).join("").replace(/[^\u4e00-\u9fff\w]/g,"")||"fangcun";
+  download(new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+svg],{type:"image/svg+xml"}),
+           txt+"-筆順.svg");
+  $("svgmodal").classList.remove("on");
+  setTimeout(()=>alert("筆順動畫完成\n\n"+list.length+" 個字 · 約 "+dur+" 秒\n\n"+
+    "用瀏覽器打開就會自己寫。可以直接嵌在網頁裡，也能用螢幕錄影轉成影片。\n\n"+
+    "（一般字型做不到這個 —— 它們的輪廓早就合併了，拿不回筆順。）"),350);
+}
+$("svAnim").addEventListener("click",()=>{ try{ svAnimate(); }catch(e){ alert("失敗："+e.message); } });
 
 /* ---- 分頁切換 ---- */
 let MODE="work";
