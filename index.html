@@ -499,6 +499,9 @@
     .sheet{max-height:88svh}
     .sheet .body{padding-bottom:16px}
   }
+
+  /* 展示頁沒有疊圖，「對照」在那裡跟「方寸」輸出一樣 —— 藏起來免得誤會 */
+  body.in-show #engines button[data-e="compare"]{display:none}
 </style>
 </head>
 <body>
@@ -659,6 +662,9 @@
     </div>
     <div class="scmore" id="scMoreBox" hidden>
       <div class="sclay">
+        <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
+          <div class="seg" id="scPreset"></div>
+          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
         <div class="sclay-g"><label>對齊</label>
           <div class="seg" id="scAlign">
             <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
@@ -2815,6 +2821,7 @@ function buildShowAxes(){
   }
 }
 function syncShowAxes(){
+  scBuildPresets();
   if($("scWt")) $("scWt").value=F.weight;
   if($("scRd")) $("scRd").value=F.round;
   buildShowAxes();
@@ -4432,10 +4439,48 @@ function svAnimate(){
 }
 $("svAnim").addEventListener("click",()=>{ try{ svAnimate(); }catch(e){ alert("失敗："+e.message); } });
 
+
+/* ---------- 展示頁的預設列與重設 ---------- */
+function scBuildPresets(){
+  const seg=$("scPreset"); if(!seg||seg.childElementCount) return;
+  for(const k of Object.keys(PRESETS)){
+    const b=document.createElement("button");
+    b.type="button"; b.dataset.p=k; b.textContent=PNAME[k]||k;
+    b.addEventListener("click",()=>{
+      Object.assign(F,PRESETS[k]); presetKey=k;
+      document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
+      document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
+      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];   /* 套預設＝回到全域，清掉這個字的單獨設定 */
+      syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+    });
+    seg.appendChild(b);
+  }
+  document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
+}
+$("scReset").addEventListener("click",()=>{
+  if(scAxMode&&scAxKey){                 /* 單字模式：只清這個字 */
+    delete scAxOvr[scAxKey];
+    scAxLabel(); syncShowAxes(); scDraw(); saveLocal(); return;
+  }
+  Object.assign(F, PRESETS[presetKey]||PRESETS.hei);
+  scAxOvr={};                            /* 全域重設也把所有單字設定清掉 */
+  document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
+  scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+});
+
 /* ---- 分頁切換 ---- */
 let MODE="work";
 function setMode(m){
   MODE=m;
+  /* 「對照」是把原樣的輪廓疊在工作台大圖上，展示頁沒有那個疊圖，
+     留著只會讓人以為壞掉（選了跟方寸長一樣）。所以展示頁只留方寸／原樣。 */
+  document.body.classList.toggle("in-show", m==="show");
+  if(m==="show" && ENGINE==="compare"){
+    ENGINE="fangcun";
+    document.querySelectorAll("#engines button[data-e]").forEach(x=>
+      x.classList.toggle("on", x.dataset.e==="fangcun"));
+    paintEngineUI();
+  }
   document.querySelectorAll(".work").forEach(x=>x.classList.toggle("hide",m!=="work"));
   $("showcase").classList.toggle("on",m==="show");
   if(m==="show"){ syncShowAxes(); scFitInput(); scDraw(); }
