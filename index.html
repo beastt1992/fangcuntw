@@ -569,11 +569,39 @@
   .about p{margin:0}
   .about b{color:var(--ink);font-weight:400}
   .about em{font-style:normal;opacity:.8}
+
+  .menuback{display:none}
+  @media (pointer:coarse){
+    .menuback{display:block;position:fixed;inset:0;z-index:59;background:rgba(22,19,13,.28)}
+    .menuback[hidden]{display:none}
+  }
+  /* ---------- 頭列的收合選單 ---------- */
+  .menu{position:relative;flex:none}
+  .menubtn{display:inline-flex;align-items:center;gap:6px}
+  .menubtn i{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid currentColor;transition:transform .18s}
+  .menubtn[aria-expanded="true"] i{transform:rotate(180deg)}
+  .menupanel{position:absolute;right:0;top:calc(100% + 6px);z-index:60;
+    background:var(--paper);border:1px solid var(--ink);box-shadow:0 14px 34px rgba(22,19,13,.22);
+    padding:7px;display:flex;flex-direction:column;gap:5px;min-width:210px}
+  .menupanel[hidden]{display:none}
+  .menupanel .btn{justify-content:flex-start;text-align:left;width:100%}
+  .menunote{font-size:11px;line-height:1.65;color:var(--muted);margin:4px 2px 1px;max-width:230px}
+  @media (pointer:coarse){
+    /* 手機上開成貼齊底部的面板，不然右上角的下拉會被螢幕邊切掉 */
+    .menupanel{position:fixed;left:0;right:0;bottom:0;top:auto;min-width:0;
+      border-left:0;border-right:0;border-bottom:0;border-radius:14px 14px 0 0;
+      padding:12px 12px calc(16px + env(safe-area-inset-bottom));gap:8px;
+      max-height:70svh;overflow-y:auto}
+    .menupanel .btn{padding:11px 14px;font-size:13px}
+    .menunote{font-size:12px;max-width:none}
+  }
 </style>
 </head>
 <body>
 <div class="app">
 
+  <div class="menuback" id="menuBack" hidden></div>
   <div class="bar">
     <div class="brand"><b>方寸</b><span>FANGCUN</span></div>
     <div class="tabs" id="tabs">
@@ -591,17 +619,39 @@
       ><button data-p="kage" title="貼近 GlyphWiki 原始資料的樣子">原樣</button>
     </div>
     <span class="spacer"></span>
-    <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
-    <button class="btn ghost sm" id="btnSubset" type="button">挑字匯出</button>
-    <button class="btn ghost sm" id="btnSVG2" type="button">向量匯出</button>
-    <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
-    <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
-    <button class="btn ghost sm" id="btnKage" type="button">匯入 KAGE</button>
-    <button class="btn ghost sm" id="btnSave" type="button">專案存檔</button>
-    <button class="btn ghost sm" id="btnLoad" type="button">專案讀入</button>
     <input type="file" id="fileIn" accept=".json,application/json" hidden>
-    <button class="btn" id="btnExport" type="button">匯出 OTF</button>
+
+    <!-- 八顆按鈕收成三個選單。按鈕本身整顆搬進面板、id 完全沒變，
+         所以既有的事件監聽一行都不用改。 -->
+    <div class="menu">
+      <button class="btn ghost sm menubtn" id="mFile" type="button" aria-expanded="false">檔案<i></i></button>
+      <div class="menupanel" id="pFile" hidden>
+        <button class="btn ghost sm" id="btnSave" type="button">專案存檔</button>
+        <button class="btn ghost sm" id="btnLoad" type="button">專案讀入</button>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="btn ghost sm menubtn" id="mAdv" type="button" aria-expanded="false">進階<i></i></button>
+      <div class="menupanel" id="pAdv" hidden>
+        <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
+        <button class="btn ghost sm" id="btnKage" type="button">匯入 KAGE</button>
+        <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
+        <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝到桌面</button>
+        <p class="menunote">自我檢查是給「別人改過的檔案帶回來」時用的。<br>
+          匯入 KAGE 與載入資料包：三萬四千字形已內建，平常不需要。</p>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="btn menubtn" id="mExp" type="button" aria-expanded="false">匯出<i></i></button>
+      <div class="menupanel" id="pExp" hidden>
+        <button class="btn ghost sm" id="btnExport" type="button">字型檔 OTF · 全部或指定字數</button>
+        <button class="btn ghost sm" id="btnSubset" type="button">挑字 · 招牌用的小字型</button>
+        <button class="btn ghost sm" id="btnSVG2" type="button">向量 SVG · 給 Illustrator</button>
+      </div>
+    </div>
   </div>
 
   <div class="mid work">
@@ -4634,6 +4684,40 @@ $("qaAbout").addEventListener("click",()=>{
   const b=$("aboutBox"); b.hidden=!b.hidden;
   $("qaAbout").textContent=b.hidden?"關於／授權":"收起";
 });
+
+
+/* ==========================================================================
+   頭列的收合選單
+   八顆按鈕收成三個。按鈕本身沒有被重建 —— 只是搬進面板，
+   id 與事件監聽完全沒動（這是刻意的：重建 DOM 是以前把版面弄壞的原因）。
+   ========================================================================== */
+const MENUS=[["mFile","pFile"],["mAdv","pAdv"],["mExp","pExp"]];
+function closeMenus(except){
+  for(const [b,p] of MENUS){
+    if(p===except) continue;
+    const el2=$(p); if(el2) el2.hidden=true;
+    const bt=$(b); if(bt) bt.setAttribute("aria-expanded","false");
+  }
+  const back=$("menuBack");
+  if(back) back.hidden = !MENUS.some(([,p])=>$(p)&&!$(p).hidden);
+}
+for(const [b,p] of MENUS){
+  $(b).addEventListener("click",e=>{
+    e.stopPropagation();
+    const box=$(p), open=box.hidden;
+    closeMenus(open?p:null);
+    box.hidden=!open;
+    $(b).setAttribute("aria-expanded",open?"true":"false");
+    const back=$("menuBack"); if(back) back.hidden=!open;
+  });
+  /* 面板裡按了任何一顆就收起來 —— 它們各自的原本行為照舊 */
+  $(p).addEventListener("click",e=>{
+    if(e.target.closest("button")) setTimeout(()=>closeMenus(null),0);
+  });
+}
+document.addEventListener("click",e=>{ if(!e.target.closest(".menu")) closeMenus(null); });
+$("menuBack").addEventListener("click",()=>closeMenus(null));
+addEventListener("keydown",e=>{ if(e.key==="Escape") closeMenus(null); });
 
 /* ---- 分頁切換 ---- */
 let MODE="work";
