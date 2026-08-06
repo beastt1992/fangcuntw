@@ -477,6 +477,28 @@
     .sheet footer{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
     .sheet{max-height:min(92dvh, 92svh)}
   }
+
+  /* ==========================================================================
+     視窗捲不動的兩個真正原因（挑字匯出／向量匯出都中）
+     1. `.sheet .body` 沒有 flex:1 —— 它在彈性欄裡不是負責伸縮的那個，
+        高度不受 max-height 約束，所以 overflow:auto 永遠不會啟動。
+     2. 視窗比螢幕寬 —— 內容把它撐開，橫向溢出會讓 iOS 的直向捲動一起失效。
+     只新增規則，不改既有選擇器。
+     ========================================================================== */
+  .sheet{overflow:hidden;max-width:100vw}
+  .sheet>.body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .sheet>header,.sheet>footer{flex:0 0 auto}
+  /* 任何一個彈性子項只要沒設 min-width:0，就可能被內容撐爆版面 */
+  .sheet .body>*,.sheet footer>*{min-width:0;max-width:100%}
+  .sheet .body textarea,.sheet .body input,.sheet .body select{max-width:100%}
+  .sheet footer .tip{flex:1 1 160px;min-width:0}
+  @media (pointer:coarse){
+    /* sticky footer 在這個結構下沒有捲動祖先，不會生效，反而會蓋住內容 */
+    .sheet footer{position:static}
+    .sheet{max-height:88svh}
+    .sheet .body{padding-bottom:16px}
+  }
 </style>
 </head>
 <body>
@@ -607,7 +629,7 @@
     <div class="scbar">
       <div class="g"><label>版式</label>
         <div class="seg" id="scLayout">
-          <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button><button data-k="line">排句</button>
+          <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button>
         </div></div>
       <div class="g"><label>上色</label>
         <div class="seg" id="scColor">
@@ -3479,7 +3501,7 @@ const SCPAL=[
   {k:"luo", n:"落山風", bg:"#170d12", ink:"#ffeadb", c:["#ff7a4d","#ffb03d","#e8456b","#ab3a7c","#5c2f6b"]},
   {k:"cha", n:"茶",     bg:"#ece4d4", ink:"#3a2a17", c:["#6b4423","#8f6b3a","#3f5140","#a8582f","#2f3a2e"]}
 ];
-let scPal=SCPAL[0], scLay="huge", scCol="stroke", scBlend="normal", scOvr={}, scSeq=0;
+let scPal=SCPAL[0], scLay="huge",   /* 只剩 huge / grid */ scCol="stroke", scBlend="normal", scOvr={}, scSeq=0;
 
 SCPAL.forEach(p=>{
   const b=document.createElement("button");
@@ -3546,13 +3568,13 @@ function scDraw(){
 
   let gap,positions=[],cols,rows;
   if(manualBreak){
-    gap=scLay==="grid"?0.14:(scLay==="line"?0.10:0.06);
+    gap=scLay==="grid"?0.14:0.06;
     rows=Math.max(1,lines.length);
     cols=Math.max(1,...lines.map(x=>x.length));
     lines.forEach((line,row)=>line.forEach((ch,col)=>positions.push({ch,row,col})));
   }else{
+    /* 排句砍掉了 —— 它只是「巨字＋字距 0.10」，現在有字距滑桿可以直接調 */
     if(scLay==="huge"){ cols=list.length; gap=0.06; }
-    else if(scLay==="line"){ cols=list.length; gap=0.10; }
     else { cols=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4)))); gap=0.14; }
     rows=Math.ceil(list.length/cols);
     positions=list.map((ch,i)=>({ch,row:Math.floor(i/cols),col:i%cols}));
@@ -3691,7 +3713,7 @@ function scSeg(id,fn){
     fn(b.dataset.k); scDraw();
   });
 }
-scSeg("scLayout",k=>scLay=k);
+scSeg("scLayout",k=>scLay=(k==="line"?"huge":k));   /* 舊設定若是 line，退回巨字 */
 scSeg("scColor", k=>scCol=k);
 scSeg("scBlend", k=>scBlend=k);
 function scFitInput(){
