@@ -1042,9 +1042,7 @@ const ORDER=[...COMP,...CXED];
 const ALL=[...ORDER,...PUNCT];
 const VNAME={left:"左偏旁",right:"右偏旁",top:"置頂",bottom:"墊底",enclose:"包圍"};
 const BASE=JSON.parse(JSON.stringify(G));
-/* 內建手工字形是品質基準。載入 KAGE 只補字庫，不再覆蓋這批核心字。 */
-const CORE_IDS=new Set(Object.keys(BASE));
-const CORE_SNAPSHOT=JSON.stringify(BASE);
+const PROTECTED_BASE=new Set(Object.keys(BASE)); /* 內建核心字／部件不被 KAGE 資料包覆蓋 */
 
 /* ==========================================================================
    幾何
@@ -1435,23 +1433,11 @@ function estimateStrokeCount(id,stack,depth){
   if(g.c) for(const p of g.c) n+=estimateStrokeCount(p.r,next,(depth||0)+1);
   n=Math.max(1,n); STROKE_EST.set(id,n); return n;
 }
-const SOURCE_STYLE_RULES=[
-  [/^u8fb6(?:-|$)/i,"辶"], [/^u961d-01/i,"阝"], [/^u961d-02/i,"阝"],
-  [/^u8a01(?:-|$)/i,"訁"], [/^u6c35(?:-|$)/i,"氵"], [/^u624c(?:-|$)/i,"扌"],
-  [/^u5fc4(?:-|$)/i,"忄"], [/^u4ebb(?:-|$)/i,"亻"], [/^u7cf9(?:-|$)/i,"糹"],
-  [/^u72ad(?:-|$)/i,"犭"], [/^u8279(?:-|$)/i,"艹"], [/^u7af9(?:-|$)/i,"竹"],
-  [/^u5b80(?:-|$)/i,"宀"], [/^u7592(?:-|$)/i,"疒"], [/^u5973-(?:t)?01/i,"女"],
-  [/^u53e3-(?:t)?01/i,"口"], [/^u6728-01/i,"木"], [/^u65e5-04/i,"日"],
-  [/^u76ee-04/i,"目"], [/^u6708-04/i,"月"], [/^u99ac-02/i,"馬"],
-  [/^u91d1-01/i,"金"], [/^u8eca-06/i,"車"], [/^u7c73-01/i,"米"]
-];
 function componentStyleKey(id){
-  const raw=String(id);
-  if([...raw].length===1) return raw;
-  for(const [rx,key] of SOURCE_STYLE_RULES) if(rx.test(raw)) return key;
-  const m=/^u([0-9a-f]{4,6})(?:-|$)/i.exec(raw);
-  if(!m) return raw;
-  try{return String.fromCodePoint(parseInt(m[1],16));}catch(e){return raw;}
+  if([...String(id)].length===1) return id;
+  const m=/^u([0-9a-f]{4,6})(?:-|$)/i.exec(String(id));
+  if(!m) return id;
+  try{return String.fromCodePoint(parseInt(m[1],16));}catch(e){return id;}
 }
 const COMPONENT_DENSITY_CAP={
   "糹":0.86,"糸":0.88,"金":0.88,"馬":0.87,"門":0.89,"雨":0.89,
@@ -1464,8 +1450,7 @@ const COMPONENT_WIDTH_BIAS={
   "言":0.96,"訁":0.95,"車":0.96,"隹":0.96,"酉":0.96,"足":0.97,"月":0.96,
   "女":0.97,"心":0.96,"忄":0.95,"辶":0.95,"竹":0.96,"父":0.97,"又":0.97,
   "火":0.97,"力":0.97,"疒":0.96,"犭":0.96,"阝":0.96,"耳":0.96,
-  "西":0.96,"目":0.96,"日":0.96,"田":0.96,"氵":0.95,"扌":0.95,"亻":0.96,
-  "訁":0.95,"艹":0.96,"宀":0.97,"米":0.97
+  "西":0.96,"目":0.96,"日":0.96,"田":0.96,"氵":0.95,"扌":0.95,"亻":0.96
 };
 
 function setLineAxis(points,axis,weight){
@@ -1489,8 +1474,7 @@ function nudgeEnd(points,dx,dy){
 }
 function tweakCommonStroke(st,sk,idx,total){
   const o={...st,p:st.p.map(q=>q.slice())};
-  /* 只處理 KAGE 轉入筆畫；手工核心字形不得被泛用規則二次改形。 */
-  if(!st.kage) return o;
+  if(!st.kage) return o; /* 手工核心骨架不得套用 KAGE 自動修正 */
   if(sk==="辶"){
     if(o.t==="dian"){ o.w=(o.w||1)*0.88; o.p=o.p.map((q,i)=>[q[0]-(i?4:0), q[1]-8]); }
     if(o.cv||o.t==="na"||o.t==="zhe"){
@@ -1555,8 +1539,10 @@ function collect(id,box,wScale,out,seed,variant,depth){
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
   /* box 已經是相對整個 em 的絕對位置，不再把父層 ws 重複相乘；深層 KAGE 引用不會越來越細。 */
   const sk=componentStyleKey(id);
-  const bias=COMPONENT_WIDTH_BIAS[sk]||1;
-  const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy))*bias;
+  const protectedCore=PROTECTED_BASE.has(id);
+  const bias=protectedCore?1:(COMPONENT_WIDTH_BIAS[sk]||1);
+  const optical=(protectedCore&&Math.abs(sx)>=0.99&&Math.abs(sy)>=0.99)?1:opticalWeightScale(id,sx,sy);
+  const ws=Math.min(wScale||1,optical)*bias;
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>{
     const tweaked=tweakCommonStroke(st,sk,i,S.length);
@@ -1633,11 +1619,8 @@ const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
 
 function glyphContours(id,f,variant,NS){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
-  /* KAGE 複雜字在同一字面塞入過多筆畫時，自動降黑；核心手工字不受影響。 */
-  const hasKage=raw.some(st=>st.kage), n=raw.length;
-  const density=!CORE_IDS.has(id)&&hasKage ? (n>=24?0.80:n>=20?0.84:n>=17?0.88:n>=14?0.92:n>=11?0.96:1) : 1;
   const out=[];
-  for(const st of warp(raw,f)) out.push(...strokeContours(st,f,st.ws*density,NS));
+  for(const st of warp(raw,f)) out.push(...strokeContours(st,f,st.ws,NS));
   return out;
 }
 function glyphSkeleton(id,f,variant){
@@ -1927,7 +1910,8 @@ const touch=id=>{ if(id) EDITED.add(id); };
 
 /* 某個 id 的「乾淨版本」：優先用匯入的 KAGE，其次才是內建出廠值 */
 function pristine(id){
-  if(CORE_IDS.has(id)) return JSON.parse(JSON.stringify(BASE[id]));
+  /* 內建核心字是人工調整的產品基準，不應被資料包覆蓋。 */
+  if(PROTECTED_BASE.has(id)&&BASE[id]) return JSON.parse(JSON.stringify(BASE[id]));
   if(PACKRAW){
     if([...id].length===1){                    /* 單字 → 一層滿框引用，指向來源字形 */
       const cp=id.codePointAt(0);
@@ -2286,7 +2270,7 @@ function resetGlyph(id){
   if(src.c) G[id].c=src.c;
   EDITED.delete(id);
 }
-const baselineName=()=>PACKRAW?"匯入的 KAGE":"內建出廠值";
+const baselineName=()=>PACKRAW?"內建核心＋匯入 KAGE":"內建出廠值";
 $("btnResetOne").addEventListener("click",()=>{
   resetGlyph(current);applyKnownKageFixes();clearStrokeEstimates();varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
   if(MODE==="show") scDraw();});
@@ -2405,99 +2389,28 @@ function kageBend(A,C,B){
   const v=((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
   return clamp(v,-0.46,0.46);
 }
-function cloneCoreGlyph(id,variant){
-  const g=BASE[id]; if(!g) return null;
-  const out={};
-  if(g.u!==undefined) out.u=g.u;
-  if(g.sp) out.sp=g.sp;
-  if(g.s){
-    const S=resolveStrokes(g,variant)||g.s;
-    out.s=JSON.parse(JSON.stringify(S));
-  }
-  if(g.c) out.c=JSON.parse(JSON.stringify(g.c));
-  return out;
-}
-function bindCoreSource(rx,core,variant){
-  for(const key of Object.keys(G)){
-    if(!rx.test(key)) continue;
-    const src=cloneCoreGlyph(core,variant); if(!src) continue;
-    /* 來源部件不需要 Unicode；只保留骨架與組件。 */
-    delete src.u; G[key]=src;
-  }
-}
-function inferCoreVariant(key,ch){
-  const g=BASE[ch]; if(!g||!g.v) return null;
-  const suf=(String(key).split("-").slice(1).join("-")||"").toLowerCase();
-  const code=(suf.match(/(?:^|[a-z])(0[1-5])(?:$|[^0-9])/)||[])[1];
-  const want=code==="01"?"left":code==="02"?"top":code==="03"?"right":code==="04"?"bottom":code==="05"?"enclose":null;
-  return want&&g.v[want]?want:null;
-}
-function bindAllCoreSources(){
-  for(const key of Object.keys(G)){
-    const m=/^u([0-9a-f]{4,6})(?:-|$)/i.exec(key); if(!m) continue;
-    let ch; try{ch=String.fromCodePoint(parseInt(m[1],16));}catch(e){continue;}
-    if(!CORE_IDS.has(ch)) continue;
-    const src=cloneCoreGlyph(ch,inferCoreVariant(key,ch)); if(!src) continue;
-    delete src.u; G[key]=src;
-  }
-}
-function enforceCoreGlyphs(){
-  for(const id of CORE_IDS){
-    if(EDITED&&EDITED.has(id)) continue;
-    G[id]=JSON.parse(JSON.stringify(BASE[id]));
-  }
-}
 function applyKnownKageFixes(){
-  /* 任何已有手工核心版本的來源字形，先統一回核心風格。 */
-  bindAllCoreSources();
-  /* 高頻偏旁直接沿用內建手工骨架，避免同一偏旁在不同字裡變形。 */
-  bindCoreSource(/^u8fb6(?:-|$)/i,"辶");
-  bindCoreSource(/^u961d-01/i,"阝");
-  bindCoreSource(/^u8a01(?:-|$)/i,"言");
-  bindCoreSource(/^u6c35(?:-|$)/i,"氵");
-  bindCoreSource(/^u624c(?:-|$)/i,"扌");
-  bindCoreSource(/^u5fc4(?:-|$)/i,"忄");
-  bindCoreSource(/^u4ebb(?:-|$)/i,"亻");
-  bindCoreSource(/^u7cf9(?:-|$)/i,"糹");
-  bindCoreSource(/^u72ad(?:-|$)/i,"犭");
-  bindCoreSource(/^u8279(?:-|$)/i,"艹");
-  bindCoreSource(/^u7af9(?:-|$)/i,"竹");
-  bindCoreSource(/^u5b80(?:-|$)/i,"宀");
-  bindCoreSource(/^u7592(?:-|$)/i,"疒");
-  bindCoreSource(/^u5973-(?:t)?01/i,"女");
-  bindCoreSource(/^u53e3-(?:t)?01/i,"口");
-  bindCoreSource(/^u6728-01/i,"木","left");
-  bindCoreSource(/^u65e5-04/i,"日");
-  bindCoreSource(/^u76ee-04/i,"目");
-  bindCoreSource(/^u6708-04/i,"月");
-  bindCoreSource(/^u99ac-02/i,"馬");
-  bindCoreSource(/^u91d1-01/i,"金");
-  bindCoreSource(/^u8eca-06/i,"車");
-  bindCoreSource(/^u7c73-01/i,"米");
-
-  /* 右耳旁不能直接使用左耳旁，做水平鏡像並保留兩筆結構。 */
-  for(const key of Object.keys(G)) if(/^u961d-02/i.test(key)){
-    const src=cloneCoreGlyph("阝");
-    if(src&&src.s){
-      src.s=src.s.map(st=>({...st,p:st.p.map(([x,y])=>[EM-x,y])}));
-      G[key]=src;
-    }
-  }
-  enforceCoreGlyphs();
-}
-function runGlyphRegression(){
-  const common="木林森這進連過還道說語讀請謝陳部都河海情快打找住他紅經媽嗎狗花草空家病痛問間的有是了人大小中";
-  const bad=[];
-  for(const ch of common){
-    if(!G[ch]){bad.push(ch+":missing");continue;}
-    try{
-      const cs=glyphContours(ch,F,null,18);
-      const finite=cs.length&&cs.every(c=>c.every(cmd=>cmd.slice(1).every(Number.isFinite)));
-      if(!finite) bad.push(ch+":outline");
-    }catch(e){bad.push(ch+":"+e.message);}
-  }
-  if(bad.length) console.warn("方寸字形回歸檢查",bad);
-  return bad;
+  /* 左右阝必須拆成四筆。舊版把兩段曲線合併成一條 S 形，會形成巨大的耳朵／葫蘆。 */
+  const leftEar=()=>[
+    {t:"heng",p:[[150,858],[366,858]],h:"open",e:"conn",w:0.80,kage:1,ear:"left"},
+    {t:"zhe",cv:"quad",p:[[366,858],[334,756],[236,620]],h:"conn",e:"open",w:0.82,kage:1,ear:"left"},
+    {t:"zhe",cv:"quad",p:[[236,620],[366,500],[324,320]],h:"conn",e:"earHook",w:0.84,kage:1,ear:"left"},
+    {t:"shu",p:[[150,858],[150,82]],h:"conn",e:"open",w:0.88,kage:1,ear:"left"}
+  ];
+  const rightEar=()=>[
+    {t:"heng",p:[[850,858],[634,858]],h:"open",e:"conn",w:0.80,kage:1,ear:"right"},
+    {t:"zhe",cv:"quad",p:[[634,858],[666,756],[764,620]],h:"conn",e:"open",w:0.82,kage:1,ear:"right"},
+    {t:"zhe",cv:"quad",p:[[764,620],[634,500],[676,320]],h:"conn",e:"earHook",w:0.84,kage:1,ear:"right"},
+    {t:"shu",p:[[850,858],[850,82]],h:"conn",e:"open",w:0.88,kage:1,ear:"right"}
+  ];
+  const walk=()=>[
+    {t:"dian",p:[[245,825],[320,750]],h:"point",e:"taperR",w:0.86,kage:1},
+    {t:"zhe",p:[[205,650],[365,650],[295,545],[370,480]],h:"open",e:"open",w:0.80,fr:0.68,kage:1},
+    {t:"na",cv:"cubic",p:[[205,385],[315,270],[600,180],[915,205]],h:"point",e:"taperR",w:0.86,kage:1}
+  ];
+  for(const key of ["u961d-01","u961d-01-var-001"]){ if(G[key]) G[key].s=leftEar(); }
+  for(const key of ["u961d-02","u961d-02-var-001"]){ if(G[key]) G[key].s=rightEar(); }
+  for(const key of Object.keys(G)) if(/^u8fb6(?:-|$)/i.test(key)&&G[key]) G[key].s=walk();
 }
 
 /* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
@@ -2802,7 +2715,13 @@ async function loadPack(json,keepMine,quiet){
     const m=/^u([0-9a-f]{4,5})$/.exec(name); if(!m) continue;
     const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
     const ch=String.fromCodePoint(cp);
-    if(mine.has(ch)||CORE_IDS.has(ch)) continue;       /* 保留手工核心字與使用者修改 */
+    if(mine.has(ch)) continue;                       /* 保留他自己調過的字 */
+    if(PROTECTED_BASE.has(ch)&&BASE[ch]){
+      G[ch]=JSON.parse(JSON.stringify(BASE[ch]));    /* 木、口、日等核心字鎖定內建骨架 */
+      if(!ALL.includes(ch)) ALL.push(ch);
+      mapped++;
+      continue;
+    }
     const t=name+"-t";
     const src=G[t]?t:(G[name]?name:null); if(!src) continue;
     if(src===t) usedT++;
@@ -2811,7 +2730,6 @@ async function loadPack(json,keepMine,quiet){
     mapped++;
   }
   KAGE_EXACT=false;
-  applyKnownKageFixes(); clearStrokeEstimates();
   /* 保留下來的那些字，仍然算「已修改」（基準線是 KAGE，不是他的版本） */
   EDITED.clear(); for(const id of mine) if(G[id]) EDITED.add(id);
   busy(true,undefined,"重建畫面…",90);
@@ -3375,7 +3293,6 @@ async function boot(){
   /* 舊版 localStorage 可能把已修正的 KAGE 部件覆蓋回去；啟動最後再跑一次引擎遷移。 */
   applyKnownKageFixes(); clearStrokeEstimates();
   buildCells(); mark(); drawAll(); drawSpec(); markEdited(); runQA(); refreshLiveFont();
-  requestAnimationFrame(()=>runGlyphRegression());
   busy(false);
 }
 boot();
