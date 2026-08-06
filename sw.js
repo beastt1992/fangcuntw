@@ -1,8 +1,8 @@
 /* 方寸 — service worker
    整個 app（含 3MB 字庫）第一次載入就快取起來，之後完全離線可用。 */
-const CACHE = "fangcun-v1-1";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
-const ASSETS = [
-  "./", "./index.html", "./manifest.webmanifest",
+const CACHE = "fangcun-v1-2";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
+const CORE_ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
+const OPTIONAL_ASSETS = [
   "./icon.svg", "./icon-192.png", "./icon-512.png",
   "./icon-mask-192.png", "./icon-mask-512.png"
 ];
@@ -10,7 +10,10 @@ const ASSETS = [
 self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS))
+      .then(async c => {
+        await c.addAll(CORE_ASSETS);
+        await Promise.allSettled(OPTIONAL_ASSETS.map(asset => c.add(asset)));
+      })
       .then(() => self.skipWaiting())
       .catch(() => self.skipWaiting())
   );
