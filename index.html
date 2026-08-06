@@ -570,20 +570,24 @@
   .about b{color:var(--ink);font-weight:400}
   .about em{font-style:normal;opacity:.8}
 
-  .menuback{display:none}
-  @media (pointer:coarse){
-    .menuback{display:block;position:fixed;inset:0;z-index:59;background:rgba(22,19,13,.28)}
-    .menuback[hidden]{display:none}
-  }
+  .menuback{position:fixed;inset:0;z-index:59;background:transparent}
+  .menuback[hidden]{display:none}
+  @media (pointer:coarse){ .menuback{background:rgba(22,19,13,.28)} }
   /* ---------- 頭列的收合選單 ---------- */
   .menu{position:relative;flex:none}
   .menubtn{display:inline-flex;align-items:center;gap:6px}
   .menubtn i{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
     border-top:5px solid currentColor;transition:transform .18s}
   .menubtn[aria-expanded="true"] i{transform:rotate(180deg)}
-  .menupanel{position:absolute;right:0;top:calc(100% + 6px);z-index:60;
+  /* 一定要 fixed，不能 absolute ——
+     .bar 在桌機是 overflow:hidden、手機是 overflow-x:auto，
+     absolute 的面板會直接被頭列的邊界裁掉（看起來就像被前面的面板擋住）。
+     fixed 不受祖先 overflow 裁切，位置由 JS 依按鈕算。已確認頭列與其祖先
+     都沒有 transform / filter，所以 fixed 不會退化成 absolute。 */
+  .menupanel{position:fixed;z-index:60;
     background:var(--paper);border:1px solid var(--ink);box-shadow:0 14px 34px rgba(22,19,13,.22);
-    padding:7px;display:flex;flex-direction:column;gap:5px;min-width:210px}
+    padding:7px;display:flex;flex-direction:column;gap:5px;min-width:210px;
+    max-height:min(70vh,560px);overflow-y:auto}
   .menupanel[hidden]{display:none}
   .menupanel .btn{justify-content:flex-start;text-align:left;width:100%}
   .menunote{font-size:11px;line-height:1.65;color:var(--muted);margin:4px 2px 1px;max-width:230px}
@@ -4701,12 +4705,33 @@ function closeMenus(except){
   const back=$("menuBack");
   if(back) back.hidden = !MENUS.some(([,p])=>$(p)&&!$(p).hidden);
 }
+/* 面板是 fixed，位置要自己算。桌機掛在按鈕下方並靠右對齊，
+   超出視窗右緣或下緣時往內收；手機交給 CSS 貼底，不算座標。 */
+function placeMenu(btnId,panelId){
+  const el0=$(panelId);
+  if(window.matchMedia("(pointer:coarse)").matches){
+    /* 手機是貼底面板，交給 CSS。但桌機模式留下的行內 style 優先度最高，
+       不清掉的話縮窗到手機尺寸時面板會卡在半空中。 */
+    el0.style.left=el0.style.right=el0.style.top=el0.style.bottom=el0.style.maxHeight="";
+    return;
+  }
+  const b=$(btnId).getBoundingClientRect(), el2=$(panelId);
+  el2.style.left=""; el2.style.right=""; el2.style.bottom="";
+  el2.style.top=Math.round(b.bottom+6)+"px";
+  const w=el2.offsetWidth||220;
+  let left=Math.round(b.right-w);
+  left=Math.max(8, Math.min(left, window.innerWidth-w-8));
+  el2.style.left=left+"px";
+  const maxH=window.innerHeight-b.bottom-18;
+  el2.style.maxHeight=Math.max(160,maxH)+"px";
+}
 for(const [b,p] of MENUS){
   $(b).addEventListener("click",e=>{
     e.stopPropagation();
     const box=$(p), open=box.hidden;
     closeMenus(open?p:null);
     box.hidden=!open;
+    if(open) placeMenu(b,p);
     $(b).setAttribute("aria-expanded",open?"true":"false");
     const back=$("menuBack"); if(back) back.hidden=!open;
   });
@@ -4718,6 +4743,9 @@ for(const [b,p] of MENUS){
 document.addEventListener("click",e=>{ if(!e.target.closest(".menu")) closeMenus(null); });
 $("menuBack").addEventListener("click",()=>closeMenus(null));
 addEventListener("keydown",e=>{ if(e.key==="Escape") closeMenus(null); });
+addEventListener("resize",()=>{
+  for(const [b,p] of MENUS) if($(p)&&!$(p).hidden) placeMenu(b,p);
+});
 
 /* ---- 分頁切換 ---- */
 let MODE="work";
