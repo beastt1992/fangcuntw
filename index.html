@@ -449,6 +449,17 @@
     .sclay-g>label{width:60px;font-size:12.5px}
     .sclay-g input[type=color]{width:44px;height:34px}
   }
+
+  /* ---------- 部件「用在這些字」預覽 ----------
+     字樣格是把部件攤成整個字面顯示的，但左偏旁在實際的字裡只佔三分之一寬。
+     不看實際用例，很容易誤判部件壞掉。 */
+  .usage{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:5px}
+  .usage .u{border:1px solid var(--line-2);background:var(--paper);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;aspect-ratio:1}
+  .usage .u:hover{border-color:var(--ink)}
+  .usage .u svg{width:100%;height:100%;display:block}
+  .usage-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin-bottom:7px}
+  @media (pointer:coarse){ .usage{grid-template-columns:repeat(auto-fill,minmax(54px,1fr))} }
 </style>
 </head>
 <body>
@@ -546,6 +557,10 @@
         <button class="btn ghost sm" id="btnResetAll" type="button">全部還原</button>
       </div>
       <div class="scroll">
+        <div class="sect" id="secUsage" hidden>
+          <h4>用在這些字 IN USE <em id="usageN"></em></h4>
+          <div class="usage" id="usageBox"></div>
+        </div>
         <div class="sect" id="secMaster" hidden>
           <h4>部件母版 MASTERS <em id="mstCount"></em></h4>
           <div id="mstBody"></div>
@@ -3979,7 +3994,8 @@ function drawMasters(){
     cb.addEventListener("change",()=>{
       if(cb.checked) MASTERS[sib]=id; else delete MASTERS[sib];
       invalidateUses(); buildCells(); mark(); schedule(); scheduleSlow(); saveLocal();
-      drawMasters(); if(MODE==="show") scDraw();
+      drawMasters();
+  drawUsage(); if(MODE==="show") scDraw();
     });
     row.appendChild(cb);
     row.appendChild(miniGlyph(sib));
@@ -4104,6 +4120,41 @@ $("svGo").addEventListener("click",()=>{
            txt+(svMode==="stroke"?"-分筆":"")+".svg");
   $("svgmodal").classList.remove("on");
 });
+
+
+/* ---------- 部件用在哪些字 ---------- */
+function drawUsage(){
+  const sec=$("secUsage"), box=$("usageBox");
+  const id=current;
+  if(!id||!G[id]||G[id].u){ sec.hidden=true; return; }   /* 成字本身不用列 */
+  const users=[];
+  for(const k in G){
+    const g=G[k]; if(!g||!g.u||[...k].length!==1) continue;
+    const seen=new Set();
+    (function walk(x,d){
+      if(d>6||seen.has(x)) return; seen.add(x);
+      const gg=G[x]; if(!gg||!gg.c) return;
+      for(const q of gg.c){ if(masterOf(q.r)===id||q.r===id){ users.push(k); return; } walk(masterOf(q.r),d+1); }
+    })(k,0);
+    if(users.length>=48) break;
+  }
+  if(!users.length){ sec.hidden=true; return; }
+  sec.hidden=false;
+  $("usageN").textContent=users.length>=48?"48+":String(users.length);
+  box.textContent="";
+  const note=document.createElement("p"); note.className="usage-note";
+  note.textContent="字樣格把部件攤成整個字面，但左偏旁實際只佔三分之一寬。要判斷部件好不好，看這裡。";
+  box.appendChild(note);
+  for(const ch of users.slice(0,48)){
+    const cell=document.createElement("div"); cell.className="u"; cell.title=ch;
+    const svg=el("svg",{viewBox:"-20 -20 1040 1040",preserveAspectRatio:"xMidYMid meet"});
+    try{ glyphContours(ch,FA(),null,14).forEach(c=>
+      svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
+    cell.appendChild(svg);
+    cell.addEventListener("click",()=>{ current=ch; mark(); drawAll(); });
+    box.appendChild(cell);
+  }
+}
 
 /* ---- 分頁切換 ---- */
 let MODE="work";
