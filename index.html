@@ -1793,7 +1793,10 @@ function markCorners(strokes,f){
     const sin=Math.abs(a[0]*b[1]-a[1]*b[0]);      /* 兩切線夾角的 sin */
     const hw2=halfW(strokes[best.i]);
     /* sin 太小＝幾乎同向，斜接會拉到無限遠，夾住 */
-    st[key]=Math.min(hw2*3.2, hw2/Math.max(0.28,sin));
+    /* 斜接會在轉角補進官方 KAGE 沒有的墨（實測：關掉後對官方吻合度 0.8702→0.8750）。
+       但它是當初修好「辶 斜線戳出去」的關鍵，風格模式要留著。
+       所以只有原樣模式關掉 —— 原樣要的是忠實，風格要的是好看。 */
+    st[key]=(f.miter===0) ? 0 : Math.min(hw2*3.2, hw2/Math.max(0.28,sin));
   }
   return strokes;
 }
@@ -1980,7 +1983,7 @@ const PRESETS={
   title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
   kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.60,dun:1.00,press:1.00,rise:0.114},
-  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00}
+  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
@@ -3469,7 +3472,8 @@ $("subGo").addEventListener("click",()=>{
    收尖是明體的事。所以原樣模式的出鋒必須是 0，鉤也不縮。 */
 const ENGINE_REF={weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
                   gravity:1.00,face:1.00,hand:0.00,finish:0.00,
-                  width:1.00,slant:0.00,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00};
+                  width:1.00,slant:0.00,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
+                  miter:0};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
