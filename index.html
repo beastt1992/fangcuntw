@@ -1,0 +1,2604 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>筆畫系統 v0.21 — 參數化中文字型工作台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+<style>
+  :root{
+    --paper:#f5f2e9; --paper-2:#ece6d6; --paper-3:#f0ece1; --ink:#16130d;
+    --line:#ddd6c4; --line-2:#b7ad95; --grid:#c2453a;
+    --skel:#2f7fbf; --box:#3f7d4e; --muted:#7d7460; --ok:#3f7d4e;
+    --w1:#b8862b; --w2:#c2453a;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--paper);color:var(--ink);overflow:hidden;
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:14px}
+  .app{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative}
+  .tabs{display:flex;border:1px solid var(--ink)}
+  .tabs button{font-family:inherit;font-size:12.5px;padding:5px 14px;background:var(--paper);
+    border:none;cursor:pointer;color:var(--muted);white-space:nowrap;letter-spacing:.05em}
+  .tabs button+button{border-left:1px solid var(--ink)}
+  .tabs button.on{background:var(--ink);color:var(--paper)}
+  .work.hide{display:none}
+
+  .bar{display:flex;align-items:center;gap:12px;padding:0 12px;height:50px;
+    border-bottom:1px solid var(--ink);overflow:hidden}
+  .brand{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+  .brand b{font-size:17px;font-weight:700;letter-spacing:.06em}
+  .brand span{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.15em}
+  .presets{display:flex;border:1px solid var(--ink)}
+  .presets button{font-family:inherit;font-size:12.5px;padding:5px 12px;background:var(--paper);
+    border:none;cursor:pointer;color:var(--muted);white-space:nowrap}
+  .presets button+button{border-left:1px solid var(--ink)}
+  .presets button:hover{background:var(--paper-2);color:var(--ink)}
+  .presets button.on{background:var(--ink);color:var(--paper)}
+  .spacer{margin-left:auto}
+  .btn{font-family:inherit;font-size:12.5px;padding:6px 13px;background:var(--ink);color:var(--paper);
+    border:1px solid var(--ink);cursor:pointer;white-space:nowrap;letter-spacing:.03em}
+  .btn:hover{background:#2c2618}
+  .btn[disabled]{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:var(--paper);color:var(--ink)}
+  .btn.ghost:hover{background:var(--paper-2)}
+  .btn.sm{font-size:11.5px;padding:4px 10px}
+
+  .mid{display:grid;grid-template-columns:238px minmax(0,1fr) 350px;min-height:0}
+  .pane{min-height:0;display:flex;flex-direction:column}
+  .pane+.pane{border-left:1px solid var(--ink)}
+  .pane h2{font-family:var(--mono);font-size:10px;letter-spacing:.18em;font-weight:500;
+    padding:6px 12px;border-bottom:1px solid var(--line-2);color:var(--muted);
+    display:flex;justify-content:space-between;align-items:center;gap:8px;flex:none}
+  .pane h2 em{font-style:normal;color:var(--ink);font-size:9.5px;letter-spacing:.1em}
+  .scroll{overflow-y:auto;min-height:0;flex:1;scrollbar-width:thin}
+
+  .ctrl{padding:4px 12px 5px;border-bottom:1px solid var(--line)}
+  .ctrl-head{display:flex;justify-content:space-between;align-items:baseline}
+  .ctrl-head label{font-size:12.5px;font-weight:500;letter-spacing:.04em}
+  .ctrl-head .ro{font-family:var(--mono);font-size:10.5px;color:var(--skel)}
+  .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-top:-3px}
+  input[type=range]{width:100%;appearance:none;height:16px;background:transparent;cursor:pointer;display:block}
+  input[type=range]:focus-visible{outline:2px solid var(--skel);outline-offset:1px}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line-2)}
+  input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
+    background:var(--paper);border:2px solid var(--ink);margin-top:-5px}
+  input[type=range]::-moz-range-track{height:2px;background:var(--line-2)}
+  input[type=range]::-moz-range-thumb{width:10px;height:10px;border-radius:50%;
+    background:var(--paper);border:2px solid var(--ink)}
+  .ctrl input[type=text]{width:100%;font-family:inherit;font-size:12px;padding:4px 7px;
+    background:var(--paper);border:1px solid var(--line-2);color:var(--ink);margin-top:4px}
+  .ctrl input[type=text]:focus{outline:none;border-color:var(--ink)}
+
+  .qa{flex:none;border-top:1px solid var(--ink);padding:9px 12px 10px}
+  .qa h3{font-family:var(--mono);font-size:10px;letter-spacing:.18em;font-weight:500;
+    color:var(--muted);margin-bottom:7px}
+  .qabar{display:flex;height:7px;border:1px solid var(--line-2);overflow:hidden;margin-bottom:7px}
+  .qabar i{display:block;height:100%}
+  .qabar i.p{background:var(--ok)} .qabar i.a{background:var(--w1)} .qabar i.b{background:var(--w2)}
+  .qanums{display:flex;gap:11px;font-family:var(--mono);font-size:10px;flex-wrap:wrap;margin-bottom:7px}
+  .qanums span::before{content:"";display:inline-block;width:7px;height:7px;margin-right:4px}
+  .qanums .p::before{background:var(--ok)} .qanums .a::before{background:var(--w1)}
+  .qanums .b::before{background:var(--w2)}
+  .qa label{display:flex;align-items:center;gap:7px;font-size:11.5px;cursor:pointer;user-select:none}
+  .qa label input{width:13px;height:13px;accent-color:var(--skel)}
+
+  .gridwrap{flex:1;min-height:0;overflow:auto;padding:7px}
+  .cells{display:grid;gap:5px;grid-template-columns:repeat(9,minmax(0,1fr));
+    grid-auto-rows:minmax(74px,auto)}
+  @media (max-width:1560px){.cells{grid-template-columns:repeat(8,minmax(0,1fr))}}
+  @media (max-width:1380px){.cells{grid-template-columns:repeat(7,minmax(0,1fr))}}
+  @media (max-width:1180px){.cells{grid-template-columns:repeat(6,minmax(0,1fr))}}
+  .cell{border:1px solid var(--line-2);background:var(--paper);cursor:pointer;padding:0;
+    font-family:inherit;display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relative}
+  .cell:hover{border-color:var(--ink)}
+  .cell.on{border-color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+  .cell:focus-visible{outline:2px solid var(--skel);outline-offset:1px}
+  .cell svg{flex:1;min-height:0;width:100%;display:block}
+  .cell .cap{flex:none;border-top:1px solid var(--line);padding:1px 4px;
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-family:var(--mono);font-size:8px;color:var(--muted);line-height:1.4}
+  .cell .cap b{color:var(--ink);font-weight:500;font-size:9.5px}
+  .cell.comp{background:var(--paper-2)}
+  .cell.punc{background:var(--paper-3);border-style:dashed}
+  .cell.edited .cap b::after{content:"*";color:var(--skel)}
+  .cell.hide{display:none}
+  .flag{position:absolute;right:0;top:0;width:0;height:0;border-style:solid;
+    border-width:0 12px 12px 0;border-color:transparent transparent transparent transparent}
+  .flag.l1{border-right-color:var(--w1)} .flag.l2{border-right-color:var(--w2)}
+  .tagrow{display:flex;gap:12px;padding:4px 12px;border-bottom:1px solid var(--line);
+    font-size:10.5px;color:var(--muted);font-family:var(--mono);letter-spacing:.05em;flex:none;flex-wrap:wrap}
+  .tag{display:flex;align-items:center;gap:5px}
+  .sw{width:11px;height:11px;border:1px solid var(--line-2);display:inline-block}
+  .sw.c{background:var(--paper-2)} .sw.u{background:var(--paper-3);border-style:dashed}
+
+  .bigbox{flex:none;border-bottom:1px solid var(--line-2);position:relative}
+  .bigbox svg{display:block;width:100%;height:auto;touch-action:none}
+  .bigbox .badge{position:absolute;left:8px;top:8px;font-family:var(--mono);font-size:9.5px;
+    letter-spacing:.1em;color:var(--skel);background:rgba(245,242,233,.86);padding:2px 6px;
+    border:1px solid var(--skel);display:none}
+  .bigbox.editing .badge{display:block}
+  .modes{display:flex;gap:12px;align-items:center;padding:5px 12px;border-bottom:1px solid var(--line);flex:none}
+  .modes label{display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;user-select:none}
+  .modes input{width:13px;height:13px;accent-color:var(--skel)}
+  .modes .spacer2{margin-left:auto}
+
+  .sect{border-bottom:1px solid var(--line);padding:8px 12px}
+  .sect h4{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--muted);
+    font-weight:500;margin-bottom:6px}
+  .chips{display:flex;gap:0;border:1px solid var(--line-2);width:fit-content;flex-wrap:wrap}
+  .chips button{font-family:inherit;font-size:11.5px;padding:3px 11px;background:var(--paper);
+    border:none;cursor:pointer;color:var(--muted)}
+  .chips button+button{border-left:1px solid var(--line-2)}
+  .chips button.on{background:var(--skel);color:#fff}
+  .partrow{display:flex;align-items:center;gap:8px;font-size:11.5px;margin-bottom:5px}
+  .partrow b{font-size:15px;font-weight:700;min-width:20px}
+  .partrow select{font-family:inherit;font-size:11.5px;padding:2px 5px;background:var(--paper);
+    border:1px solid var(--line-2);color:var(--ink);flex:1;min-width:0}
+  .qalist{list-style:none;display:flex;flex-direction:column;gap:5px}
+  .qalist li{display:flex;gap:7px;font-size:11.5px;line-height:1.5}
+  .qalist li i{width:8px;height:8px;flex:none;margin-top:5px}
+  .qalist li.l1 i{background:var(--w1)} .qalist li.l2 i{background:var(--w2)}
+  .qalist li.ok i{background:var(--ok)} .qalist li.na i{background:var(--line-2)}
+  .qalist code{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+  .meta{padding:8px 12px;font-size:11.5px;line-height:1.55;display:flex;flex-direction:column;gap:6px}
+  .mrow{display:flex;gap:9px}
+  .mrow .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;color:var(--muted);
+    min-width:56px;padding-top:2px;flex:none}
+  .mrow .v{color:var(--ink);min-width:0}
+  .mrow .v.tree{font-family:var(--mono);font-size:10.5px;white-space:pre-wrap;word-break:break-all}
+  .hint{font-size:10.5px;color:var(--muted);line-height:1.6;
+    border-top:1px dashed var(--line-2);padding-top:7px}
+
+  .foot{border-top:1px solid var(--ink);display:flex;align-items:stretch;height:118px;flex:none}
+  .foot .lbl{flex:none;width:112px;border-right:1px solid var(--line-2);padding:9px 12px;
+    display:flex;flex-direction:column;justify-content:center;gap:3px}
+  .foot .lbl b{font-size:12px;letter-spacing:.05em}
+  .foot .lbl span{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted)}
+  .foot .live{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;
+    padding:8px 14px;gap:7px;overflow:hidden}
+  .specimen{height:56px;flex:none;display:flex;align-items:baseline;gap:18px;
+    white-space:nowrap;overflow:hidden;padding-top:6px}
+  .specimen span{line-height:1.3;display:block}
+  .specimen .s1{font-size:34px}.specimen .s2{font-size:20px}.specimen .s3{font-size:13px}
+  .specimen.live{font-family:"SEPreview",sans-serif}
+  .foot input[type=text]{font-family:inherit;font-size:12px;padding:5px 8px;width:100%;flex:none;
+    background:var(--paper);border:1px solid var(--line-2);color:var(--ink)}
+  .foot input[type=text]:focus{outline:none;border-color:var(--ink)}
+  .foot .stat{flex:none;border-left:1px solid var(--line-2);padding:9px 14px;
+    display:flex;flex-direction:column;justify-content:center;gap:4px;
+    font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.06em;white-space:nowrap}
+  .foot .stat b{color:var(--ink);font-weight:500}
+  #fontState.ok{color:var(--ok)} #fontState.err{color:var(--grid)}
+
+  .modal{position:fixed;inset:0;background:rgba(22,19,13,.55);display:none;z-index:50;
+    align-items:center;justify-content:center;padding:24px}
+  .modal.on{display:flex}
+  .sheet{background:var(--paper);border:1px solid var(--ink);width:min(900px,100%);
+    max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(22,19,13,.3)}
+  .sheet header{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--ink)}
+  .sheet header b{font-size:15px;letter-spacing:.05em}
+  .sheet header span{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--muted)}
+  .sheet .body{padding:12px 14px;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:10px}
+  .sheet textarea{width:100%;min-height:110px;font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    padding:8px;background:var(--paper);border:1px solid var(--line-2);color:var(--ink);resize:vertical}
+  .sheet textarea:focus{outline:none;border-color:var(--ink)}
+  .sheet .tip{font-size:11.5px;color:var(--muted);line-height:1.7}
+  .sheet .tip code{font-family:var(--mono);font-size:10.5px;background:var(--paper-2);padding:1px 4px}
+  .sheet footer{display:flex;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--ink)}
+  .sheet footer .grow{margin-left:auto}
+  .prev{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+  .pcell{border:1px solid var(--line-2);display:flex;flex-direction:column}
+  .pcell svg{width:100%;height:auto;display:block;background:var(--paper)}
+  .pcell .pc{border-top:1px solid var(--line);padding:3px 6px;font-family:var(--mono);font-size:9px;
+    color:var(--muted);display:flex;justify-content:space-between;align-items:baseline}
+  .pcell .pc b{font-size:13px;color:var(--ink)}
+  .pcell.warn{border-color:var(--w1)}
+  .pcell.bad{border-color:var(--w2);opacity:.55}
+
+
+  /* ---------- 展示分頁 ---------- */
+  #showcase{position:absolute;left:0;right:0;top:50px;bottom:0;display:none;
+    grid-template-rows:auto minmax(0,1fr) auto;background:var(--sbg,#f1ece1)}
+  #showcase.on{display:grid}
+  .scbar{display:flex;align-items:center;gap:13px;padding:0 14px;height:46px;
+    border-bottom:1px solid var(--ink);background:var(--paper);overflow-x:auto}
+  .scbar>.g{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .scbar label{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)}
+  .pals{display:flex;gap:4px}
+  .pal{padding:3px;border:1px solid var(--line-2);background:var(--paper);cursor:pointer;
+    display:flex;gap:2px;align-items:center}
+  .pal:hover{border-color:var(--ink)}
+  .pal.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+  .pal i{width:8px;height:15px;display:block}
+  .pal em{font-style:normal;font-size:10px;padding:0 5px 0 3px;color:var(--muted)}
+  .pal.on em{color:var(--ink)}
+  .scstage{min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;
+    padding:26px;position:relative}
+  #scArt{display:block;max-width:100%;height:auto}
+  .schint{position:absolute;left:14px;bottom:10px;font-family:var(--mono);font-size:10px;
+    letter-spacing:.1em;color:var(--sink,#2a2118);opacity:.45;pointer-events:none;
+    max-width:calc(100% - 28px)}
+  .scfoot{display:flex;align-items:center;gap:11px;padding:0 14px;height:50px;
+    border-top:1px solid var(--ink);background:var(--paper)}
+  .scfoot input[type=text]{flex:1;min-width:80px;font-family:inherit;font-size:14px;padding:6px 9px;
+    background:var(--paper);border:1px solid var(--line-2);color:var(--ink)}
+  .scfoot input[type=text]:focus{outline:none;border-color:var(--ink)}
+  .scfoot input[type=range]{width:96px}
+  @media (max-width:900px){
+    #showcase{position:static;display:none}
+    #showcase.on{display:block}
+    .scbar{flex-wrap:wrap;height:auto;padding:10px 12px}
+    .scstage{min-height:56vh;background:var(--sbg,#f1ece1)}
+    .scfoot{flex-wrap:wrap;height:auto;padding:10px 12px}
+    .scfoot input[type=text]{flex-basis:100%}
+  }
+  @media (max-width:900px){
+    body{overflow:auto}
+    .app{height:auto;display:block}
+    .bar{flex-wrap:wrap;height:auto;padding:10px 12px}
+    .mid{display:block}
+    .pane+.pane{border-left:none;border-top:1px solid var(--ink)}
+    .scroll{overflow:visible}
+    .gridwrap{overflow:visible;height:auto}
+    .cells{grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(80px,auto)}
+    .foot{flex-wrap:wrap;height:auto}
+    .foot .lbl{width:100%;border-right:none;border-bottom:1px solid var(--line-2)}
+    .foot .stat{border-left:none;border-top:1px solid var(--line-2);width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="bar">
+    <div class="brand"><b>筆畫系統</b><span>v0.21</span></div>
+    <div class="tabs" id="tabs">
+      <button data-m="work" class="on">工作台</button><button data-m="show">展示</button>
+    </div>
+    <div class="presets" id="presets">
+      <button data-p="hei">黑體</button><button data-p="yuan">圓體</button
+      ><button data-p="ming">明體</button><button data-p="hand">手寫</button
+      ><button data-p="title">標題黑</button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
+    <input type="file" id="packIn" accept=".json,application/json" hidden>
+    <button class="btn ghost sm" id="btnKage" type="button">匯入 KAGE</button>
+    <button class="btn ghost sm" id="btnSave" type="button">專案存檔</button>
+    <button class="btn ghost sm" id="btnLoad" type="button">專案讀入</button>
+    <input type="file" id="fileIn" accept=".json,application/json" hidden>
+    <button class="btn" id="btnExport" type="button">匯出 OTF</button>
+  </div>
+
+  <div class="mid work">
+
+    <section class="pane">
+      <h2>設計軸 <button class="btn ghost sm" id="btnResetAxes" type="button">重設設計軸</button></h2>
+      <div class="scroll" id="ctrls"></div>
+      <div class="qa">
+        <h3>品質檢查 QA</h3>
+        <div class="qabar"><i class="p" id="qbP"></i><i class="a" id="qbA"></i><i class="b" id="qbB"></i></div>
+        <div class="qanums">
+          <span class="p">通過 <b id="qnP">0</b></span>
+          <span class="a">注意 <b id="qnA">0</b></span>
+          <span class="b">需調整 <b id="qnB">0</b></span>
+        </div>
+        <label><input type="checkbox" id="qaFilter">只看待處理的字</label>
+      </div>
+    </section>
+
+    <section class="pane">
+      <h2>字樣
+        <input type="text" id="q" placeholder="搜尋字或部件名…" spellcheck="false"
+               style="font-family:inherit;font-size:12px;padding:3px 8px;width:150px;margin-left:auto;
+                      background:var(--paper);border:1px solid var(--line-2);color:var(--ink)">
+        <em id="hCount">— GLYPHS</em></h2>
+      <div class="tagrow">
+        <span class="tag"><i class="sw"></i>手繪部件 <b id="tagComp">0</b></span>
+        <span class="tag"><i class="sw c"></i>組合字 <b id="tagCx">0</b></span>
+        <span class="tag"><i class="sw u"></i>標點 <b id="tagPu">0</b></span>
+        <span class="tag" id="tagEdited">已修改 0</span>
+        <span class="tag" id="tagVar">使用變體 0</span>
+        <span class="tag" style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <button class="btn ghost sm" id="pgPrev" type="button">‹</button>
+          <span id="pgInfo">—</span>
+          <button class="btn ghost sm" id="pgNext" type="button">›</button>
+        </span>
+      </div>
+      <div class="gridwrap"><div class="cells" id="cells"></div></div>
+    </section>
+
+    <section class="pane">
+      <h2>檢視與編輯 <em id="mGlyph">木</em></h2>
+      <div class="bigbox" id="bigBox">
+        <svg id="bigSvg" viewBox="-26 -26 1052 1052"></svg>
+        <div class="badge" id="badge">EDIT</div>
+      </div>
+      <div class="modes">
+        <label><input type="checkbox" id="inSkel">骨架</label>
+        <label><input type="checkbox" id="inEdit">編輯</label>
+        <span class="spacer2"></span>
+        <button class="btn ghost sm" id="btnGrab" type="button">抓這個字</button>
+        <button class="btn ghost sm" id="btnResetOne" type="button">還原此字</button>
+        <button class="btn ghost sm" id="btnResetAll" type="button">全部還原</button>
+      </div>
+      <div class="scroll">
+        <div class="sect" id="secVariant" hidden>
+          <h4 id="varTitle">部件變體 VARIANTS</h4>
+          <div id="varBody"></div>
+        </div>
+        <div class="sect">
+          <h4>品質檢查 QA</h4>
+          <ul class="qalist" id="qaDetail"></ul>
+        </div>
+        <div class="meta">
+          <div class="mrow"><span class="k">TYPE</span><span class="v" id="mType">—</span></div>
+          <div class="mrow"><span class="k">IDS</span><span class="v tree" id="mTree">—</span></div>
+          <div class="mrow"><span class="k">STROKES</span><span class="v" id="mCount">—</span></div>
+          <div class="mrow"><span class="k">CURSOR</span><span class="v" id="mCur">—</span></div>
+          <p class="hint" id="mHint"></p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+
+  <section id="showcase">
+    <div class="scbar">
+      <div class="g"><label>版式</label>
+        <div class="seg" id="scLayout">
+          <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button><button data-k="line">排句</button>
+        </div></div>
+      <div class="g"><label>上色</label>
+        <div class="seg" id="scColor">
+          <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
+          ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
+          ><button data-k="rand">隨機</button>
+        </div></div>
+      <div class="g"><label>疊色</label>
+        <div class="seg" id="scBlend"><button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div>
+      </div>
+      <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="scClear" type="button">清除個別配色</button>
+      <button class="btn ghost sm" id="scSVG" type="button">存 SVG</button>
+      <button class="btn sm" id="scPNG" type="button">存 PNG</button>
+    </div>
+    <div class="scstage" id="scStage">
+      <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="schint" id="scHint">點任何一個字可以單獨換色</div>
+    </div>
+    <div class="scfoot">
+      <input type="text" id="scTxt" spellcheck="false" value="森林" placeholder="打字看看…">
+      <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
+      <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
+      <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
+    </div>
+  </section>
+
+  <div class="modal" id="kmodal">
+    <div class="sheet">
+      <header><b>匯入 GlyphWiki（KAGE）</b><span>PASTE KAGE DATA</span>
+        <button class="btn ghost sm grow" id="kClose" type="button" style="margin-left:auto">關閉</button></header>
+      <div class="body">
+        <p class="tip"><b>三步驟：</b>① 在下面直接打你要的字（可以一次打好幾個，例如 <code>糹金犭隹馬</code>）
+          → ② 按「直接抓取」看預覽 → ③ 覺得比現在的好就按右下角「套用」。<br>
+          不用查 Unicode 碼位，也不用管字尾——勾著「優先台灣字形」它會自己去找 <code>-t</code> 版本，
+          找不到才退回一般版，還會自動跟著別名鏈、把用到的部件一併抓回來。<br>
+          抓不到（瀏覽器擋跨網域）就手動：開 <code>glyphwiki.org/api/glyph?name=u6728-t</code>，
+          整段 JSON 貼進下面按「解析貼上的內容」。只貼資料則套用到目前選取的「<b id="kCur">木</b>」。</p>
+        <textarea id="kIn" spellcheck="false" placeholder='{"name":"u4e08","related":"u4e08","data":"1:0:0:21:61:181:61$7:0:7:117:17:117:80:117:173:21:189$2:7:0:71:76:83:164:178:177"}'></textarea>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+                    padding-bottom:8px;border-bottom:1px dashed var(--line-2)">
+          <span class="tip" style="margin-right:2px">一鍵帶入：</span>
+          <button class="btn ghost sm" id="kPre1" type="button">最該修的 10 個</button>
+          <button class="btn ghost sm" id="kPre2" type="button">全部手繪部件</button>
+          <button class="btn ghost sm" id="kPre3" type="button">全部字</button>
+          <button class="btn ghost sm" id="kPre4" type="button">目前這個字</button>
+          <span class="tip" id="kPreNote"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="kName" spellcheck="false" placeholder="直接打字，例如　糹金犭隹馬"
+                 style="font-family:inherit;font-size:13px;padding:5px 8px;width:230px;
+                        background:var(--paper);border:1px solid var(--line-2);color:var(--ink)">
+          <button class="btn sm" id="kFetch" type="button">直接抓取</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="kPrefT" checked style="width:13px;height:13px;accent-color:var(--skel)">優先台灣字形</label>
+          <span style="width:1px;height:20px;background:var(--line-2)"></span>
+          <button class="btn ghost sm" id="kParse" type="button">解析貼上的內容</button>
+          <span class="tip" id="kStat">—</span>
+        </div>
+        <div class="prev" id="kPrev"></div>
+      </div>
+      <footer>
+        <span class="tip">KAGE 座標 0–200、y 向下，會自動轉成本系統的 0–1000、y 向上。</span>
+        <button class="btn grow" id="kApply" type="button" disabled>套用</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal" id="busy">
+    <div class="sheet" style="width:min(460px,100%)">
+      <header><b id="busyT">處理中</b></header>
+      <div class="body">
+        <div class="bar" style="height:8px;border:1px solid var(--line-2);overflow:hidden">
+          <i id="busyBar" style="display:block;height:100%;background:var(--skel);width:0"></i>
+        </div>
+        <p class="tip" id="busyMsg" style="margin-top:8px">—</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot work">
+    <div class="lbl"><b>實裝測試</b><span>LIVE @FONT-FACE</span></div>
+    <div class="live">
+      <div class="specimen" id="spec"><span class="s1"></span><span class="s2"></span><span class="s3"></span></div>
+      <input type="text" id="specIn" value="「這是好天，早上看星。」" spellcheck="false" aria-label="預覽文字">
+    </div>
+    <div class="stat">
+      <div id="fontState">字型尚未生成</div>
+      <div id="statAxes">—</div>
+      <div id="statCounts">—</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   筆畫系統 v0.21
+   本版把部件庫從 14 擴到 46（依 cjkvi-ids 對 Big5 常用字統計的使用頻率排序），
+   連帶自動組出 57 個組合字。共 114 字。
+   ========================================================================== */
+
+const EM=1000, ASC=880, DESC=-120;
+const F={weight:78,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.00,hand:0.00,finish:0.00,
+         simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
+const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
+const AXKEYS=['weight','contrast','round','counter','gravity','face','hand','finish'];
+let FAMILY="筆畫黑體", LATIN="StrokeEngine";
+
+const G = {
+/* ===================== 手繪部件 ===================== */
+"一":{u:0x4E00,s:[{t:"heng",p:[[70,505],[930,505]]}]},
+"丨":{u:0x4E28,s:[{t:"shu",p:[[500,920],[500,80]]}]},
+"丿":{u:0x4E3F,s:[{t:"pie",p:[[800,900],[190,90]],bend:0.14}]},
+"十":{u:0x5341,s:[{t:"heng",p:[[80,520],[920,520]]},{t:"shu",p:[[500,935],[500,65]]}]},
+"八":{u:0x516B,s:[{t:"pie",p:[[478,800],[160,150]],bend:0.13},
+                  {t:"na",p:[[522,800],[845,150]],bend:-0.13}]},
+"人":{u:0x4EBA,s:[{t:"pie",p:[[520,905],[110,75]],bend:0.13},
+                  {t:"na",p:[[545,660],[900,75]],bend:-0.11}]},
+"亻":{u:0x4EBB,s:[{t:"pie",p:[[625,900],[300,405]],bend:0.07},
+                  {t:"shu",p:[[505,700],[505,60]]}]},
+"又":{u:0x53C8,s:[{t:"zhe",p:[[160,790],[700,790],[300,240]],fr:1.2},
+                  {t:"na",p:[[420,600],[840,170]],bend:-0.11}]},
+"力":{u:0x529B,s:[{t:"zhe",p:[[215,830],[700,830],[560,205],[400,275]],end:"hook",fr:1.4},
+                  {t:"pie",p:[[490,830],[160,130]],bend:0.13}]},
+"刂":{u:0x5202,s:[{t:"shu",p:[[315,750],[315,235]]},
+                  {t:"zhe",p:[[715,840],[715,190],[590,285]],end:"hook",fr:1.2}]},
+"冖":{u:0x5196,s:[{t:"zhe",p:[[196,548],[196,678],[804,678],[804,528]],w:0.95}]},
+"冫":{u:0x51AB,s:[{t:"dian",p:[[330,790],[440,680]],bend:-0.10},
+                  {t:"ti",p:[[318,300],[452,430]],bend:-0.08}]},
+"厂":{u:0x5382,s:[{t:"heng",p:[[150,838],[882,838]]},
+                  {t:"pie",p:[[186,838],[110,128]],bend:0.08}]},
+"口":{u:0x53E3,
+  s:[{t:"shu",p:[[190,830],[190,170]]},
+     {t:"zhe",p:[[190,830],[812,830],[812,170]]},
+     {t:"heng",p:[[190,170],[812,170]]}],
+  v:{enclose:{0:{p:[[118,882],[118,118]]},
+              1:{p:[[118,882],[882,882],[882,118]]},
+              2:{p:[[118,118],[882,118]]}}}},
+"土":{u:0x571F,
+  s:[{t:"heng",p:[[225,745],[775,745]]},
+     {t:"shu",p:[[500,880],[500,155]]},
+     {t:"heng",p:[[95,155],[905,155]]}],
+  v:{top:{0:{p:[[272,752],[728,752]]},2:{p:[[158,158],[842,158]]}},
+     left:{2:{t:"ti",p:[[120,120],[880,235]]}}}},
+"大":{u:0x5927,s:[{t:"heng",p:[[80,655],[920,655]]},
+                  {t:"pie",p:[[512,905],[112,75]],bend:0.13},
+                  {t:"na",p:[[532,608],[902,75]],bend:-0.11}]},
+"女":{u:0x5973,s:[{t:"zhe",p:[[660,890],[318,462],[706,150]],fr:1.6},
+                  {t:"pie",p:[[848,880],[286,150]],bend:0.10},
+                  {t:"heng",p:[[120,440],[888,440]]}]},
+"子":{u:0x5B50,s:[{t:"zhe",p:[[228,868],[736,868],[438,618]],fr:1.4},
+                  {t:"zhe",p:[[502,712],[502,138],[318,232]],end:"hook",fr:1.3},
+                  {t:"heng",p:[[128,528],[884,528]]}]},
+"宀":{u:0x5B80,s:[{t:"dian",p:[[492,958],[524,856]],bend:-0.06},
+                  {t:"dian",p:[[212,842],[186,724]],bend:0.10},
+                  {t:"zhe",p:[[196,838],[808,838],[772,716]],end:"hook",fr:1.2}]},
+"小":{u:0x5C0F,s:[{t:"zhe",p:[[500,882],[500,168],[352,262]],end:"hook",fr:1.3},
+                  {t:"dian",p:[[312,758],[224,552]],bend:0.08},
+                  {t:"dian",p:[[688,758],[778,552]],bend:-0.08}]},
+"尸":{u:0x5C38,s:[{t:"zhe",p:[[196,886],[768,886],[768,584]]},
+                  {t:"heng",p:[[196,584],[768,584]]},
+                  {t:"pie",p:[[196,886],[96,104]],bend:0.06}]},
+"山":{u:0x5C71,s:[{t:"shu",p:[[500,900],[500,165]]},
+                  {t:"zhe",p:[[175,825],[175,165],[832,165]]},
+                  {t:"shu",p:[[832,730],[832,165]]}]},
+"工":{u:0x5DE5,s:[{t:"heng",p:[[150,846],[850,846]]},
+                  {t:"shu",p:[[500,846],[500,158]]},
+                  {t:"heng",p:[[110,158],[890,158]]}]},
+"广":{u:0x5E7F,s:[{t:"dian",p:[[468,956],[502,848]],bend:-0.05},
+                  {t:"heng",p:[[160,848],[884,848]]},
+                  {t:"pie",p:[[204,848],[104,108]],bend:0.08}]},
+"彳":{u:0x5F73,s:[{t:"pie",p:[[642,896],[428,674]],bend:0.06},
+                  {t:"pie",p:[[642,692],[352,458]],bend:0.06},
+                  {t:"shu",p:[[624,700],[624,86]]}]},
+"忄":{u:0x5FC4,s:[{t:"dian",p:[[262,762],[196,596]],bend:0.08},
+                  {t:"dian",p:[[738,762],[806,596]],bend:-0.08},
+                  {t:"shu",p:[[500,884],[500,78]]}]},
+"心":{u:0x5FC3,s:[{t:"dian",p:[[228,572],[302,452]],bend:-0.08},
+                  {t:"zhe",p:[[338,588],[452,196],[748,258],[790,462]],end:"hook",fr:6},
+                  {t:"dian",p:[[498,616],[556,494]],bend:-0.08},
+                  {t:"dian",p:[[692,708],[760,586]],bend:-0.08}]},
+"扌":{u:0x624C,s:[{t:"heng",p:[[128,692],[836,692]]},
+                  {t:"zhe",p:[[520,908],[520,112],[358,206]],end:"hook",fr:1.3},
+                  {t:"ti",p:[[136,214],[520,438]],bend:-0.06}]},
+"攵":{u:0x6535,s:[{t:"pie",p:[[446,902],[188,662]],bend:0.06},
+                  {t:"heng",p:[[136,688],[724,688]]},
+                  {t:"pie",p:[[566,882],[214,168]],bend:0.12},
+                  {t:"na",p:[[386,516],[856,116]],bend:-0.12}]},
+"日":{u:0x65E5,
+  s:[{t:"shu",p:[[255,885],[255,115]]},
+     {t:"zhe",p:[[255,885],[748,885],[748,115]]},
+     {t:"heng",p:[[255,500],[748,500]]},
+     {t:"heng",p:[[255,115],[748,115]]}],
+  v:{left:{0:{p:[[292,896],[292,104]]},
+           1:{p:[[292,896],[712,896],[712,104]]},
+           2:{p:[[292,528],[712,528]],w:0.90},
+           3:{p:[[292,104],[712,104]]}}}},
+"月":{u:0x6708,s:[{t:"pie",p:[[338,900],[195,88]],bend:0.09},
+                  {t:"zhe",p:[[338,900],[788,900],[788,150],[684,238]],end:"hook"},
+                  {t:"heng",p:[[338,648],[788,648]],w:0.9},
+                  {t:"heng",p:[[338,396],[788,396]],w:0.9}]},
+"木":{u:0x6728,
+  s:[{t:"heng",p:[[80,640],[920,640]]},
+     {t:"shu",p:[[500,945],[500,60]]},
+     {t:"pie",p:[[480,600],[95,80]],bend:0.13,w:0.95},
+     {t:"na",p:[[520,600],[908,78]],bend:-0.12}],
+  v:{left:{0:{p:[[70,640],[858,640]]},
+           2:{p:[[478,600],[122,105]],bend:0.11},
+           3:{t:"dian",p:[[514,598],[712,428]],bend:-0.05}},
+     top:{1:{p:[[500,945],[500,132]]},
+          2:{p:[[476,608],[58,222]],bend:0.17},
+          3:{p:[[524,608],[942,222]],bend:-0.16}},
+     bottom:{0:{p:[[52,648],[948,648]]},
+             2:{p:[[478,606],[62,52]],bend:0.14},
+             3:{p:[[522,606],[938,50]],bend:-0.13}}}},
+"火":{u:0x706B,s:[{t:"dian",p:[[272,804],[196,626]],bend:0.08},
+                  {t:"pie",p:[[766,808],[644,626]],bend:0.05},
+                  {t:"pie",p:[[512,884],[128,116]],bend:0.13},
+                  {t:"na",p:[[524,552],[882,110]],bend:-0.12}]},
+"王":{u:0x738B,s:[{t:"heng",p:[[170,865],[830,865]]},
+                  {t:"heng",p:[[230,505],[770,505]]},
+                  {t:"shu",p:[[500,865],[500,140]]},
+                  {t:"heng",p:[[95,140],[905,140]]}]},
+"目":{u:0x76EE,s:[{t:"shu",p:[[252,902],[252,98]]},
+                  {t:"zhe",p:[[252,902],[752,902],[752,98]]},
+                  {t:"heng",p:[[252,634],[752,634]]},
+                  {t:"heng",p:[[252,366],[752,366]]},
+                  {t:"heng",p:[[252,98],[752,98]]}]},
+"禾":{u:0x79BE,s:[{t:"pie",p:[[652,946],[372,812]],bend:0.05},
+                  {t:"heng",p:[[104,766],[896,766]]},
+                  {t:"shu",p:[[500,812],[500,68]]},
+                  {t:"pie",p:[[478,528],[112,92]],bend:0.13,w:0.95},
+                  {t:"na",p:[[522,528],[894,88]],bend:-0.12}]},
+"立":{u:0x7ACB,s:[{t:"dian",p:[[478,955],[516,862]],bend:-0.05},
+                  {t:"heng",p:[[252,782],[748,782]]},
+                  {t:"pie",p:[[318,712],[224,452]],bend:0.06},
+                  {t:"dian",p:[[682,712],[776,452]],bend:-0.06},
+                  {t:"heng",p:[[94,262],[906,262]]}]},
+"竹":{u:0x7AF9,s:[{t:"pie",p:[[318,908],[168,716]],bend:0.05},
+                  {t:"heng",p:[[152,712],[440,712]]},
+                  {t:"shu",p:[[296,712],[296,196]]},
+                  {t:"pie",p:[[762,908],[612,716]],bend:0.05},
+                  {t:"heng",p:[[596,712],[884,712]]},
+                  {t:"zhe",p:[[740,712],[740,232],[636,308]],end:"hook",fr:1.2}]},
+"米":{u:0x7C73,s:[{t:"dian",p:[[236,884],[352,752]],bend:-0.08},
+                  {t:"pie",p:[[764,884],[648,752]],bend:0.08},
+                  {t:"heng",p:[[104,566],[896,566]]},
+                  {t:"shu",p:[[500,880],[500,92]]},
+                  {t:"pie",p:[[478,528],[132,116]],bend:0.12,w:0.95},
+                  {t:"na",p:[[522,528],[874,112]],bend:-0.12}]},
+"糹":{u:0x7CF9,s:[{t:"zhe",p:[[622,932],[368,796],[586,704]],fr:2},
+                  {t:"zhe",p:[[586,704],[330,566],[556,472]],fr:2},
+                  {t:"shu",p:[[500,472],[500,308]]},
+                  {t:"dian",p:[[292,296],[208,146]],bend:0.08},
+                  {t:"shu",p:[[500,296],[500,136]]},
+                  {t:"dian",p:[[708,296],[792,146]],bend:-0.08}]},
+"艹":{u:0x8279,s:[{t:"heng",p:[[86,620],[914,620]]},
+                  {t:"shu",p:[[276,800],[276,440]]},
+                  {t:"shu",p:[[724,800],[724,440]]}]},
+"虫":{u:0x866B,s:[{t:"shu",p:[[296,878],[296,542]]},
+                  {t:"zhe",p:[[296,878],[704,878],[704,542]]},
+                  {t:"heng",p:[[296,542],[704,542]]},
+                  {t:"shu",p:[[500,878],[500,152]]},
+                  {t:"heng",p:[[108,300],[892,300]]},
+                  {t:"dian",p:[[640,268],[840,132]],bend:-0.08}]},
+"言":{u:0x8A00,s:[{t:"dian",p:[[478,952],[516,858]],bend:-0.05},
+                  {t:"heng",p:[[168,780],[832,780]]},
+                  {t:"heng",p:[[232,620],[768,620]]},
+                  {t:"heng",p:[[232,470],[768,470]]},
+                  {t:"shu",p:[[268,330],[268,80]]},
+                  {t:"zhe",p:[[268,330],[732,330],[732,80]]},
+                  {t:"heng",p:[[268,80],[732,80]]}]},
+"金":{u:0x91D1,s:[{t:"pie",p:[[500,948],[176,596]],bend:0.10},
+                  {t:"na",p:[[512,940],[832,596]],bend:-0.10},
+                  {t:"heng",p:[[248,556],[752,556]]},
+                  {t:"heng",p:[[300,388],[700,388]]},
+                  {t:"shu",p:[[500,556],[500,120]]},
+                  {t:"dian",p:[[352,300],[280,178]],bend:0.08},
+                  {t:"dian",p:[[648,300],[720,178]],bend:-0.08},
+                  {t:"heng",p:[[104,120],[896,120]]}]},
+"中":{u:0x4E2D,s:[{t:"shu",p:[[305,760],[305,245]]},
+                  {t:"zhe",p:[[305,760],[700,760],[700,245]]},
+                  {t:"heng",p:[[305,245],[700,245]]},
+                  {t:"shu",p:[[500,930],[500,72]]}]},
+"氵":{u:0x6C35,s:[{t:"dian",p:[[330,865],[452,742]],bend:-0.12},
+                  {t:"dian",p:[[238,575],[362,452]],bend:-0.12},
+                  {t:"ti",p:[[248,148],[472,336]],bend:-0.10}]},
+
+/* ---- 第三批部件（依頻率續補） ---- */
+"辶":{u:0x8FB6,s:[{t:"dian",p:[[286,904],[398,796]],bend:-0.08},
+                  {t:"zhe",p:[[188,724],[434,724],[232,502],[428,432]],fr:4},
+                  {t:"na",p:[[204,332],[902,142]],bend:-0.16}]},
+"阝":{u:0x961D,s:[{t:"zhe",p:[[298,890],[684,890],[696,682],[312,618]],fr:3},
+                  {t:"shu",p:[[298,890],[298,72]]}]},
+"疒":{u:0x7592,s:[{t:"dian",p:[[468,956],[502,856]],bend:-0.05},
+                  {t:"heng",p:[[160,856],[884,856]]},
+                  {t:"pie",p:[[204,856],[104,116]],bend:0.08},
+                  {t:"dian",p:[[326,704],[430,600]],bend:-0.10},
+                  {t:"ti",p:[[316,418],[452,542]],bend:-0.08}]},
+"車":{u:0x8ECA,s:[{t:"heng",p:[[188,902],[812,902]]},
+                  {t:"shu",p:[[300,782],[300,300]]},
+                  {t:"zhe",p:[[300,782],[700,782],[700,300]]},
+                  {t:"heng",p:[[300,542],[700,542]]},
+                  {t:"heng",p:[[300,300],[700,300]]},
+                  {t:"shu",p:[[500,902],[500,92]]},
+                  {t:"heng",p:[[118,178],[882,178]]}]},
+"馬":{u:0x99AC,s:[{t:"shu",p:[[312,918],[312,352]]},
+                  {t:"heng",p:[[312,918],[744,918]]},
+                  {t:"heng",p:[[312,730],[744,730]]},
+                  {t:"heng",p:[[312,542],[744,542]]},
+                  {t:"zhe",p:[[312,918],[812,918],[812,352],[600,268]],end:"hook",fr:2.5},
+                  {t:"heng",p:[[132,352],[886,352]]},
+                  {t:"dian",p:[[212,268],[268,146]],bend:-0.06},
+                  {t:"dian",p:[[404,268],[460,146]],bend:-0.06},
+                  {t:"dian",p:[[596,268],[652,146]],bend:-0.06},
+                  {t:"dian",p:[[788,268],[844,146]],bend:-0.06}]},
+"隹":{u:0x96B9,s:[{t:"pie",p:[[382,942],[228,812]],bend:0.05},
+                  {t:"shu",p:[[298,812],[298,108]]},
+                  {t:"heng",p:[[420,902],[862,902]]},
+                  {t:"shu",p:[[642,902],[642,178]]},
+                  {t:"heng",p:[[420,692],[862,692]]},
+                  {t:"heng",p:[[420,482],[862,482]]},
+                  {t:"heng",p:[[420,272],[862,272]]},
+                  {t:"heng",p:[[376,108],[902,108]]}]},
+"門":{u:0x9580,s:[{t:"shu",p:[[146,902],[146,88]]},
+                  {t:"zhe",p:[[146,902],[420,902],[420,642]]},
+                  {t:"heng",p:[[146,642],[420,642]]},
+                  {t:"heng",p:[[146,382],[420,382]]},
+                  {t:"shu",p:[[580,902],[580,88]]},
+                  {t:"zhe",p:[[580,902],[854,902],[854,642]]},
+                  {t:"heng",p:[[580,642],[854,642]]},
+                  {t:"heng",p:[[580,382],[854,382]]}]},
+"衤":{u:0x8864,s:[{t:"dian",p:[[468,942],[508,850]],bend:-0.05},
+                  {t:"zhe",p:[[238,782],[722,782],[430,600]],fr:1.5},
+                  {t:"shu",p:[[500,782],[500,78]]},
+                  {t:"dian",p:[[302,482],[218,346]],bend:0.08},
+                  {t:"dian",p:[[698,482],[782,346]],bend:-0.08}]},
+"犭":{u:0x72AD,s:[{t:"pie",p:[[566,906],[372,706]],bend:0.05},
+                  {t:"zhe",p:[[406,786],[580,584],[598,336],[464,158],[318,244]],end:"hook",fr:9},
+                  {t:"pie",p:[[712,616],[160,102]],bend:0.13}]},
+"巾":{u:0x5DFE,s:[{t:"shu",p:[[282,702],[282,178]]},
+                  {t:"zhe",p:[[282,702],[742,702],[742,152],[602,238]],end:"hook",fr:1.2},
+                  {t:"shu",p:[[500,702],[500,58]]}]},
+"雨":{u:0x96E8,s:[{t:"heng",p:[[148,906],[852,906]]},
+                  {t:"shu",p:[[500,906],[500,692]]},
+                  {t:"zhe",p:[[242,692],[758,692],[758,118]]},
+                  {t:"shu",p:[[242,692],[242,118]]},
+                  {t:"dian",p:[[338,562],[402,442]],bend:-0.06},
+                  {t:"dian",p:[[338,342],[402,222]],bend:-0.06},
+                  {t:"dian",p:[[598,562],[662,442]],bend:-0.06},
+                  {t:"dian",p:[[598,342],[662,222]],bend:-0.06}]},
+"酉":{u:0x9149,s:[{t:"heng",p:[[128,902],[872,902]]},
+                  {t:"pie",p:[[332,782],[278,652]],bend:0.05},
+                  {t:"dian",p:[[668,782],[722,652]],bend:-0.05},
+                  {t:"shu",p:[[222,782],[222,112]]},
+                  {t:"zhe",p:[[222,782],[778,782],[778,112]]},
+                  {t:"heng",p:[[222,452],[778,452]]},
+                  {t:"heng",p:[[222,112],[778,112]]}]},
+"足":{u:0x8DB3,s:[{t:"shu",p:[[302,902],[302,562]]},
+                  {t:"zhe",p:[[302,902],[698,902],[698,562]]},
+                  {t:"heng",p:[[302,562],[698,562]]},
+                  {t:"shu",p:[[482,562],[482,252]]},
+                  {t:"heng",p:[[168,252],[622,252]]},
+                  {t:"pie",p:[[482,342],[192,82]],bend:0.10},
+                  {t:"na",p:[[500,302],[882,78]],bend:-0.12}]},
+"亠":{u:0x4EA0,s:[{t:"dian",p:[[478,902],[516,808]],bend:-0.05},
+                  {t:"heng",p:[[128,722],[872,722]]}]},
+"手":{u:0x624B,s:[{t:"pie",p:[[562,882],[298,792]],bend:0.05},
+                  {t:"heng",p:[[178,702],[832,702]]},
+                  {t:"heng",p:[[128,452],[882,452]]},
+                  {t:"zhe",p:[[520,882],[520,108],[352,202]],end:"hook",fr:1.3}]},
+"正":{u:0x6B63,s:[{t:"heng",p:[[142,882],[858,882]]},
+                  {t:"shu",p:[[378,882],[378,242]]},
+                  {t:"heng",p:[[378,562],[722,562]]},
+                  {t:"shu",p:[[642,562],[642,242]]},
+                  {t:"heng",p:[[102,242],[898,242]]}]},
+"生":{u:0x751F,s:[{t:"pie",p:[[562,932],[238,762]],bend:0.06},
+                  {t:"heng",p:[[198,762],[802,762]]},
+                  {t:"heng",p:[[148,482],[852,482]]},
+                  {t:"shu",p:[[478,932],[478,152]]},
+                  {t:"heng",p:[[88,152],[912,152]]}]},
+"五":{u:0x4E94,s:[{t:"heng",p:[[148,866],[852,866]]},
+                  {t:"shu",p:[[402,866],[318,216]]},
+                  {t:"zhe",p:[[318,556],[692,556],[642,216]],fr:1.2},
+                  {t:"heng",p:[[108,216],[892,216]]}]},
+"上":{u:0x4E0A,s:[{t:"shu",p:[[398,852],[398,222]]},
+                  {t:"heng",p:[[398,562],[822,562]]},
+                  {t:"heng",p:[[108,222],[892,222]]}]},
+"下":{u:0x4E0B,s:[{t:"heng",p:[[108,782],[892,782]]},
+                  {t:"shu",p:[[418,782],[418,148]]},
+                  {t:"dian",p:[[418,602],[612,468]],bend:-0.08}]},
+"不":{u:0x4E0D,s:[{t:"heng",p:[[88,832],[912,832]]},
+                  {t:"pie",p:[[498,832],[128,108]],bend:0.12},
+                  {t:"shu",p:[[602,602],[602,88]]},
+                  {t:"dian",p:[[602,522],[862,192]],bend:-0.10}]},
+"勺":{u:0x52FA,s:[{t:"pie",p:[[558,902],[278,418]],bend:0.10},
+                  {t:"zhe",p:[[298,862],[722,862],[702,298],[478,338]],end:"hook",fr:2},
+                  {t:"dian",p:[[438,562],[558,468]],bend:-0.08}]},
+"弓":{u:0x5F13,s:[{t:"zhe",p:[[214,886],[776,886],[776,678]],fr:1},
+                  {t:"zhe",p:[[214,678],[776,678],[776,452]],fr:1},
+                  {t:"zhe",p:[[214,452],[762,452],[698,152],[302,192]],end:"hook",fr:3}]},
+"丶":{u:0x4E36,s:[{t:"dian",p:[[418,642],[582,442]],bend:-0.08,w:1.3}]},
+/* ===================== 組合部件 ===================== */
+"白":{u:0x767D,ids:"⿱丿日",c:[{r:"丿",box:[190,742,590,1000]},{r:"日",box:[144,0,872,760]}]},
+"石":{u:0x77F3,ids:"⿸厂口",c:[{r:"厂",box:[0,130,1000,1000]},{r:"口",box:[296,72,884,566]}]},
+"貝":{u:0x8C9D,ids:"⿱目八",c:[{r:"目",box:[178,264,822,1000]},{r:"八",box:[86,0,914,306]}]},
+"古":{u:0x53E4,ids:"⿱十口",c:[{r:"十",box:[150,506,850,1000]},{r:"口",box:[196,20,804,506]}]},
+"胡":{u:0x80E1,ids:"⿰古月",c:[{r:"古",box:[0,60,500,940]},{r:"月",box:[478,30,1000,970]}]},
+
+/* ===================== 組合字 ===================== */
+"田":{u:0x7530,ids:"⿴口十",c:[{r:"口",v:"enclose",box:[0,0,1000,1000]},{r:"十",box:[120,120,880,880]}]},
+"林":{u:0x6797,ids:"⿰木木",c:[{r:"木",v:"left",box:[0,40,470,960]},{r:"木",box:[452,20,1000,980]}]},
+"森":{u:0x68EE,ids:"⿱木⿰木木",c:[{r:"木",v:"top",box:[196,498,804,1000]},
+                                {r:"木",v:"left",box:[0,0,478,508]},{r:"木",box:[522,0,1000,508]}]},
+"品":{u:0x54C1,ids:"⿱口⿰口口",c:[{r:"口",box:[272,512,728,1000]},
+                                {r:"口",box:[8,0,472,492]},{r:"口",box:[528,0,992,492]}]},
+"昌":{u:0x660C,ids:"⿱日日",c:[{r:"日",box:[228,512,772,1000]},{r:"日",box:[178,0,822,490]}]},
+"明":{u:0x660E,ids:"⿰日月",c:[{r:"日",v:"left",box:[10,120,458,880]},{r:"月",box:[432,55,992,962]}]},
+"休":{u:0x4F11,ids:"⿰亻木",c:[{r:"亻",box:[0,0,382,1000]},{r:"木",box:[338,42,1000,958]}]},
+"沐":{u:0x6C90,ids:"⿰氵木",c:[{r:"氵",box:[0,0,358,1000]},{r:"木",box:[336,42,1000,958]}]},
+"杜":{u:0x675C,ids:"⿰木土",c:[{r:"木",v:"left",box:[0,40,500,960]},{r:"土",box:[478,85,1000,915]}]},
+"呆":{u:0x5446,ids:"⿱口木",c:[{r:"口",box:[282,548,718,982]},{r:"木",v:"bottom",box:[0,0,1000,548]}]},
+"杲":{u:0x6772,ids:"⿱日木",c:[{r:"日",box:[282,522,718,992]},{r:"木",v:"bottom",box:[0,8,1000,528]}]},
+"果":{u:0x679C,ids:"⿱田木",c:[{r:"田",box:[232,502,768,992]},{r:"木",v:"bottom",box:[0,8,1000,520]}]},
+"圭":{u:0x572D,ids:"⿱土土",c:[{r:"土",v:"top",box:[202,512,798,1000]},{r:"土",box:[118,0,882,500]}]},
+"汁":{u:0x6C41,ids:"⿰氵十",c:[{r:"氵",box:[0,0,358,1000]},{r:"十",box:[338,58,1000,942]}]},
+"仕":{u:0x4ED5,ids:"⿰亻土",c:[{r:"亻",box:[0,0,382,1000]},{r:"土",box:[358,85,1000,915]}]},
+"旦":{u:0x65E6,ids:"⿱日一",c:[{r:"日",box:[232,285,768,1000]},{r:"一",box:[75,0,925,285]}]},
+
+"湖":{u:0x6E56,ids:"⿰氵胡",c:[{r:"氵",box:[0,0,330,1000]},{r:"胡",box:[306,40,1000,960]}]},
+"好":{u:0x597D,ids:"⿰女子",c:[{r:"女",box:[0,70,500,930]},{r:"子",box:[472,50,1000,950]}]},
+"如":{u:0x5982,ids:"⿰女口",c:[{r:"女",box:[0,70,506,930]},{r:"口",box:[486,190,1000,810]}]},
+"安":{u:0x5B89,ids:"⿱宀女",c:[{r:"宀",box:[0,596,1000,1000]},{r:"女",box:[104,0,896,616]}]},
+"字":{u:0x5B57,ids:"⿱宀子",c:[{r:"宀",box:[0,596,1000,1000]},{r:"子",box:[104,0,896,616]}]},
+"相":{u:0x76F8,ids:"⿰木目",c:[{r:"木",v:"left",box:[0,40,472,960]},{r:"目",box:[452,60,1000,940]}]},
+"想":{u:0x60F3,ids:"⿱相心",c:[{r:"相",box:[0,452,1000,1000]},{r:"心",box:[126,0,874,460]}]},
+"秋":{u:0x79CB,ids:"⿰禾火",c:[{r:"禾",box:[0,40,506,960]},{r:"火",box:[484,60,1000,940]}]},
+"和":{u:0x548C,ids:"⿰禾口",c:[{r:"禾",box:[0,40,536,960]},{r:"口",box:[506,180,1000,760]}]},
+"岩":{u:0x5CA9,ids:"⿱山石",c:[{r:"山",box:[136,522,864,1000]},{r:"石",box:[0,0,1000,522]}]},
+"泊":{u:0x6CCA,ids:"⿰氵白",c:[{r:"氵",box:[0,0,342,1000]},{r:"白",box:[326,76,946,924]}]},
+"怕":{u:0x6015,ids:"⿰忄白",c:[{r:"忄",box:[0,0,346,1000]},{r:"白",box:[330,76,950,924]}]},
+"皇":{u:0x7687,ids:"⿱白王",c:[{r:"白",box:[192,496,808,1000]},{r:"王",box:[56,0,944,506]}]},
+"信":{u:0x4FE1,ids:"⿰亻言",c:[{r:"亻",box:[0,0,378,1000]},{r:"言",box:[350,40,1000,960]}]},
+"計":{u:0x8A08,ids:"⿰言十",c:[{r:"言",box:[0,40,534,960]},{r:"十",box:[504,80,1000,920]}]},
+"位":{u:0x4F4D,ids:"⿰亻立",c:[{r:"亻",box:[0,0,378,1000]},{r:"立",box:[350,76,1000,924]}]},
+"拉":{u:0x62C9,ids:"⿰扌立",c:[{r:"扌",box:[0,0,402,1000]},{r:"立",box:[382,76,1000,924]}]},
+"男":{u:0x7537,ids:"⿱田力",c:[{r:"田",box:[174,502,826,1000]},{r:"力",box:[56,0,944,516]}]},
+"加":{u:0x52A0,ids:"⿰力口",c:[{r:"力",box:[0,50,546,950]},{r:"口",box:[506,120,1000,700]}]},
+"苦":{u:0x82E6,ids:"⿱艹古",c:[{r:"艹",box:[56,712,944,1000]},{r:"古",box:[106,0,894,726]}]},
+"早":{u:0x65E9,ids:"⿱日十",c:[{r:"日",box:[242,468,758,1000]},{r:"十",box:[56,0,944,502]}]},
+"草":{u:0x8349,ids:"⿱艹早",c:[{r:"艹",box:[56,724,944,1000]},{r:"早",box:[86,0,914,742]}]},
+"音":{u:0x97F3,ids:"⿱立日",c:[{r:"立",box:[66,478,934,1000]},{r:"日",box:[242,0,758,500]}]},
+"意":{u:0x610F,ids:"⿱音心",c:[{r:"音",box:[76,336,924,1000]},{r:"心",box:[126,0,874,352]}]},
+"章":{u:0x7AE0,ids:"⿱立早",c:[{r:"立",box:[66,504,934,1000]},{r:"早",box:[126,0,874,524]}]},
+"江":{u:0x6C5F,ids:"⿰氵工",c:[{r:"氵",box:[0,0,352,1000]},{r:"工",box:[338,140,1000,860]}]},
+"紅":{u:0x7D05,ids:"⿰糹工",c:[{r:"糹",box:[0,20,446,980]},{r:"工",box:[426,140,1000,860]}]},
+"炎":{u:0x708E,ids:"⿱火火",c:[{r:"火",box:[140,502,860,1000]},{r:"火",box:[36,0,964,512]}]},
+"只":{u:0x53EA,ids:"⿱口八",c:[{r:"口",box:[224,438,776,962]},{r:"八",box:[56,0,944,472]}]},
+"尖":{u:0x5C16,ids:"⿱小大",c:[{r:"小",box:[192,518,808,1000]},{r:"大",box:[26,0,974,536]}]},
+"床":{u:0x5E8A,ids:"⿸广木",c:[{r:"广",box:[0,120,1000,1000]},{r:"木",box:[178,36,1000,706]}]},
+"反":{u:0x53CD,ids:"⿸厂又",c:[{r:"厂",box:[0,130,1000,1000]},{r:"又",box:[238,56,982,626]}]},
+"故":{u:0x6545,ids:"⿰古攵",c:[{r:"古",box:[0,70,506,930]},{r:"攵",box:[476,56,1000,944]}]},
+"員":{u:0x54E1,ids:"⿱口貝",c:[{r:"口",box:[254,662,746,1000]},{r:"貝",box:[132,0,868,680]}]},
+"蟲":{u:0x87F2,ids:"⿱虫⿰虫虫",c:[{r:"虫",box:[244,498,756,1000]},
+                                {r:"虫",box:[0,0,492,508]},{r:"虫",box:[508,0,1000,508]}]},
+
+/* ---- 第三批組合字 ---- */
+"自":{u:0x81EA,ids:"⿱丿目",c:[{r:"丿",box:[176,796,542,1000]},{r:"目",box:[128,0,878,832]}]},
+"頁":{u:0x9801,ids:"⿱一自八",c:[{r:"一",box:[58,858,942,1000]},
+                                {r:"自",box:[188,298,812,872]},{r:"八",box:[88,0,912,332]}]},
+"舌":{u:0x820C,ids:"⿱丿古",c:[{r:"丿",box:[256,776,662,1000]},{r:"古",box:[108,0,892,798]}]},
+"天":{u:0x5929,ids:"⿱一大",c:[{r:"一",box:[78,782,922,1000]},{r:"大",box:[0,0,1000,802]}]},
+"主":{u:0x4E3B,ids:"⿱丶王",c:[{r:"丶",box:[326,818,674,1000]},{r:"王",box:[38,0,962,832]}]},
+"話":{u:0x8A71,ids:"⿰言舌",c:[{r:"言",box:[0,40,512,960]},{r:"舌",box:[488,76,1000,924]}]},
+"活":{u:0x6D3B,ids:"⿰氵舌",c:[{r:"氵",box:[0,0,352,1000]},{r:"舌",box:[334,68,1000,932]}]},
+"吾":{u:0x543E,ids:"⿱五口",c:[{r:"五",box:[108,478,892,1000]},{r:"口",box:[228,0,772,502]}]},
+"語":{u:0x8A9E,ids:"⿰言吾",c:[{r:"言",box:[0,40,508,960]},{r:"吾",box:[484,48,1000,952]}]},
+"這":{u:0x9019,ids:"⿺辶言",c:[{r:"辶",box:[0,0,1000,758]},{r:"言",box:[252,182,1000,942]}]},
+"進":{u:0x9032,ids:"⿺辶隹",c:[{r:"辶",box:[0,0,1000,758]},{r:"隹",box:[252,182,1000,942]}]},
+"連":{u:0x9023,ids:"⿺辶車",c:[{r:"辶",box:[0,0,1000,758]},{r:"車",box:[252,182,1000,942]}]},
+"軍":{u:0x8ECD,ids:"⿱冖車",c:[{r:"冖",box:[38,698,962,1000]},{r:"車",box:[78,0,922,722]}]},
+"集":{u:0x96C6,ids:"⿱隹木",c:[{r:"隹",box:[128,418,872,1000]},{r:"木",v:"bottom",box:[0,0,1000,442]}]},
+"問":{u:0x554F,ids:"⿵門口",c:[{r:"門",box:[0,0,1000,1000]},{r:"口",box:[302,182,698,642]}]},
+"間":{u:0x9593,ids:"⿵門日",c:[{r:"門",box:[0,0,1000,1000]},{r:"日",box:[288,148,712,662]}]},
+"酒":{u:0x9152,ids:"⿰氵酉",c:[{r:"氵",box:[0,0,352,1000]},{r:"酉",box:[328,58,1000,942]}]},
+"媽":{u:0x5ABD,ids:"⿰女馬",c:[{r:"女",box:[0,70,472,930]},{r:"馬",box:[448,38,1000,962]}]},
+"嗎":{u:0x55CE,ids:"⿰口馬",c:[{r:"口",box:[0,198,428,762]},{r:"馬",box:[414,38,1000,962]}]},
+"是":{u:0x662F,ids:"⿱日正",c:[{r:"日",box:[238,518,762,1000]},{r:"正",box:[58,0,942,542]}]},
+"政":{u:0x653F,ids:"⿰正攵",c:[{r:"正",box:[0,70,502,930]},{r:"攵",box:[472,56,1000,944]}]},
+"看":{u:0x770B,ids:"⿱手目",c:[{r:"手",box:[0,478,1000,1000]},{r:"目",box:[188,0,812,502]}]},
+"的":{u:0x7684,ids:"⿰白勺",c:[{r:"白",box:[0,78,472,922]},{r:"勺",box:[448,38,1000,962]}]},
+"市":{u:0x5E02,ids:"⿱亠巾",c:[{r:"亠",box:[0,658,1000,1000]},{r:"巾",box:[128,0,872,702]}]},
+"引":{u:0x5F15,ids:"⿰弓丨",c:[{r:"弓",box:[0,70,522,930]},{r:"丨",box:[518,38,1000,962]}]},
+"星":{u:0x661F,ids:"⿱日生",c:[{r:"日",box:[238,498,762,1000]},{r:"生",box:[58,0,942,522]}]},
+/* ===================== 全形標點 ===================== */
+"　":{u:0x3000,sp:1,s:[]},
+"。":{u:0x3002,sp:1,s:[{t:"ring",p:[[500,478]],r:150,w:0.86}]},
+"、":{u:0x3001,sp:1,s:[{t:"dian",p:[[406,604],[582,398]],bend:-0.10,w:1.28}]},
+"，":{u:0xFF0C,sp:1,s:[{t:"pie",p:[[574,600],[404,316]],bend:0.30,w:1.28}]},
+"：":{u:0xFF1A,sp:1,s:[{t:"dot",p:[[500,672]],rk:1.12},{t:"dot",p:[[500,330]],rk:1.12}]},
+"；":{u:0xFF1B,sp:1,s:[{t:"dot",p:[[500,686]],rk:1.12},
+                       {t:"pie",p:[[566,506],[414,268]],bend:0.30,w:1.18}]},
+"！":{u:0xFF01,sp:1,s:[{t:"pie",p:[[500,882],[500,382]],w:1.42},{t:"dot",p:[[500,216]],rk:1.18}]},
+"？":{u:0xFF1F,sp:1,s:[{t:"zhe",p:[[326,738],[438,876],[618,832],[628,668],[500,540],[500,420]],w:0.98,fr:5},
+                       {t:"dot",p:[[500,216]],rk:1.18}]},
+"「":{u:0x300C,sp:1,s:[{t:"zhe",p:[[808,862],[332,862],[332,428]],w:0.82,fr:0.35}]},
+"」":{u:0x300D,sp:1,s:[{t:"zhe",p:[[668,572],[668,138],[192,138]],w:0.82,fr:0.35}]},
+"（":{u:0xFF08,sp:1,s:[{t:"shu",p:[[652,904],[652,96]],bend:-0.21,w:0.80}]},
+"）":{u:0xFF09,sp:1,s:[{t:"shu",p:[[348,904],[348,96]],bend:0.21,w:0.80}]}
+};
+
+/* 依 cjkvi-ids 對 Big5 常用字算出的使用頻率排序 */
+const COMP=["氵","口","扌","木","亻","艹","言","金","糹","土","女","忄","心",
+            "辶","一","日","虫","阝","竹","王","火","疒","山","目","禾","宀",
+            "亠","刂","車","馬","攵","彳","隹","丨","广","衤","力","犭","門",
+            "巾","冖","米","雨","八","尸","酉","月","足","人","大","中","十",
+            "小","立","子","又","厂","工","手","正","生","五","上","下","不",
+            "勺","弓","丿","丶","冫"];
+const CXED=["白","石","貝","古","胡","自","頁","舌",
+            "田","林","森","品","昌","明","休","沐","杜","呆","杲","果","圭","汁","仕","旦",
+            "湖","好","如","安","字","相","想","秋","和","岩","泊","怕","皇","信","計","位",
+            "拉","男","加","苦","早","草","音","意","章","江","紅","炎","只","尖","床","反",
+            "故","員","蟲",
+            "天","主","話","活","吾","語","這","進","連","軍","集","問","間","酒","媽","嗎",
+            "是","政","看","的","市","引","星"];
+const PUNCT=["　","。","、","，","：","；","！","？","「","」","（","）"];
+const ORDER=[...COMP,...CXED];
+const ALL=[...ORDER,...PUNCT];
+const VNAME={left:"左偏旁",top:"置頂",bottom:"墊底",enclose:"包圍"};
+const BASE=JSON.parse(JSON.stringify(G));
+
+/* ==========================================================================
+   幾何
+   ========================================================================== */
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1]];
+const mul=(a,k)=>[a[0]*k,a[1]*k];
+const len=a=>Math.hypot(a[0],a[1])||1e-6;
+const unit=a=>mul(a,1/len(a));
+const dist=(a,b)=>len(sub(a,b));
+const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a||1e-6)));return t*t*(3-2*t);};
+
+function makeSegs(pts,bend,fillet,cv){
+  const segs=[];
+  /* KAGE 類型 6 是三次貝茲：中間兩點是控制點，不是經過點
+     KAGE 類型 7 是「直線接二次曲線」：p1→p2 直線，再以 p3 為控制點彎到 p4
+     以前把它們當折線轉圓角，辶、之、廴 這類部件就會歪掉 */
+  if(cv==="cubic"&&pts.length===4)
+    return [{c3:1,a:pts[0],c1:pts[1],c2:pts[2],b:pts[3]}];
+  if(cv==="lineQuad"&&pts.length===4)
+    return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c:pts[2],b:pts[3]}];
+  if(pts.length===2){
+    const [A,B]=pts;
+    if(bend){const d=sub(B,A),L=len(d);
+      segs.push({q:1,a:A,c:[(A[0]+B[0])/2-d[1]/L*bend*L,(A[1]+B[1])/2+d[0]/L*bend*L],b:B});
+    } else segs.push({q:0,a:A,b:B});
+    return segs;
+  }
+  let cur=pts[0];
+  for(let i=1;i<pts.length-1;i++){
+    const P=pts[i],N=pts[i+1];
+    const r=Math.min(fillet,dist(cur,P)*0.45,dist(P,N)*0.45);
+    const A1=add(P,mul(unit(sub(cur,P)),r)), B1=add(P,mul(unit(sub(N,P)),r));
+    if(dist(cur,A1)>1) segs.push({q:0,a:cur,b:A1});
+    segs.push({q:1,a:A1,c:P,b:B1});
+    cur=B1;
+  }
+  segs.push({q:0,a:cur,b:pts[pts.length-1]});
+  return segs;
+}
+function sampleSkeleton(pts,bend,fillet,N,cv){
+  const segs=makeSegs(pts,bend,fillet,cv);
+  const L=segs.map(s=> s.c3 ? (dist(s.a,s.c1)+dist(s.c1,s.c2)+dist(s.c2,s.b))*0.86
+                    : s.q  ? (dist(s.a,s.c)+dist(s.c,s.b))*0.92
+                    : dist(s.a,s.b));
+  const tot=L.reduce((a,b)=>a+b,0)||1, out=[];
+  segs.forEach((s,i)=>{
+    const n=Math.max(2,Math.round(N*L[i]/tot));
+    for(let k=(i===0?0:1);k<=n;k++){
+      const t=k/n;
+      if(s.c3){const u=1-t;
+        out.push({p:[u*u*u*s.a[0]+3*u*u*t*s.c1[0]+3*u*t*t*s.c2[0]+t*t*t*s.b[0],
+                     u*u*u*s.a[1]+3*u*u*t*s.c1[1]+3*u*t*t*s.c2[1]+t*t*t*s.b[1]],
+                  t:[3*u*u*(s.c1[0]-s.a[0])+6*u*t*(s.c2[0]-s.c1[0])+3*t*t*(s.b[0]-s.c2[0]),
+                     3*u*u*(s.c1[1]-s.a[1])+6*u*t*(s.c2[1]-s.c1[1])+3*t*t*(s.b[1]-s.c2[1])]});
+      } else if(s.q){const u=1-t;
+        out.push({p:[u*u*s.a[0]+2*u*t*s.c[0]+t*t*s.b[0], u*u*s.a[1]+2*u*t*s.c[1]+t*t*s.b[1]],
+                  t:[2*u*(s.c[0]-s.a[0])+2*t*(s.b[0]-s.c[0]), 2*u*(s.c[1]-s.a[1])+2*t*(s.b[1]-s.c[1])]});
+      } else out.push({p:[s.a[0]+(s.b[0]-s.a[0])*t, s.a[1]+(s.b[1]-s.a[1])*t], t:sub(s.b,s.a)});
+    }
+  });
+  return out;
+}
+const widths=f=>{const hw=f.weight*2/(1+f.contrast);return{hw,sw:hw*f.contrast};};
+function widthAt(st,t,tan,f){
+  const {hw,sw}=widths(f),k=st.w||1;
+  switch(st.t){
+    case "heng":return hw*k;
+    case "shu": return sw*k;
+    case "zhe":{const s=Math.abs(tan[1])/len(tan),b=(hw+(sw-hw)*s)*k;
+      return st.end==="hook"?b*Math.max(0.14,1-1.15*smooth(0.87,1,t)):b;}
+    case "pie": return sw*k*Math.max(0.09,1-0.90*Math.pow(t,1.30));
+    case "na":  return sw*k*1.06*Math.max(0.13,Math.pow(t,0.80))*(1+f.finish*0.30*smooth(0.72,1,t));
+    case "dian":return sw*k*(0.34+0.72*Math.pow(t,0.70));
+    case "ti":  return sw*k*1.12*Math.max(0.10,1-Math.pow(t,1.15));
+    default:    return sw*k;
+  }
+}
+function caps(st,f){
+  const r=f.round;
+  switch(st.t){
+    case "pie": return {a:r,b:"pt"};
+    case "na":  return {a:"pt",b:Math.min(r,0.25)};
+    case "dian":return {a:"pt",b:Math.max(r,0.5)};
+    case "ti":  return {a:r,b:"pt"};
+    case "zhe": return {a:r,b:st.end==="hook"?"pt":r};
+    default:    return {a:r,b:r};
+  }
+}
+function capCmds(kind,tip,T,w,dir,to,out){
+  if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
+    out.push(["L",to[0],to[1]]);return;}
+  const k=typeof kind==="number"?kind:0;
+  if(k<0.02){out.push(["L",to[0],to[1]]);return;}
+  out.push(["Q",tip[0]+T[0]*w*1.28*k*dir,tip[1]+T[1]*w*1.28*k*dir,to[0],to[1]]);
+}
+function contourArea(c){
+  const p=c.map(x=>x[0]==="Q"?[x[3],x[4]]:[x[1],x[2]]);
+  let a=0;for(let i=0;i<p.length;i++){const j=(i+1)%p.length;a+=p[i][0]*p[j][1]-p[j][0]*p[i][1];}
+  return a/2;
+}
+function reverseContour(c){
+  const pts=c.map(x=>x[0]==="Q"?{ctrl:[x[1],x[2]],p:[x[3],x[4]]}:{ctrl:null,p:[x[1],x[2]]});
+  const n=pts.length,out=[["M",pts[n-1].p[0],pts[n-1].p[1]]];
+  for(let i=n-1;i>0;i--){const k=pts[i].ctrl;
+    out.push(k?["Q",k[0],k[1],pts[i-1].p[0],pts[i-1].p[1]]:["L",pts[i-1].p[0],pts[i-1].p[1]]);}
+  const k0=pts[0].ctrl;
+  if(k0) out.push(["Q",k0[0],k0[1],pts[n-1].p[0],pts[n-1].p[1]]);
+  return out;
+}
+const orient=(c,want)=>{const a=contourArea(c);return (a<0)===(want<0)?c:reverseContour(c);};
+function circleContour(cx,cy,r){
+  const N=8,R2=r/Math.cos(Math.PI/N),out=[];
+  const ang=i=>2*Math.PI*i/N;
+  const P=i=>[cx+r*Math.cos(ang(i)),cy+r*Math.sin(ang(i))];
+  out.push(["M",P(0)[0],P(0)[1]]);
+  for(let i=0;i<N;i++){
+    const a=(ang(i)+ang(i+1))/2,c=[cx+R2*Math.cos(a),cy+R2*Math.sin(a)],p=P(i+1);
+    out.push(["Q",c[0],c[1],p[0],p[1]]);
+  }
+  return out;
+}
+
+/* Ramer–Douglas–Peucker：把偏移出來的密集折線化簡。
+   直線會塌成兩點、曲線只留轉折，實測節點只剩 13%——
+   這是「五千字以上編碼就爆記憶體」的治本解法，而且檔案更小、渲染更順。 */
+function rdp(pts,tol){
+  const n=pts.length; if(n<3||tol<=0) return pts;
+  const keep=new Uint8Array(n); keep[0]=keep[n-1]=1;
+  const stack=[[0,n-1]];
+  while(stack.length){
+    const seg=stack.pop(), i=seg[0], j=seg[1];
+    if(j<=i+1) continue;
+    const a=pts[i],b=pts[j];
+    const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);
+    let maxD=-1,idx=-1;
+    for(let k=i+1;k<j;k++){
+      const q=pts[k];
+      const d = L<1e-9 ? Math.hypot(q[0]-a[0],q[1]-a[1])
+                       : Math.abs(dy*q[0]-dx*q[1]+b[0]*a[1]-b[1]*a[0])/L;
+      if(d>maxD){maxD=d;idx=k;}
+    }
+    if(maxD>tol){ keep[idx]=1; stack.push([i,idx],[idx,j]); }
+  }
+  const out=[]; for(let k=0;k<n;k++) if(keep[k]) out.push(pts[k]);
+  return out;
+}
+function strokeOutline(st,f,wScale,NS){
+  const {hw}=widths(f),fillet=hw*(0.10+0.62*f.round)*(st.fr||1);
+  const S=sampleSkeleton(st.p,st.bend||0,fillet,NS||30,st.cv),n=S.length-1;
+  const L=[],R=[];
+  for(let i=0;i<=n;i++){
+    const t=i/n,s=S[i],tl=len(s.t);
+    const nx=-s.t[1]/tl,ny=s.t[0]/tl;
+    const w=widthAt(st,t,s.t,f)*wScale/2;
+    let up=0;
+    if(st.t==="heng"&&f.finish>0) up=f.finish*hw*0.62*smooth(0.80,1,t)*wScale;
+    L.push([s.p[0]+nx*(w+up),s.p[1]+ny*(w+up)]);
+    R.push([s.p[0]-nx*w,s.p[1]-ny*w]);
+  }
+  const C=caps(st,f),T0=unit(S[0].t),T1=unit(S[n].t);
+  const w0=widthAt(st,0,S[0].t,f)*wScale/2,w1=widthAt(st,1,S[n].t,f)*wScale/2;
+  /* 兩側各自化簡（頭尾一定保留，端點造型才接得上） */
+  const tol=f.simp===undefined?1.5:f.simp;
+  const La=rdp(L,tol), Ra=rdp(R,tol);
+  const cmds=[["M",La[0][0],La[0][1]]];
+  for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
+  capCmds(C.b,S[n].p,T1,w1,+1,Ra[Ra.length-1],cmds);
+  for(let i=Ra.length-1;i>=0;i--) cmds.push(["L",Ra[i][0],Ra[i][1]]);
+  capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds);
+  return orient(cmds,-1);
+}
+function strokeContours(st,f,wScale,NS){
+  const {hw}=widths(f);
+  if(st.t==="ring"){
+    const [cx,cy]=st.p[0];
+    const w=hw*(st.w||1)*wScale, r=(st.r||150)*f.face;
+    return [orient(circleContour(cx,cy,r+w/2),-1),
+            orient(circleContour(cx,cy,Math.max(6,r-w/2)),+1)];
+  }
+  if(st.t==="dot"){
+    const [cx,cy]=st.p[0];
+    return [orient(circleContour(cx,cy,hw*(st.rk||1)*wScale),-1)];
+  }
+  return [strokeOutline(st,f,wScale,NS)];
+}
+const fx=v=>v.toFixed(1);
+function svgD(cmds){
+  let d="";
+  for(const c of cmds){
+    if(c[0]==="M") d+="M "+fx(c[1])+" "+fx(EM-c[2]);
+    else if(c[0]==="L") d+=" L "+fx(c[1])+" "+fx(EM-c[2]);
+    else d+=" Q "+fx(c[1])+" "+fx(EM-c[2])+" "+fx(c[3])+" "+fx(EM-c[4]);
+  }
+  return d+" Z";
+}
+function toOtPath(list){
+  const path=new opentype.Path();
+  for(const cmds of list){
+    for(const c of cmds){
+      if(c[0]==="M") path.moveTo(c[1],c[2]+DESC);
+      else if(c[0]==="L") path.lineTo(c[1],c[2]+DESC);
+      else path.quadraticCurveTo(c[1],c[2]+DESC,c[3],c[4]+DESC);
+    }
+    path.close();
+  }
+  return path;
+}
+
+/* ==========================================================================
+   變體 + 組字
+   ========================================================================== */
+function resolveStrokes(g,variant){
+  if(!g.s) return null;
+  const ov=variant&&g.v&&g.v[variant];
+  if(!ov) return g.s;
+  return g.s.map((st,i)=> ov[i]?{...st,...ov[i]}:st);
+}
+function collect(id,box,wScale,out,seed,variant,depth){
+  const g=G[id]; if(!g||(depth||0)>8) return;
+  const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
+  const ws=wScale*Math.min(1,Math.max(0.72,(sx+sy)/2));
+  const S=resolveStrokes(g,variant);
+  if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,r:st.r,rk:st.rk,ws,
+    p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
+    seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
+  if(g.c) g.c.forEach((part,i)=>{
+    const [a,b,c,d]=part.box;
+    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1);
+  });
+}
+const powC=(v,g)=>{const u=(v-500)/500,s=u<0?-1:1;return 500+500*s*Math.pow(Math.abs(u),g);};
+const powG=(v,g)=>{const u=v/EM;return u<0?v:EM*Math.pow(u,g);};
+const invC=(v,g)=>{const u=(v-500)/500,s=u<0?-1:1;return 500+500*s*Math.pow(Math.abs(u),1/g);};
+const invG=(v,g)=>{const u=v/EM;return u<0?v:EM*Math.pow(u,1/g);};
+const rnd=s=>{const x=Math.sin(s*12.9898)*43758.5453;return (x-Math.floor(x))*2-1;};
+
+function ptWarp(x,y,f){
+  x=500+(x-500)*f.face; y=500+(y-500)*f.face;
+  x=powC(x,f.counter);  y=powC(y,f.counter);
+  y=powG(y,f.gravity);  return [x,y];
+}
+function ptUnwarp(x,y,f){
+  y=invG(y,f.gravity);
+  x=invC(x,f.counter);  y=invC(y,f.counter);
+  x=500+(x-500)/f.face; y=500+(y-500)/f.face; return [x,y];
+}
+function warpStroke(st,f){
+  let p=st.p.map(([x,y])=>ptWarp(x,y,f));
+  let bend=st.bend||0, hp=null;
+  if(st.t==="heng"&&f.finish>0&&p.length===2) p[1]=[p[1][0],p[1][1]+f.finish*13];
+  if(f.hand>0&&p.length>1){
+    const a=rnd(st.seed)*f.hand*0.05;
+    const c=[p.reduce((s,q)=>s+q[0],0)/p.length,p.reduce((s,q)=>s+q[1],0)/p.length];
+    const j=[rnd(st.seed+11)*f.hand*16,rnd(st.seed+29)*f.hand*16];
+    const ca=Math.cos(a),sa=Math.sin(a);
+    p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa+j[0],c[1]+(x-c[0])*sa+(y-c[1])*ca+j[1]]);
+    bend+=rnd(st.seed+53)*f.hand*0.055;
+    hp={a,c,j};
+  }
+  return {...st,p,bend,hp};
+}
+function unwarpPoint(w,st,f,pi){
+  let [x,y]=w;
+  const hp=warpStroke(st,f).hp;
+  if(hp){
+    x-=hp.j[0]; y-=hp.j[1];
+    const ca=Math.cos(hp.a),sa=Math.sin(hp.a);
+    const dx=x-hp.c[0],dy=y-hp.c[1];
+    x=hp.c[0]+dx*ca+dy*sa; y=hp.c[1]-dx*sa+dy*ca;
+  }
+  if(st.t==="heng"&&f.finish>0&&st.p.length===2&&pi===1) y-=f.finish*13;
+  return ptUnwarp(x,y,f);
+}
+const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
+
+function glyphContours(id,f,variant,NS){
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
+  const out=[];
+  for(const st of warp(raw,f)) out.push(...strokeContours(st,f,st.ws,NS));
+  return out;
+}
+function glyphSkeleton(id,f,variant){
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
+  return warp(raw,f).filter(st=>st.p.length>1).map(st=>
+    "M "+sampleSkeleton(st.p,st.bend||0,40,22,st.cv).map(s=>fx(s.p[0])+" "+fx(EM-s.p[1])).join(" L "));
+}
+function strokeCount(id){const o=[];collect(id,[0,0,EM,EM],1,o,7,null,0);return o.length;}
+function contourCount(id){const o=[];collect(id,[0,0,EM,EM],1,o,7,null,0);
+  return o.reduce((a,s)=>a+(s.t==="ring"?2:1),0);}
+
+/* ==========================================================================
+   品質檢查
+   ========================================================================== */
+const REF=80, SMALL=18;
+const cvRef=document.createElement("canvas"), cvSm=document.createElement("canvas");
+cvRef.width=cvRef.height=REF; cvSm.width=cvSm.height=SMALL;
+const ctxRef=cvRef.getContext("2d",{willReadFrequently:true});
+const ctxSm =cvSm .getContext("2d",{willReadFrequently:true});
+
+function raster(ds,ctx,N){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,N,N);
+  ctx.setTransform(N/EM,0,0,N/EM,0,0);
+  ctx.fillStyle="#000";
+  const p=new Path2D();
+  for(const d of ds) p.addPath(new Path2D(d));
+  ctx.fill(p,"nonzero");
+  ctx.setTransform(1,0,0,1,0,0);
+  const px=ctx.getImageData(0,0,N,N).data;
+  const ink=new Uint8Array(N*N);
+  for(let i=0;i<N*N;i++) ink[i]= px[i*4]<130?1:0;
+  return ink;
+}
+function measure(ink,N){
+  let n=0,sx=0,sy=0,minx=N,maxx=-1,miny=N,maxy=-1,l=0,r=0;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(!ink[y*N+x])continue;
+    n++;sx+=x;sy+=y;
+    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y;
+    if(x<N/2)l++;else r++;
+  }
+  if(!n) return {ratio:0,cx:.5,cy:.5,bw:0,bh:0,bal:0};
+  return {ratio:n/(N*N),cx:sx/n/N,cy:sy/n/N,
+          bw:(maxx-minx+1)/N,bh:(maxy-miny+1)/N,bal:(r-l)/n};
+}
+function holeCount(ink,N,minArea){
+  const seen=new Uint8Array(N*N),st=[];
+  const push=(x,y)=>{if(x<0||y<0||x>=N||y>=N)return;const i=y*N+x;
+    if(seen[i]||ink[i])return;seen[i]=1;st.push(i);};
+  for(let x=0;x<N;x++){push(x,0);push(x,N-1);}
+  for(let y=0;y<N;y++){push(0,y);push(N-1,y);}
+  while(st.length){const i=st.pop(),x=i%N,y=(i-x)/N;
+    push(x+1,y);push(x-1,y);push(x,y+1);push(x,y-1);}
+  let count=0;const s2=[];
+  for(let i=0;i<N*N;i++){
+    if(ink[i]||seen[i])continue;
+    let area=0;seen[i]=1;s2.push(i);
+    while(s2.length){const j=s2.pop(),x=j%N,y=(j-x)/N;area++;
+      for(const nb of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
+        const a=nb[0],b=nb[1];
+        if(a<0||b<0||a>=N||b>=N)continue;
+        const k=b*N+a;
+        if(!ink[k]&&!seen[k]){seen[k]=1;s2.push(k);}
+      }}
+    if(area>=minArea) count++;
+  }
+  return count;
+}
+/* 非成字部件（只當偏旁用，不會單獨出現）：
+   它們本來就該偏一邊、偏輕、字面小，用整字的標準去量全是誤判，
+   所以只對它們跑「小字糊化」一項。 */
+const BOUND=new Set(["氵","亻","忄","彳","阝","刂","冫","艹","宀","冖","亠",
+                     "尸","厂","广","疒","辶","衤","犭","糹","扌","丿","丨","丶"]);
+const isFullChar=id=>!BOUND.has(id)&&strokeCount(id)>=3;
+
+let QA={};
+function runQA(){
+  const raw={};
+  const ORDER=VIEW.slice(page*PAGE,(page+1)*PAGE).filter(id=>G[id]&&!G[id].sp);
+  for(const id of ORDER){
+    const ds=glyphContours(id,F,null,16).map(svgD);
+    const iR=raster(ds,ctxRef,REF), iS=raster(ds,ctxSm,SMALL);
+    raw[id]={m:measure(iR,REF),hR:holeCount(iR,REF,4),hS:holeCount(iS,SMALL,1)};
+  }
+  /* 黑度基準只用完整字算；把偏旁和單筆畫算進去會把中位數拉低，
+     結果每個正常的字都變成「黑度偏高」 */
+  const pool=ORDER.filter(isFullChar);
+  if(!pool.length){ QA={}; paintQA(); return; }
+  const sorted=pool.map(id=>raw[id].m.ratio).sort((a,b)=>a-b);
+  const med=sorted[Math.floor(sorted.length/2)]||0.001;
+  QA={};
+  for(const id of ORDER){
+    const {m,hR,hS}=raw[id],flags=[];
+    /* 這一項對誰都成立：縮到 18px 還糊，就是真的糊 */
+    if(hR>0&&hS<hR) flags.push({l:2,t:"小字糊化，封閉白空間消失",n:"白空間 "+hR+" → "+hS+" @"+SMALL+"px"});
+    if(isFullChar(id)){
+      /* 門檻對照 Noto Sans CJK TC 實測值校準過，讓專業字型能全數通過 */
+      if(m.ratio>med*1.45) flags.push({l:2,t:"黑度偏高，小字容易糊",n:"ink "+(m.ratio/med).toFixed(2)+"×中位數"});
+      else if(m.ratio<med*0.50) flags.push({l:1,t:"黑度偏低，與整體不搭",n:"ink "+(m.ratio/med).toFixed(2)+"×中位數"});
+      if(Math.abs(m.cx-0.5)>0.058) flags.push({l:1,t:"水平重心偏"+(m.cx>0.5?"右":"左"),n:"cx "+m.cx.toFixed(3)});
+      if(Math.abs(m.cy-0.5)>0.075) flags.push({l:1,t:"垂直重心偏"+(m.cy>0.5?"下":"上"),n:"cy "+m.cy.toFixed(3)});
+      if(m.bw<0.62||m.bh<0.62) flags.push({l:1,t:"字面偏小，排在一起會鬆",n:"bbox "+m.bw.toFixed(2)+"×"+m.bh.toFixed(2)});
+      if(G[id].ids&&G[id].ids.startsWith("⿰")&&Math.abs(m.bal)>0.30)
+        flags.push({l:1,t:"左右失衡，"+(m.bal>0?"右":"左")+"側過重",n:"bal "+m.bal.toFixed(2)});
+    }
+    QA[id]={flags,lvl:flags.reduce((a,f)=>Math.max(a,f.l),0),m,hR,hS,bound:!isFullChar(id)};
+  }
+  paintQA();
+}
+function paintQA(){
+  let p=0,a=0,b=0;
+  document.querySelectorAll(".cell").forEach(c=>{
+    const q=QA[c.dataset.id];
+    if(!q){c.classList.toggle("hide",qaOnly);return;}
+    if(q.lvl===0)p++; else if(q.lvl===1)a++; else b++;
+    let f=c.querySelector(".flag");
+    if(q.lvl===0){if(f)f.remove();}
+    else{if(!f){f=document.createElement("i");f.className="flag";c.appendChild(f);}
+         f.className="flag l"+q.lvl; f.title=q.flags.map(x=>x.t).join(" / ");}
+    c.classList.toggle("hide",qaOnly&&q.lvl===0);
+  });
+  const tot=p+a+b||1;
+  $("qbP").style.width=(p/tot*100)+"%";
+  $("qbA").style.width=(a/tot*100)+"%";
+  $("qbB").style.width=(b/tot*100)+"%";
+  $("qnP").textContent=p; $("qnA").textContent=a; $("qnB").textContent=b;
+  paintQADetail();
+}
+function paintQADetail(){
+  const ul=$("qaDetail"); ul.textContent="";
+  if(G[current]&&G[current].sp){
+    ul.innerHTML='<li class="na"><i></i><span>標點不列入品質檢查</span></li>';return;}
+  const q=QA[current];
+  if(!q){ul.innerHTML='<li class="na"><i></i><span>尚未檢查</span></li>';return;}
+  if(!q.flags.length){
+    ul.innerHTML='<li class="ok"><i></i><span>通過 · 黑度 '+(q.m.ratio*100).toFixed(1)+
+      '% · 白空間 '+q.hR+' · 重心 '+q.m.cx.toFixed(3)+','+q.m.cy.toFixed(3)+
+      (q.bound?'<br><code>偏旁只檢查小字糊化</code>':'')+'</span></li>';return;}
+  for(const f of q.flags){
+    const li=document.createElement("li");li.className="l"+f.l;
+    li.innerHTML='<i></i><span>'+f.t+'<br><code>'+f.n+'</code></span>';
+    ul.appendChild(li);
+  }
+}
+
+/* ==========================================================================
+   UI
+   ========================================================================== */
+const NS="http://www.w3.org/2000/svg";
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const $=id=>document.getElementById(id);
+
+const AXES=[
+  {k:"weight",  n:"字重",  en:"WEIGHT",  min:34,  max:150, step:1,   lo:"細",  hi:"粗",  f:v=>v},
+  {k:"contrast",n:"對比",  en:"CONTRAST",min:0.62,max:1.90,step:0.02,lo:"均勻",hi:"強烈",f:v=>v.toFixed(2)},
+  {k:"round",   n:"圓角",  en:"ROUND",   min:0,   max:1,   step:0.02,lo:"尖",  hi:"圓",  f:v=>v.toFixed(2)},
+  {k:"counter", n:"中宮",  en:"COUNTER", min:0.78,max:1.30,step:0.01,lo:"鬆",  hi:"緊",  f:v=>v.toFixed(2)},
+  {k:"gravity", n:"重心",  en:"GRAVITY", min:0.84,max:1.18,step:0.01,lo:"高",  hi:"低",  f:v=>v.toFixed(2)},
+  {k:"face",    n:"字面率",en:"FACE",    min:0.84,max:1.10,step:0.01,lo:"小",  hi:"大",  f:v=>v.toFixed(2)},
+  {k:"hand",    n:"書寫感",en:"HAND",    min:0,   max:1,   step:0.02,lo:"幾何",hi:"手寫",f:v=>v.toFixed(2)},
+  {k:"finish",  n:"收筆",  en:"FINISH",  min:0,   max:1,   step:0.02,lo:"平切",hi:"翹角",f:v=>v.toFixed(2)}
+];
+const PRESETS={
+  hei:{weight:78,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0},
+  yuan:{weight:86,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:0.98,hand:0.06,finish:0},
+  ming:{weight:60,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.00,hand:0,finish:0.95},
+  hand:{weight:56,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:0.96,hand:0.85,finish:0.34},
+  title:{weight:132,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.06,hand:0,finish:0}
+};
+const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑"};
+const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display"};
+const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
+
+let current="木",showSkel=false,editMode=false,presetKey="hei",varSel=null,qaOnly=false;
+const cellPaths=new Map(),ro={};
+
+AXES.forEach(ax=>{
+  const b=document.createElement("div");b.className="ctrl";
+  b.innerHTML='<div class="ctrl-head"><label for="ax_'+ax.k+'">'+ax.n+
+    '</label><span class="ro" id="ro_'+ax.k+'"></span></div>'+
+    '<input type="range" id="ax_'+ax.k+'" min="'+ax.min+'" max="'+ax.max+'" step="'+ax.step+
+    '" value="'+F[ax.k]+'">'+
+    '<div class="ends"><span>'+ax.lo+'</span><span>'+ax.en+'</span><span>'+ax.hi+'</span></div>';
+  $("ctrls").appendChild(b);
+  ro[ax.k]=b.querySelector(".ro"); ax.input=b.querySelector("input");
+  ax.input.addEventListener("input",e=>{
+    F[ax.k]=+e.target.value; presetKey=null;
+    document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
+    schedule(); scheduleSlow();
+  });
+});
+{
+  const b=document.createElement("div"); b.className="ctrl";
+  b.innerHTML='<div class="ctrl-head"><label for="famIn">字型名稱</label>'+
+    '<span class="ro">NAME</span></div>'+
+    '<input type="text" id="famIn" spellcheck="false" placeholder="中文名，例如 青埔黑體">'+
+    '<input type="text" id="latIn" spellcheck="false" placeholder="英文名（PostScript 用，限 A-Z）">';
+  $("ctrls").appendChild(b);
+  $("famIn").value=FAMILY; $("latIn").value=LATIN;
+  $("famIn").addEventListener("input",e=>{FAMILY=e.target.value||"";saveLocal();scheduleSlow();});
+  $("latIn").addEventListener("input",e=>{LATIN=e.target.value||"";saveLocal();scheduleSlow();});
+}
+
+const PAGE=180;
+let VIEW=[], page=0, query="";
+function computeView(){
+  const q=query.trim();
+  let list;
+  if(q){
+    const qs=[...q];
+    list=ALL.filter(id=> qs.includes(id) || id.indexOf(q)>=0 );
+    if(!list.length) list=ALL.filter(id=>id.toLowerCase().indexOf(q.toLowerCase())>=0);
+  } else {
+    list=ALL.filter(id=>G[id]&&(G[id].u||G[id].sp));   /* 預設只列有碼位的字，部件太多 */
+    if(!list.length) list=ALL.slice();
+  }
+  VIEW=list;
+  const pages=Math.max(1,Math.ceil(VIEW.length/PAGE));
+  if(page>=pages) page=pages-1;
+  if(page<0) page=0;
+  $("pgInfo").textContent=(page+1)+" / "+pages+"　共 "+VIEW.length.toLocaleString();
+  $("pgPrev").disabled=page<=0; $("pgNext").disabled=page>=pages-1;
+  return VIEW.slice(page*PAGE,(page+1)*PAGE);
+}
+function buildCells(){
+ const shown=computeView();
+ $("cells").textContent=""; cellPaths.clear();
+ shown.forEach(id=>{
+  const g=G[id],composed=!!g.c,punc=!!g.sp,n=contourCount(id);
+  const btn=document.createElement("button");
+  btn.className="cell"+(composed?" comp":"")+(punc?" punc":"");
+  btn.type="button"; btn.dataset.id=id;
+  btn.setAttribute("aria-label","檢視 "+id);
+  const svg=el("svg",{viewBox:"-14 -14 1028 1028",preserveAspectRatio:"xMidYMid meet"});
+  const paths=[];
+  for(let i=0;i<n;i++){const p=el("path",{fill:"var(--ink)"});svg.appendChild(p);paths.push(p);}
+  btn.appendChild(svg);
+  const cap=document.createElement("div");cap.className="cap";
+  cap.innerHTML='<b>'+(id==="　"?"␣":id)+'</b><span>'+(g.ids||strokeCount(id)+"畫")+'</span>';
+  btn.appendChild(cap);
+  btn.addEventListener("click",()=>{current=id;varSel=null;mark();drawBig();});
+  $("cells").appendChild(btn); cellPaths.set(id,paths);
+ });
+ $("hCount").textContent=ALL.length.toLocaleString()+" GLYPHS";
+ $("tagComp").textContent=ALL.filter(i=>G[i]&&G[i].s&&!G[i].sp).length;
+ $("tagCx").textContent=ALL.filter(i=>G[i]&&G[i].c).length;
+ $("tagPu").textContent=ALL.filter(i=>G[i]&&G[i].sp).length;
+}
+buildCells();
+$("q").addEventListener("input",e=>{query=e.target.value;page=0;buildCells();mark();scheduleSlow();});
+$("pgPrev").addEventListener("click",()=>{page--;buildCells();mark();scheduleSlow();});
+$("pgNext").addEventListener("click",()=>{page++;buildCells();mark();scheduleSlow();});
+$("tagComp").textContent=COMP.length;
+$("tagCx").textContent=CXED.length;
+$("tagPu").textContent=PUNCT.length;
+$("statCounts").textContent="部件 "+COMP.length+" · 組合 "+CXED.length+" · 標點 "+PUNCT.length;
+const mark=()=>document.querySelectorAll(".cell").forEach(c=>c.classList.toggle("on",c.dataset.id===current));
+
+/* 匯入的 KAGE 原始資料 —— 它就是基準線，「還原」一律退回到這裡 */
+let PACKRAW=null;
+/* 明確記錄改過哪些字，比每次深層比對 17,000 個字形快得多 */
+const EDITED=new Set();
+const isEdited=id=>EDITED.has(id);
+const touch=id=>{ if(id) EDITED.add(id); };
+
+/* 某個 id 的「乾淨版本」：優先用匯入的 KAGE，其次才是內建出廠值 */
+function pristine(id){
+  if(PACKRAW){
+    if([...id].length===1){                    /* 單字 → 一層滿框引用，指向來源字形 */
+      const cp=id.codePointAt(0);
+      const nm="u"+cp.toString(16).toLowerCase();
+      const t=nm+"-t";
+      const src = PACKRAW[t] ? t : (PACKRAW[nm] ? nm : null);
+      if(src) return {u:cp, c:[{r:src, box:[0,0,EM,EM]}]};
+    }
+    if(PACKRAW[id]){                           /* GlyphWiki 字形名 → 直接重轉 */
+      const prev=KAGE_EXACT; KAGE_EXACT=true;
+      const r=kageToGlyph(PACKRAW[id]);
+      KAGE_EXACT=prev;
+      if(r.strokes.length||r.parts.length){
+        const g={};
+        if(r.strokes.length) g.s=r.strokes;
+        if(r.parts.length)   g.c=r.parts.map(({missing,...q})=>q);
+        return g;
+      }
+    }
+  }
+  return BASE[id] ? JSON.parse(JSON.stringify(BASE[id])) : null;
+}
+function markEdited(){
+  let n=0,v=0;
+  document.querySelectorAll(".cell").forEach(c=>{
+    const id=c.dataset.id,e=isEdited(id); if(e)n++;
+    if(G[id].c&&G[id].c.some(p=>p.v))v++;
+    c.classList.toggle("edited",e);
+  });
+  $("tagEdited").textContent="已修改 "+n;
+  $("tagVar").textContent="使用變體 "+v;
+}
+
+/* ---------- 檢視 / 編輯 ---------- */
+const bigSvg=$("bigSvg");
+function drawBig(){
+  const g=G[current];
+  if(varSel&&!(g.v&&g.v[varSel])) varSel=null;
+  bigSvg.textContent="";
+  bigSvg.appendChild(el("rect",{x:0,y:0,width:EM,height:EM,fill:"none",
+    stroke:"var(--grid)","stroke-width":2.2,opacity:.5}));
+  const dash={stroke:"var(--grid)","stroke-width":1.3,"stroke-dasharray":"9 11",opacity:.32,fill:"none"};
+  bigSvg.appendChild(el("line",{x1:500,y1:0,x2:500,y2:EM,...dash}));
+  bigSvg.appendChild(el("line",{x1:0,y1:500,x2:EM,y2:500,...dash}));
+  bigSvg.appendChild(el("line",{x1:0,y1:0,x2:EM,y2:EM,...dash}));
+  bigSvg.appendChild(el("line",{x1:EM,y1:0,x2:0,y2:EM,...dash}));
+
+  const cs=glyphContours(current,F,varSel);
+  cs.forEach(c=>bigSvg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)",
+    "fill-rule":"nonzero",opacity:editMode?.55:1})));
+  if(showSkel||editMode) glyphSkeleton(current,F,varSel).forEach(d=>bigSvg.appendChild(
+    el("path",{d,fill:"none",stroke:"var(--skel)","stroke-width":3,
+      "stroke-dasharray":"13 7 3 7",opacity:.9})));
+
+  $("bigBox").classList.toggle("editing",editMode);
+  if(editMode){
+    const S=resolveStrokes(g,varSel);
+    if(S) S.forEach((st,si)=>st.p.forEach((pt,pi)=>{
+      const w=warpStroke({...st,seed:7*31+si*7},F).p[pi];
+      bigSvg.appendChild(el("circle",{cx:w[0],cy:EM-w[1],r:19,fill:"var(--paper)",
+        stroke:"var(--skel)","stroke-width":4,cursor:"grab","data-k":"s","data-si":si,"data-pi":pi}));
+    }));
+    if(g.c) g.c.forEach((part,ci)=>{
+      const [a,b,c,d]=part.box;
+      const P=[[a,b],[c,b],[c,d],[a,d]].map(([x,y])=>ptWarp(x,y,F));
+      bigSvg.appendChild(el("polygon",{points:P.map(p=>p[0]+","+(EM-p[1])).join(" "),
+        fill:"none",stroke:"var(--box)","stroke-width":2.5,"stroke-dasharray":"12 8",opacity:.85}));
+      P.forEach((p,k)=>bigSvg.appendChild(el("rect",{x:p[0]-16,y:EM-p[1]-16,width:32,height:32,
+        fill:"var(--paper)",stroke:"var(--box)","stroke-width":4,cursor:"grab",
+        "data-k":"c","data-ci":ci,"data-corner":k})));
+    });
+    $("badge").textContent = g.c?"拖曳綠框改配置"
+      :(varSel?"編輯「"+VNAME[varSel]+"」變體":"拖曳藍點改基本骨架");
+  }
+  drawVariantPanel(g);
+
+  const composed=!!g.c;
+  $("mGlyph").textContent = current==="　"?"␣":current;
+  $("mType").textContent=(g.sp?"標點 · 全形":composed?"組合字 · 零手繪":"部件 · 手繪骨架")+
+    (isEdited(current)?" · 已修改":"");
+  $("mTree").textContent=composed?g.ids+"\n"+tree(current):"獨體 · 直接定義筆畫";
+  $("mCount").textContent=strokeCount(current)+" 筆 · "+contourCount(current)+" 外框";
+  $("mHint").textContent=composed
+    ? "拖綠框調整部件在字面裡的位置；下拉選單換部件變體。兩者都只影響這個字。"
+    : g.sp ? "標點也是骨架做的。「。」用 ring：外圈實心、內圈反向繞，靠 nonzero 填充自動挖空。"
+    : "拖藍點改骨架。所有引用這個部件的字會同時更新；選了變體時只寫進該變體。";
+  paintQADetail();
+}
+function drawVariantPanel(g){
+  const sec=$("secVariant"),body=$("varBody");
+  body.textContent="";
+  if(g.s&&g.v){
+    $("varTitle").textContent="部件變體 VARIANTS"; sec.hidden=false;
+    const chips=document.createElement("div"); chips.className="chips";
+    [null,...Object.keys(g.v)].forEach(k=>{
+      const b=document.createElement("button"); b.type="button";
+      b.textContent=k===null?"基本":VNAME[k]||k;
+      if(varSel===k) b.classList.add("on");
+      b.addEventListener("click",()=>{varSel=k;drawBig();});
+      chips.appendChild(b);
+    });
+    body.appendChild(chips);
+  } else if(g.c){
+    $("varTitle").textContent="部件配置 COMPONENTS"; sec.hidden=false;
+    g.c.forEach(part=>{
+      const row=document.createElement("div"); row.className="partrow";
+      const b=document.createElement("b"); b.textContent=part.r; row.appendChild(b);
+      const vs=G[part.r]&&G[part.r].v;
+      if(vs){
+        const sel=document.createElement("select");
+        [["","基本形"],...Object.keys(vs).map(k=>[k,VNAME[k]||k])].forEach(([val,label])=>{
+          const o=document.createElement("option"); o.value=val; o.textContent=label;
+          if((part.v||"")===val) o.selected=true; sel.appendChild(o);
+        });
+        sel.addEventListener("change",e=>{
+          if(e.target.value) part.v=e.target.value; else delete part.v;
+          touch(current); schedule(); scheduleSlow(); markEdited(); saveLocal();
+        });
+        row.appendChild(sel);
+      } else {
+        const s=document.createElement("span");
+        s.style.cssText="color:var(--muted);font-size:11px"; s.textContent="無變體";
+        row.appendChild(s);
+      }
+      body.appendChild(row);
+    });
+  } else sec.hidden=true;
+}
+function tree(id,d=0){
+  const g=G[id]; if(!g||!g.c||d>4) return "";
+  return g.c.map(p=>"  ".repeat(d+1)+"└ "+p.r+(p.v?"("+(VNAME[p.v]||p.v)+")":"")+
+    (G[p.r]&&G[p.r].c?"\n"+tree(p.r,d+1):"")).join("\n");
+}
+
+/* ---------- 拖曳 ---------- */
+let drag=null;
+function toEm(evt){
+  const p=bigSvg.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;
+  const m=bigSvg.getScreenCTM();if(!m)return null;
+  const q=p.matrixTransform(m.inverse());
+  return [q.x,EM-q.y];
+}
+bigSvg.addEventListener("pointerdown",evt=>{
+  const t=evt.target,k=t.dataset&&t.dataset.k;
+  if(!editMode||!k)return;
+  drag = k==="s"?{k:"s",si:+t.dataset.si,pi:+t.dataset.pi}
+                :{k:"c",ci:+t.dataset.ci,corner:+t.dataset.corner};
+  bigSvg.setPointerCapture(evt.pointerId); evt.preventDefault();
+});
+bigSvg.addEventListener("pointermove",evt=>{
+  const em=toEm(evt); if(!em)return;
+  $("mCur").textContent=Math.round(em[0])+", "+Math.round(em[1]);
+  if(!drag)return;
+  const g=G[current];
+  if(drag.k==="s"){
+    const resolved=resolveStrokes(g,varSel)[drag.si];
+    let target;
+    if(varSel){
+      g.v[varSel]=g.v[varSel]||{};
+      if(!g.v[varSel][drag.si]) g.v[varSel][drag.si]=JSON.parse(JSON.stringify(resolved));
+      target=g.v[varSel][drag.si];
+    } else target=g.s[drag.si];
+    const raw=unwarpPoint(em,{...resolved,seed:7*31+drag.si*7},F,drag.pi);
+    target.p[drag.pi]=[Math.max(-60,Math.min(1060,raw[0])),Math.max(-60,Math.min(1060,raw[1]))];
+  } else {
+    const box=g.c[drag.ci].box;
+    const raw=ptUnwarp(em[0],em[1],F);
+    const x=Math.max(-100,Math.min(1100,raw[0])),y=Math.max(-100,Math.min(1100,raw[1]));
+    if(drag.corner===0){box[0]=x;box[1]=y;}
+    else if(drag.corner===1){box[2]=x;box[1]=y;}
+    else if(drag.corner===2){box[2]=x;box[3]=y;}
+    else {box[0]=x;box[3]=y;}
+  }
+  schedule(); scheduleSlow(); saveLocal();
+});
+const endDrag=()=>{if(drag){drag=null;touch(current);markEdited();}};
+bigSvg.addEventListener("pointerup",endDrag);
+bigSvg.addEventListener("pointercancel",endDrag);
+
+/* ---------- 重繪 ---------- */
+function drawAll(){
+  AXES.forEach(ax=>{ax.input.value=F[ax.k];ro[ax.k].textContent=ax.f(F[ax.k]);});
+  cellPaths.forEach((paths,id)=>{
+    const cs=glyphContours(id,F,null,14);
+    for(let i=0;i<paths.length;i++) paths[i].setAttribute("d",cs[i]?svgD(cs[i]):"");
+  });
+  drawBig();
+  $("statAxes").textContent="W"+F.weight+" C"+F.contrast.toFixed(2)+" R"+F.round.toFixed(2)+
+    " · "+(presetKey?PNAME[presetKey]:"自訂");
+}
+let pending=false;
+const schedule=()=>{if(pending)return;pending=true;
+  requestAnimationFrame(()=>{pending=false;drawAll();});};
+let slowTimer=null;
+const scheduleSlow=()=>{clearTimeout(slowTimer);
+  slowTimer=setTimeout(()=>{runQA();refreshLiveFont();},560);};
+
+/* ==========================================================================
+   字型
+   ========================================================================== */
+const HAS_OT=typeof opentype!=="undefined";
+function buildFont(){
+  const styleTW=presetKey?PNAME[presetKey]:"Regular";
+  const styleEN=presetKey?PNAME_EN[presetKey]:"Regular";
+  const fam=(FAMILY||"").trim()||"筆畫黑體";
+  const lat=asciiSafe(LATIN)||"StrokeEngine";
+  const notdef=new opentype.Glyph({name:".notdef",unicode:0,advanceWidth:EM,path:new opentype.Path()});
+  const glyphs=[notdef];
+  /* 半形空白：沒有它，一遇到英數間的空格就會變成豆腐格 */
+  glyphs.push(new opentype.Glyph({name:"space",unicode:0x20,advanceWidth:EM/2,path:new opentype.Path()}));
+  for(const id of ALL){
+    if(!G[id].u) continue;               /* 匯入的 GlyphWiki 部件沒有碼位，不進字型 */
+    glyphs.push(new opentype.Glyph({
+      name:"uni"+G[id].u.toString(16).toUpperCase().padStart(4,"0"),
+      unicode:G[id].u,advanceWidth:EM,path:toOtPath(glyphContours(id,F))}));
+  }
+
+  const font=new opentype.Font({familyName:lat,styleName:styleEN,
+    unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
+
+  /* 中英雙語名稱：Windows 會依系統語言挑，繁中系統就顯示中文名 */
+  font.names.fontFamily     ={en:lat, "zh-TW":fam};
+  font.names.fontSubfamily  ={en:styleEN, "zh-TW":styleTW};
+  font.names.fullName       ={en:lat+" "+styleEN, "zh-TW":fam+" "+styleTW};
+  font.names.postScriptName ={en:lat+"-"+styleEN};   /* 必須純 ASCII */
+  font.names.manufacturer   ={en:"Stroke Engine"};
+  font.names.designer       ={en:lat};
+  font.names.version        ={en:"Version 0.21"};
+  /* nameID 19 = 預覽用範例文字。系統內建的中文樣句（微風迎客，軟語伴茶）
+     一個字都不在本字型裡，找不到就會退回英文 pangram；給它一段畫得出來的就好 */
+  const smp=[...(($("specIn")&&$("specIn").value)||"")].filter(ch=>G[ch]).join("")
+            || "這是好天，早上看星。";
+  font.names.sampleText     ={en:smp, "zh-TW":smp};
+
+  /* opentype.js 的 OS/2 寫死 ulCodePageRange1 = 1（Latin-1），
+     所以系統會把字型當成英文字型：歸類到拉丁區、預覽字串也給 abcdef。
+     這裡覆寫成繁體中文，並如實宣告涵蓋的 Unicode 區塊。 */
+  font.tables.os2=Object.assign({},font.tables.os2,{
+    ulUnicodeRange1:0,                 /* 沒有拉丁字母，不謊報 */
+    ulUnicodeRange2:(1<<27)|(1<<16),   /* bit59 CJK統一漢字 · bit48 CJK標點 */
+    ulUnicodeRange3:(1<<3),            /* bit67 全形／半形形式 */
+    ulUnicodeRange4:0,
+    ulCodePageRange1:(1<<20)>>>0,      /* bit20 = 代碼頁 950 繁體中文 */
+    ulCodePageRange2:0,
+    fsType:0,                          /* 無嵌入限制 */
+    achVendID:"DBST"
+  });
+  return font;
+}
+let faceRef=null;
+/* 大字集時的即時預覽：只建樣張輸入框用到的那幾個字 */
+async function refreshLiveFontSmall(){
+  const st=$("fontState");
+  const need=[...new Set([...(($("specIn")&&$("specIn").value)||"")])].filter(ch=>G[ch]&&G[ch].u);
+  if(!need.length){ st.textContent="樣張沒有可用的字"; st.className=""; return; }
+  try{
+    const notdef=new opentype.Glyph({name:".notdef",unicode:0,advanceWidth:EM,path:new opentype.Path()});
+    const glyphs=[notdef,new opentype.Glyph({name:"space",unicode:0x20,advanceWidth:EM/2,path:new opentype.Path()})];
+    for(const ch of need) glyphs.push(new opentype.Glyph({
+      name:"uni"+G[ch].u.toString(16).toUpperCase(),unicode:G[ch].u,
+      advanceWidth:EM,path:toOtPath(glyphContours(ch,F))}));
+    const font=new opentype.Font({familyName:"SEPrev",styleName:"Regular",
+      unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
+    const buf=font.toArrayBuffer();
+    if(faceRef) document.fonts.delete(faceRef);
+    faceRef=new FontFace("SEPreview",buf); await faceRef.load(); document.fonts.add(faceRef);
+    $("spec").classList.add("live");
+    st.textContent="預覽 "+need.length+" 字（字庫共 "+
+      ALL.filter(i=>G[i]&&G[i].u).length.toLocaleString()+" 字）";
+    st.className="ok";
+  }catch(e){ st.textContent="預覽失敗："+(e.message||e); st.className="err"; }
+}
+async function refreshLiveFont(){
+  const st=$("fontState");
+  if(!HAS_OT){st.textContent="opentype.js 未載入";st.className="err";return;}
+  if(ALL.filter(i=>G[i]&&G[i].u).length>900){       /* 字太多，預覽只建樣張用到的字 */
+    return refreshLiveFontSmall();
+  }
+  st.textContent="生成中…";st.className="";
+  try{
+    const buf=buildFont().toArrayBuffer();
+    if(faceRef) document.fonts.delete(faceRef);
+    faceRef=new FontFace("SEPreview",buf);
+    await faceRef.load(); document.fonts.add(faceRef);
+    $("spec").classList.add("live");
+    st.textContent="字型已生成 · "+(ALL.filter(i=>G[i].u).length+1)+" 字 · "+(buf.byteLength/1024).toFixed(1)+" KB";
+    st.className="ok";
+  }catch(e){
+    st.textContent="生成失敗："+(e&&e.message||e); st.className="err";
+    $("spec").classList.remove("live");
+  }
+}
+function download(blob,name){
+  /* 注意：URL 撤銷太早會把大檔案的下載截斷（6MB 的字型就中過招），
+     所以拉長到 60 秒，anchor 也延後移除 */
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=name; a.style.display="none";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); },60000);
+}
+function exportFont(){
+  if(!HAS_OT){alert("opentype.js 未載入，請在有網路的環境開啟本頁。");return;}
+  const safe=asciiSafe(LATIN)||"StrokeEngine";
+  download(new Blob([buildFont().toArrayBuffer()],{type:"font/otf"}),
+    safe+"-"+(presetKey?PNAME_EN[presetKey]:"Custom")+"-W"+F.weight+".otf");
+}
+
+/* ==========================================================================
+   專案存讀
+   ========================================================================== */
+const KEY="strokeengine-v21";
+function snapshot(){
+  const edits={};
+  for(const id of EDITED){
+    if(!G[id]) continue;
+    const g=G[id],e={};
+    if(g.s){e.s=g.s.map(st=>st.p); if(g.v)e.v=g.v;}
+    if(g.c){e.c=g.c.map(p=>({box:p.box,v:p.v||null}));}
+    edits[id]=e;
+  }
+  const ax={}; for(const k of AXKEYS) ax[k]=F[k];
+  return {v:19,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,edits};
+}
+function restore(data){
+  if(!data) return;
+  if(data.axes) for(const k of AXKEYS) if(data.axes[k]!==undefined) F[k]=data.axes[k];
+  if(data.family!==undefined){FAMILY=data.family;const i=$("famIn");if(i)i.value=FAMILY;}
+  if(data.latin!==undefined){LATIN=data.latin;const i=$("latIn");if(i)i.value=LATIN;}
+  presetKey=data.preset||null;
+  for(const id of ALL) resetGlyph(id);
+  for(const id in (data.edits||{})){
+    const e=data.edits[id],g=G[id]; if(!g) continue;
+    if(e.s&&g.s) e.s.forEach((p,i)=>{if(g.s[i])g.s[i].p=p;});
+    if(e.v) g.v=e.v;
+    if(e.c&&g.c) e.c.forEach((it,i)=>{
+      if(!g.c[i])return;
+      if(Array.isArray(it)) g.c[i].box=it;
+      else {g.c[i].box=it.box; if(it.v)g.c[i].v=it.v; else delete g.c[i].v;}
+    });
+  }
+  document.querySelectorAll("#presets button").forEach(x=>
+    x.classList.toggle("on",!!presetKey&&x.dataset.p===presetKey));
+  EDITED.clear(); for(const id in (data.edits||{})) if(G[id]) EDITED.add(id);
+  varSel=null; buildCells(); mark(); schedule(); scheduleSlow(); markEdited();
+}
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(snapshot()));}catch(e){}}
+function loadLocal(){try{const s=localStorage.getItem(KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+
+function resetGlyph(id){
+  const src=pristine(id);
+  if(!src) return;
+  delete G[id].s; delete G[id].v; delete G[id].c;
+  if(src.s) G[id].s=src.s;
+  if(src.v) G[id].v=src.v;
+  if(src.c) G[id].c=src.c;
+  EDITED.delete(id);
+}
+const baselineName=()=>PACKRAW?"匯入的 KAGE":"內建出廠值";
+$("btnResetOne").addEventListener("click",()=>{
+  resetGlyph(current);varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
+  if(MODE==="show") scDraw();});
+$("btnResetAll").addEventListener("click",async ()=>{
+  const n=EDITED.size;
+  if(!confirm("把所有字的骨架、變體、配置還原到「"+baselineName()+"」？\n\n"+
+              "目前改過 "+n+" 個字，這些調整會消失。\n設計軸不受影響（那個用左上角的「重設設計軸」）。"))return;
+  busy(true,"還原中","回到 "+baselineName()+"…",0);
+  const list=ALL.slice(); let i=0;
+  for(const id of list){
+    resetGlyph(id);
+    if(++i%800===0){ busy(true,undefined,i.toLocaleString()+" / "+list.length.toLocaleString(),i/list.length*100); await yield_(); }
+  }
+  EDITED.clear();
+  varSel=null; buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
+  if(MODE==="show") scDraw();
+  busy(false);
+});
+
+function drawSpec(){
+  const ok=[...$("specIn").value].filter(ch=>G[ch]).join("")||"這是好天";
+  const s=$("spec");
+  s.children[0].textContent=ok; s.children[1].textContent=ok; s.children[2].textContent=ok+ok;
+}
+
+$("presets").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-p]");if(!b)return;
+  Object.assign(F,PRESETS[b.dataset.p]); presetKey=b.dataset.p;   /* simp 不在預設裡，保持不變 */
+  document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x===b));
+  schedule(); scheduleSlow(); saveLocal();
+});
+$("inSkel").addEventListener("change",e=>{showSkel=e.target.checked;drawBig();});
+$("inEdit").addEventListener("change",e=>{editMode=e.target.checked;drawBig();});
+$("qaFilter").addEventListener("change",e=>{qaOnly=e.target.checked;paintQA();});
+$("btnResetAxes").addEventListener("click",()=>{
+  for(const k of AXKEYS) F[k]=F_DEFAULT[k]; presetKey="hei";
+  document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p==="hei"));
+  schedule(); scheduleSlow(); saveLocal();
+});
+$("btnExport").addEventListener("click",exportBig);
+$("specIn").addEventListener("input",drawSpec);
+$("btnSave").addEventListener("click",()=>download(
+  new Blob([JSON.stringify(snapshot(),null,1)],{type:"application/json"}),"strokeengine-project.json"));
+$("btnLoad").addEventListener("click",()=>$("fileIn").click());
+$("fileIn").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{restore(JSON.parse(r.result));saveLocal();}
+                catch(err){alert("讀入失敗："+err.message);}};
+  r.readAsText(f); e.target.value="";
+});
+
+
+/* ==========================================================================
+   KAGE（GlyphWiki）匯入
+   格式 a1:a2:a3:x1:y1:x2:y2[:x3:y3[:x4:y4]]，以 $ 分隔每一筆
+   a1%100 = 筆種 1直線 2曲線 3屈折 4乙線 6複曲線 7縱橫曲線 99部件引用
+   a3%100 = 4 表示鉤。座標 0..200、y 向下 → 本系統 0..1000、y 向上
+   ========================================================================== */
+let KAGE_EXACT=false;      /* 批次載入時打開：99 引用一律用 GlyphWiki 原名 */
+const KX=x=>x*5, KY=y=>(200-y)*5;
+const KVAR={ "01":"left", "07":null };   /* -01 = 左偏旁，對應本系統的 v:"left" */
+
+function kageClassify(pts,a3,nseg){
+  const A=pts[0],B=pts[pts.length-1];
+  const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);
+  const hook=(a3%100)===4;
+  if(nseg>2) return {t:"zhe",end:hook?"hook":undefined};
+  if(L<170) return {t:"dian"};
+  const ax=Math.abs(dx),ay=Math.abs(dy);
+  if(ay<L*0.28) return {t:"heng"};
+  if(ax<L*0.28) return hook?{t:"zhe",end:"hook"}:{t:"shu"};
+  if(dy>0&&dx>0) return {t:"ti"};
+  if(dy<0&&dx<0) return {t:"pie"};
+  if(dy<0&&dx>0) return {t:"na"};
+  return {t:"shu"};
+}
+function kageBend(A,C,B){
+  const dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1;
+  const mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2;
+  return ((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
+}
+/* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
+   u6728      → 木（純字）
+   u6728-t    → 木的台灣標準形（-j 日本 -g 中國 -t 台灣 -k 韓國 -v 越南）
+   u6728-01   → 木的左偏旁變形體
+   帶字尾的一律用原名當鍵，各自是獨立字形，跟 GlyphWiki 的模型一致        */
+function kageName(nm){
+  /* 引用可能帶 @版本號（u65e8-t02@2）。資料包只有最新版，剝掉即可 */
+  const raw=(nm||"").trim().split("@")[0];
+  if(!raw) return null;
+  const m=/^u([0-9a-f]{4,6})(?:-([0-9a-z-]+))?$/i.exec(raw);
+  /* cdp-8a7a、aj1-xxxxx、twedu-xxxx 這類沒有 Unicode 碼位的部件，
+     直接用原名當鍵。漏掉它們的話「我、與、從」這種字會缺一塊。 */
+  if(!m) return {ch:null, suf:null, key:raw, v:undefined};
+  let ch; try{ ch=String.fromCodePoint(parseInt(m[1],16)); }catch(e){ return {ch:null,suf:null,key:raw}; }
+  const suf=m[2]?m[2].toLowerCase():null;
+  return {ch, suf, key: suf?("u"+m[1].toLowerCase()+"-"+suf):ch, v: suf?KVAR[suf]:undefined};
+}
+/* 整筆資料只有一行、且是滿框的部件引用 → 這是「別名」，真正的資料在下一層 */
+function kageAliasOf(data){
+  const parts=String(data).trim().split("$");
+  if(parts.length!==1) return null;
+  const c=parts[0].split(":");
+  if((parseInt(c[0],10)||0)%100!==99) return null;
+  const n=v=>parseFloat(v)||0;
+  if(n(c[3])>2||n(c[4])>2||n(c[5])<198||n(c[6])<198) return null;
+  return (c[7]||"").trim()||null;
+}
+function kageToGlyph(data){
+  const strokes=[],parts=[],skipped=[];
+  for(const raw of String(data).trim().split("$")){
+    const c=raw.trim().split(":").map(v=>v.trim());
+    if(c.length<3) continue;
+    const a1=parseInt(c[0],10)||0, a3=parseInt(c[2],10)||0, a1t=a1%100;
+    const n=v=>parseFloat(v)||0;
+    if(a1t===99){
+      const nm=kageName(c[7]);
+      if(!nm){ skipped.push(raw); continue; }
+      const key = KAGE_EXACT ? nm.key
+                : (G[nm.key] ? nm.key : (nm.ch && G[nm.ch] ? nm.ch : nm.key));
+      const q={r:key, box:[KX(n(c[3])),KY(n(c[6])),KX(n(c[5])),KY(n(c[4]))]};
+      if(nm.ch && key===nm.ch && nm.v && G[nm.ch] && G[nm.ch].v && G[nm.ch].v[nm.v]) q.v=nm.v;
+      if(!G[key]) q.missing=1;
+      parts.push(q); continue;
+    }
+    let P;
+    if(a1t===1)                P=[[KX(n(c[3])),KY(n(c[4]))],[KX(n(c[5])),KY(n(c[6]))]];
+    else if(a1t===2||a1t===3||a1t===4)
+                               P=[[KX(n(c[3])),KY(n(c[4]))],[KX(n(c[5])),KY(n(c[6]))],[KX(n(c[7])),KY(n(c[8]))]];
+    else if(a1t===6||a1t===7)  P=[[KX(n(c[3])),KY(n(c[4]))],[KX(n(c[5])),KY(n(c[6]))],
+                                  [KX(n(c[7])),KY(n(c[8]))],[KX(n(c[9])),KY(n(c[10]))]];
+    else { skipped.push(raw); continue; }
+
+    if(a1t===2){                       /* 二次曲線的控制點 → 本系統的 bend（精確可逆） */
+      const st=kageClassify([P[0],P[2]],a3,2);
+      strokes.push({...st,p:[P[0],P[2]],bend:kageBend(P[0],P[1],P[2])});
+    } else if(a1t===1){
+      strokes.push({...kageClassify(P,a3,2),p:P});
+    } else {
+      const st=kageClassify(P,a3,P.length);
+      if(a1t===6)      strokes.push({...st,p:P,cv:"cubic"});     /* 三次貝茲 */
+      else if(a1t===7) strokes.push({...st,p:P,cv:"lineQuad"});  /* 直線＋二次曲線 */
+      else             strokes.push({...st,p:P,fr: a1t===3?0.6:2});
+    }
+  }
+  return {strokes,parts,skipped};
+}
+/* 一行 → {ch, data}；吃 dump 格式、「字 資料」、或只有資料 */
+function kageParseLine(line){
+  const t=line.trim(); if(!t||t.startsWith("#")) return null;
+  const seg=t.split(/\s*[|\t]\s*/).filter(Boolean);
+  let ch=null,data=null;
+  if(seg.length>=3 && seg[2].includes(":")){ ch=kageName(seg[0])?kageName(seg[0]).ch:(seg[1]||null); data=seg[2]; }
+  else if(seg.length===2 && seg[1].includes(":")){ ch=kageName(seg[0])?kageName(seg[0]).ch:seg[0]; data=seg[1]; }
+  else {
+    const m=/^(\S+)\s+(\d+:.*)$/.exec(t);
+    if(m){ ch=kageName(m[1])?kageName(m[1]).ch:m[1]; data=m[2]; }
+    else if(t.includes(":")){ ch=null; data=t; }
+  }
+  if(!data) return null;
+  if(ch && [...ch].length!==1) ch=[...ch][0]||null;
+  return {ch,data};
+}
+
+/* 也吃 glyphwiki.org/api/glyph?name=... 回傳的 JSON */
+function kageCollect(text){
+  const items=[], t=String(text).trim();
+  const tryJson=str=>{
+    let j; try{ j=JSON.parse(str); }catch(e){ return false; }
+    let got=false;
+    for(const o of (Array.isArray(j)?j:[j])){
+      if(o&&typeof o.data==="string"&&o.data.includes(":")){
+        const nm=kageName(o.name||"");
+        items.push({key:nm?nm.key:(o.name||null), ch:(nm&&!nm.suf&&nm.ch)?nm.ch:null, data:o.data});
+        got=true;
+      }
+    }
+    return got;
+  };
+  if((t.startsWith("{")||t.startsWith("["))&&tryJson(t)) return items;
+  for(const ln of t.split(/\r?\n/)){
+    const q=ln.trim(); if(!q) continue;
+    if(q.startsWith("{")&&tryJson(q)) continue;
+    const pl=kageParseLine(q); if(pl) items.push(pl);
+  }
+  return items;
+}
+let kagePending=null;
+function kagePreview(){
+  const out=[];
+  for(const pl of kageCollect($("kIn").value)){
+    const key=pl.key||pl.ch||current;
+    const r=kageToGlyph(pl.data);
+    out.push({key, ch:pl.ch||(pl.key?null:current), ...r,
+              ok:(r.strokes.length+r.parts.length)>0});
+  }
+  kagePending=out;
+  const wrap=$("kPrev"); wrap.textContent="";
+  for(const it of out){
+    const cell=document.createElement("div");
+    cell.className="pcell"+(!it.ok?" bad":(it.skipped.length?" warn":""));
+    const svg=el("svg",{viewBox:"-14 -14 1028 1028",preserveAspectRatio:"xMidYMid meet"});
+    if(it.ok){
+      const tmp={u:0,s:it.strokes.length?it.strokes:undefined,c:it.parts.length?it.parts:undefined};
+      const key="\u0000tmp"; G[key]=tmp;
+      try{ glyphContours(key,F).forEach(c=>svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }
+      catch(e){ it.ok=false; }
+      delete G[key];
+    }
+    cell.appendChild(svg);
+    const cap=document.createElement("div"); cap.className="pc";
+    const miss=it.parts.filter(q=>q.missing).length;
+    let note;
+    if(!it.ok) note="解析失敗";
+    else if(it.strokes.length) note=it.strokes.length+"筆"+(it.parts.length?" +"+it.parts.length+"部件":"");
+    else note="引用 "+it.parts.map(q=>q.r).join("、");
+    if(miss) note+=" · 缺"+miss;
+    if(it.skipped.length) note+=" · 跳"+it.skipped.length;
+    cap.innerHTML='<b>'+(it.ch||it.key||"?")+'</b><span>'+note+'</span>';
+    cap.title=note;
+    cell.appendChild(cap); wrap.appendChild(cell);
+  }
+  const good=out.filter(o=>o.ok&&(o.ch||o.key)).length;
+  $("kStat").textContent = out.length
+    ? (good+" 個可套用 —— 看預覽 OK 就按右下角「套用」")
+    : "沒解析到資料";
+  $("kApply").disabled = good===0;
+}
+function kageApply(){
+  if(!kagePending) return;
+  let n=0;
+  for(const it of kagePending){
+    if(!it.ok) continue;
+    const key=it.key||it.ch; if(!key) continue;
+    const isNew=!G[key];
+    const g={};
+    const cp = it.ch ? it.ch.codePointAt(0) : (G[key]&&G[key].u);
+    if(cp) g.u=cp;                            /* 沒碼位＝純部件，不進字型 */
+    if(it.strokes.length) g.s=it.strokes;
+    if(it.parts.length){ g.c=it.parts.map(({missing,...q})=>q);
+                         g.ids=(G[key]&&G[key].ids)||"（GlyphWiki）"; }
+    if(G[key]&&G[key].v&&g.s) g.v=G[key].v;   /* 保留已有的變體 */
+    G[key]=g;
+    if(isNew){ ALL.push(key); if(g.u)(g.c?CXED:COMP).push(key); BASE[key]=JSON.parse(JSON.stringify(g)); }
+    n++;
+  }
+  for(const it of kagePending) if(it.ok&&(it.key||it.ch)) touch(it.key||it.ch);
+  buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
+  $("kmodal").classList.remove("on");
+  $("kStat").textContent="";
+  alert("已套用 "+n+" 個字。");
+}
+$("btnKage").addEventListener("click",()=>{
+  $("kCur").textContent=current; $("kmodal").classList.add("on"); $("kIn").focus();
+});
+$("kClose").addEventListener("click",()=>$("kmodal").classList.remove("on"));
+$("kmodal").addEventListener("click",e=>{ if(e.target===$("kmodal")) $("kmodal").classList.remove("on"); });
+
+/* ---- 直接向 GlyphWiki API 抓，跟著別名鏈走，並遞迴補齊用到的部件 ---- */
+const GWAPI="https://glyphwiki.org/api/glyph?name=";
+async function gwGet(name){
+  const r=await fetch(GWAPI+encodeURIComponent(name),{mode:"cors"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const j=await r.json();
+  if(!j||typeof j.data!=="string") throw new Error("查無 "+name);
+  return j;
+}
+/* 輸入可以是漢字（犭、糹金犭隹馬）或字形名（u72ad-t） */
+function gwNamesFor(input){
+  const t=(input||"").trim();
+  if(!t) return [];
+  if(/^[a-z][a-z0-9_.-]*$/i.test(t)) return [{name:t, target:null}];
+  return [...t].filter(c=>c.trim()).map(c=>({
+    name:"u"+c.codePointAt(0).toString(16).toLowerCase(), target:c }));
+}
+async function gwResolve(name,seen,acc,depth,target){
+  name=(name||"").trim();
+  if(!name||seen.has(name)||depth>6) return;
+  seen.add(name);
+  let j=null, used=name;
+  /* 頂層且沒字尾時，先試台灣字形 */
+  if(depth===0 && $("kPrefT").checked && !/-/.test(name)){
+    try{ j=await gwGet(name+"-t"); used=name+"-t"; acc.log.push("用了 "+used); }catch(e){}
+  }
+  if(!j){ try{ j=await gwGet(name); }catch(e){ acc.fail.push(name+"（"+e.message+"）"); return; } }
+  let data=j.data, alias, hops=0;
+  while((alias=kageAliasOf(data)) && hops++<5){          /* 跟著別名鏈 */
+    if(seen.has(alias)) break;
+    seen.add(alias);
+    try{ const k=await gwGet(alias); data=k.data; acc.log.push(used+" → "+alias); used=alias; }
+    catch(e){ break; }
+  }
+  const nm=kageName(target||name);
+  const key = target || (nm?nm.key:name);
+  acc.items.push({key, ch: target || ((nm&&!nm.suf&&nm.ch)?nm.ch:null), data});
+  const r=kageToGlyph(data);
+  for(const q of r.parts) if(!G[q.r]) await gwResolve(q.r,seen,acc,depth+1,null);
+}
+async function gwFetchClicked(){
+  const list=gwNamesFor($("kName").value);
+  if(!list.length) return;
+  $("kStat").textContent="抓取中…";
+  $("kFetch").disabled=true;
+  const acc={items:[],fail:[],log:[]}, seen=new Set();
+  let i=0;
+  for(const it of list){
+    i++;
+    $("kStat").textContent="抓取中… "+i+" / "+list.length+"　"+(it.target||it.name);
+    try{ await gwResolve(it.name,seen,acc,0,it.target); }
+    catch(e){ acc.fail.push(String(e.message||e)); }
+    if(list.length>3) await new Promise(r=>setTimeout(r,120));   /* 別狂打伺服器 */
+  }
+  $("kFetch").disabled=false;
+  if(!acc.items.length){
+    $("kStat").textContent="抓不到（"+(acc.fail[0]||"未知錯誤")+"）。瀏覽器可能擋跨網域，請改用手動貼上。";
+    return;
+  }
+  $("kIn").value=acc.items.map(it=>JSON.stringify({name:it.key,data:it.data})).join("\n");
+  kagePreview();
+  if(acc.fail.length) $("kStat").textContent+="　｜　"+acc.fail.length+" 個沒抓到";
+}
+/* 我標過「骨架是近似的」那幾個，最值得先換掉 */
+const GW_WORST="糹金犭疒隹馬車雨門酉";
+function kSet(txt,note){
+  $("kName").value=txt;
+  $("kPreNote").textContent=note+"（"+[...txt].length+" 個）";
+}
+$("kPre1").addEventListener("click",()=>kSet(GW_WORST,"我畫得最心虛的"));
+$("kPre2").addEventListener("click",()=>kSet(COMP.filter(c=>G[c]&&G[c].s).join(""),"全部手繪部件"));
+$("kPre3").addEventListener("click",()=>kSet(ALL.filter(c=>G[c]&&G[c].u&&!G[c].sp).join(""),"全部字"));
+$("kPre4").addEventListener("click",()=>kSet(current,"目前選取"));
+$("btnGrab").addEventListener("click",()=>{
+  $("kCur").textContent=current; $("kmodal").classList.add("on");
+  kSet(current,"目前選取"); gwFetchClicked();
+});
+$("kFetch").addEventListener("click",gwFetchClicked);
+$("kName").addEventListener("keydown",e=>{ if(e.key==="Enter") gwFetchClicked(); });
+$("kParse").addEventListener("click",kagePreview);
+$("kApply").addEventListener("click",kageApply);
+
+
+/* ==========================================================================
+   資料包載入 + 背景建置字型
+   ========================================================================== */
+function busy(on,title,msg,pct){
+  $("busy").classList.toggle("on",!!on);
+  if(title!==undefined) $("busyT").textContent=title;
+  if(msg!==undefined) $("busyMsg").textContent=msg;
+  if(pct!==undefined) $("busyBar").style.width=Math.max(0,Math.min(100,pct))+"%";
+}
+const yield_=()=>new Promise(r=>setTimeout(r,0));
+
+async function loadPack(json,keepMine){
+  const pack=json&&json.data; if(!pack) throw new Error("這不像資料包（沒有 data 欄位）");
+  const names=Object.keys(pack);
+  busy(true,"載入資料包","轉換 "+names.length.toLocaleString()+" 個字形…",0);
+  KAGE_EXACT=true;
+  const mine=new Set(keepMine ? [...EDITED] : []);
+  PACKRAW=pack;                    /* 這份原始資料就是新的基準線 */
+  let ok=0,i=0;
+  for(const name of names){
+    const r=kageToGlyph(pack[name]);
+    if(r.strokes.length||r.parts.length){
+      const g={};
+      if(r.strokes.length) g.s=r.strokes;
+      if(r.parts.length)   g.c=r.parts.map(({missing,...q})=>q);
+      G[name]=g; ok++;
+      if(!ALL.includes(name)) ALL.push(name);
+    }
+    if(++i%900===0){ busy(true,undefined,"轉換 "+i.toLocaleString()+" / "+names.length.toLocaleString(),
+                          i/names.length*55); await yield_(); }
+  }
+  /* 目標字 → 一層滿框引用，指向該字的來源字形（優先台灣字形） */
+  busy(true,undefined,"對應到字…",60);
+  let mapped=0,usedT=0;
+  for(const name of names){
+    const m=/^u([0-9a-f]{4,5})$/.exec(name); if(!m) continue;
+    const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
+    const ch=String.fromCodePoint(cp);
+    if(mine.has(ch)) continue;                       /* 保留他自己調過的字 */
+    const t=name+"-t";
+    const src=G[t]?t:(G[name]?name:null); if(!src) continue;
+    if(src===t) usedT++;
+    G[ch]={u:cp,c:[{r:src,box:[0,0,EM,EM]}]};
+    if(!ALL.includes(ch)) ALL.push(ch);
+    mapped++;
+  }
+  KAGE_EXACT=false;
+  /* 保留下來的那些字，仍然算「已修改」（基準線是 KAGE，不是他的版本） */
+  EDITED.clear(); for(const id of mine) if(G[id]) EDITED.add(id);
+  busy(true,undefined,"重建畫面…",90);
+  await yield_();
+  page=0; query=""; $("q").value="";
+  buildCells(); mark(); markEdited(); schedule(); scheduleSlow();
+  if(MODE==="show") scDraw();
+  busy(false);
+  alert("載入完成\n\n字形資料：" + ok.toLocaleString() + " 個\n可用的字：" + mapped.toLocaleString() +
+        " 個（其中 " + usedT.toLocaleString() + " 個是台灣字形）" +
+        (mine.size?"\n保留了你調過的 "+mine.size+" 個字":"") +
+        "\n\n這份資料現在是基準線，任何時候按「全部還原」都會回到這裡。");
+}
+$("btnPack").addEventListener("click",()=>$("packIn").click());
+$("packIn").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value="";
+  if(!f) return;
+  const keep=confirm("匯入的 GlyphWiki 字形會成為新的基準線。\n\n"+
+    "【確定】全部改用 GlyphWiki（推薦，風格一致）\n"+
+    "【取消】保留我自己調過的字，其餘用 GlyphWiki\n\n"+
+    "不管選哪個，之後按「全部還原」都會退回到這次匯入的狀態。") ? false : true;
+  const r=new FileReader();
+  r.onload=()=>{ let j; try{ j=JSON.parse(r.result); }catch(err){ alert("讀不出來："+err.message); return; }
+                 loadPack(j,keep).catch(err=>{busy(false);alert("載入失敗："+err.message);}); };
+  r.readAsText(f);
+});
+
+/* ---- 背景建置：輪廓在主執行緒分批算，序列化丟給 Worker ---- */
+const WORKER_SRC=`
+importScripts("https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js");
+/* ==========================================================================
+   把 opentype.js 產出的 cmap 換掉
+   它每個字產生一個 segment、從不合併連續範圍，
+   超過約 8,180 字就撐爆 format 4 的 uint16 length 欄位 → 整個字型變成無效檔。
+   這裡重建成「合併連續範圍的 format 4 ＋ 保險用的 format 12」。
+   ========================================================================== */
+function buildCmap(pairs){                     // pairs: [[codepoint, glyphId], ...] 已排序
+  const runs=[];                               // 連續碼位且 gid 也連續 → 併成一段
+  for(const [cp,gid] of pairs){
+    const last=runs[runs.length-1];
+    if(last && cp===last.endC+1 && gid===last.endG+1){ last.endC=cp; last.endG=gid; }
+    else runs.push({startC:cp,endC:cp,startG:gid,endG:gid});
+  }
+  const bmp=runs.filter(r=>r.endC<=0xFFFF);
+  /* ---- format 4 ---- */
+  const segs=bmp.slice(); segs.push({startC:0xFFFF,endC:0xFFFF,startG:0,endG:0,term:true});
+  const segCount=segs.length;
+  const f4len=16+segCount*8;
+  const f4=new DataView(new ArrayBuffer(f4len));
+  let o=0;
+  f4.setUint16(o,4);o+=2; f4.setUint16(o,f4len);o+=2; f4.setUint16(o,0);o+=2;
+  f4.setUint16(o,segCount*2);o+=2;
+  let sr=2; while(sr*2<=segCount) sr*=2; sr*=2;
+  let es=0,x=sr/2; while(x>1){es++;x/=2;}
+  f4.setUint16(o,sr);o+=2; f4.setUint16(o,es);o+=2; f4.setUint16(o,segCount*2-sr);o+=2;
+  for(const g of segs){ f4.setUint16(o,g.endC);o+=2; }
+  f4.setUint16(o,0);o+=2;                                    // reservedPad
+  for(const g of segs){ f4.setUint16(o,g.startC);o+=2; }
+  for(const g of segs){ f4.setUint16(o, g.term?1:((g.startG-g.startC)&0xFFFF));o+=2; }
+  for(let i=0;i<segCount;i++){ f4.setUint16(o,0);o+=2; }     // idRangeOffset 全 0
+  /* ---- format 12 ---- */
+  const f12len=16+runs.length*12;
+  const f12=new DataView(new ArrayBuffer(f12len));
+  o=0; f12.setUint16(o,12);o+=2; f12.setUint16(o,0);o+=2;
+  f12.setUint32(o,f12len);o+=4; f12.setUint32(o,0);o+=4; f12.setUint32(o,runs.length);o+=4;
+  for(const r of runs){ f12.setUint32(o,r.startC);o+=4; f12.setUint32(o,r.endC);o+=4;
+                        f12.setUint32(o,r.startG);o+=4; }
+  /* ---- 表頭 ---- */
+  const head=4+2*8, total=head+f4len+f12len;
+  const out=new Uint8Array(total), dv=new DataView(out.buffer);
+  o=0; dv.setUint16(o,0);o+=2; dv.setUint16(o,2);o+=2;
+  dv.setUint16(o,3);o+=2; dv.setUint16(o,1);o+=2;  dv.setUint32(o,head);o+=4;
+  dv.setUint16(o,3);o+=2; dv.setUint16(o,10);o+=2; dv.setUint32(o,head+f4len);o+=4;
+  out.set(new Uint8Array(f4.buffer),head);
+  out.set(new Uint8Array(f12.buffer),head+f4len);
+  return {buf:out, segs:segCount, groups:runs.length};
+}
+function tableChecksum(bytes){
+  let sum=0;
+  for(let i=0;i<bytes.length;i+=4){
+    const v=((bytes[i]<<24)|((bytes[i+1]||0)<<16)|((bytes[i+2]||0)<<8)|(bytes[i+3]||0))>>>0;
+    sum=(sum+v)>>>0;
+  }
+  return sum;
+}
+function replaceTable(buf,tag,newBytes){
+  const src=new Uint8Array(buf), dv=new DataView(buf);
+  const numTables=dv.getUint16(4);
+  const dir=[];
+  for(let i=0;i<numTables;i++){
+    const p=12+i*16;
+    dir.push({tag:String.fromCharCode(src[p],src[p+1],src[p+2],src[p+3]),
+              off:dv.getUint32(p+8), len:dv.getUint32(p+12)});
+  }
+  const tables=dir.map(t=>({tag:t.tag,
+    data: t.tag===tag ? newBytes : src.subarray(t.off,t.off+t.len)}));
+  tables.sort((a,b)=>a.tag<b.tag?-1:1);
+  const n=tables.length;
+  let sr=16; while(sr*2<=n*16) sr*=2;
+  let es=0,x=sr/16; while(x>1){es++;x/=2;}
+  const dirSize=12+n*16;
+  let size=dirSize;
+  for(const t of tables) size+=(t.data.length+3)&~3;
+  const out=new Uint8Array(size), o=new DataView(out.buffer);
+  out.set(src.subarray(0,4),0);                       // sfntVersion
+  o.setUint16(4,n); o.setUint16(6,sr); o.setUint16(8,es); o.setUint16(10,n*16-sr);
+  let off=dirSize, headIdx=-1, headOff=0, headPad=0;
+  tables.forEach((t,i)=>{
+    const p=12+i*16;
+    for(let k=0;k<4;k++) out[p+k]=t.tag.charCodeAt(k);
+    const padded=new Uint8Array((t.data.length+3)&~3);
+    padded.set(t.data);
+    o.setUint32(p+4,tableChecksum(padded));
+    o.setUint32(p+8,off); o.setUint32(p+12,t.data.length);
+    out.set(padded,off);
+    if(t.tag==='head'){ headIdx=i; headOff=off; headPad=padded.length; }
+    off+=padded.length;
+  });
+  if(headIdx>=0){
+    /* 規格：head 的目錄檢查碼要在 checkSumAdjustment 仍為 0 時計算，
+       全檔檢查碼也是；最後才把 adjustment 寫回去，不再重算 head 的檢查碼 */
+    o.setUint32(headOff+8,0);
+    o.setUint32(12+headIdx*16+4, tableChecksum(out.subarray(headOff,headOff+headPad)));
+    const total=tableChecksum(out);
+    o.setUint32(headOff+8,(0xB1B0AFBA-total)>>>0);
+  }
+  return out.buffer;
+}
+onmessage=function(e){
+  var d=e.data, EM=d.em, DESC=d.desc;
+  try{
+    var glyphs=[new opentype.Glyph({name:".notdef",unicode:0,advanceWidth:EM,path:new opentype.Path()})];
+    glyphs.push(new opentype.Glyph({name:"space",unicode:32,advanceWidth:EM/2,path:new opentype.Path()}));
+    for(var i=0;i<d.glyphs.length;i++){
+      var g=d.glyphs[i], a=g.cmds, n=a.length, p=new opentype.Path(), k=0;
+      while(k<n){
+        var op=a[k];
+        if(op===0){ p.moveTo(a[k+1],a[k+2]+DESC); k+=3; }
+        else if(op===1){ p.lineTo(a[k+1],a[k+2]+DESC); k+=3; }
+        else if(op===2){ p.quadraticCurveTo(a[k+1],a[k+2]+DESC,a[k+3],a[k+4]+DESC); k+=5; }
+        else { p.close(); k+=1; }
+      }
+      glyphs.push(new opentype.Glyph({name:"uni"+g.u.toString(16).toUpperCase(),
+        unicode:g.u,advanceWidth:EM,path:p}));
+    }
+    var font=new opentype.Font({familyName:d.lat,styleName:d.styleEN,
+      unitsPerEm:EM,ascender:d.asc,descender:DESC,glyphs:glyphs});
+    font.names.fontFamily={en:d.lat,"zh-TW":d.fam};
+    font.names.fontSubfamily={en:d.styleEN,"zh-TW":d.styleTW};
+    font.names.fullName={en:d.lat+" "+d.styleEN,"zh-TW":d.fam+" "+d.styleTW};
+    font.names.postScriptName={en:d.lat+"-"+d.styleEN};
+    font.names.manufacturer={en:"Stroke Engine"};
+    font.names.designer={en:d.lat};
+    font.names.version={en:d.ver};
+    if(d.sample) font.names.sampleText={en:d.sample,"zh-TW":d.sample};
+    font.tables.os2=Object.assign({},font.tables.os2,{
+      ulUnicodeRange1:0, ulUnicodeRange2:(1<<27)|(1<<16), ulUnicodeRange3:(1<<3),
+      ulUnicodeRange4:0, ulCodePageRange1:(1<<20)>>>0, ulCodePageRange2:0,
+      fsType:0, achVendID:"DBST"});
+    var buf=font.toArrayBuffer();
+    /* opentype.js 的 cmap 每個字一個 segment、不合併連續範圍，
+       超過約 8,180 字就撐爆 format 4 的 uint16 length → 整個檔案作廢。
+       這裡整張換掉：合併範圍的 format 4 ＋ 保險的 format 12 */
+    var pairs=[[32,1]];
+    for(var q=0;q<d.glyphs.length;q++) pairs.push([d.glyphs[q].u,q+2]);
+    pairs.sort(function(a,b){return a[0]-b[0];});
+    buf=replaceTable(buf,"cmap",buildCmap(pairs).buf);
+    postMessage({ok:true,buf:buf},[buf]);
+  }catch(err){ postMessage({ok:false,err:String(err&&err.message||err)}); }
+};`;
+let WORKER_URL=null;
+function getWorker(){
+  if(!WORKER_URL) WORKER_URL=URL.createObjectURL(new Blob([WORKER_SRC],{type:"text/javascript"}));
+  return new Worker(WORKER_URL);
+}
+function cmdsOf(id,NS){
+  const out=[];
+  for(const c of glyphContours(id,F,null,NS)){
+    for(const k of c){
+      if(k[0]==="M") out.push(0,k[1],k[2]);
+      else if(k[0]==="L") out.push(1,k[1],k[2]);
+      else out.push(2,k[1],k[2],k[3],k[4]);
+    }
+    out.push(3);
+  }
+  /* 用 Float32Array 才能 transfer 過去（不複製），
+     五千多字的指令有六百萬個數字，用一般陣列會吃掉幾百 MB */
+  return Float32Array.from(out);
+}
+async function buildFontBig(chars,NS){
+  const pack=[];
+  for(let i=0;i<chars.length;i++){
+    const id=chars[i]; if(!G[id]||!G[id].u) continue;
+    pack.push({u:G[id].u,cmds:cmdsOf(id,NS)});
+    if(i%150===0){ busy(true,undefined,"產生輪廓 "+i.toLocaleString()+" / "+chars.length.toLocaleString(),
+                       i/chars.length*45); await yield_(); }
+  }
+  busy(true,undefined,"編碼字型檔（背景執行，畫面不會卡）…",50);
+  const styleTW=presetKey?PNAME[presetKey]:"Regular";
+  const styleEN=presetKey?PNAME_EN[presetKey]:"Regular";
+  const smp=[...(($("specIn")&&$("specIn").value)||"")].filter(ch=>G[ch]).join("")||"這是好天，早上看星。";
+  return new Promise((res,rej)=>{
+    const w=getWorker();
+    let tick=50;
+    const iv=setInterval(()=>{ tick=Math.min(96,tick+1.2); busy(true,undefined,undefined,tick); },400);
+    w.onmessage=ev=>{ clearInterval(iv); w.terminate();
+      ev.data.ok ? res(ev.data.buf) : rej(new Error(ev.data.err)); };
+    w.onerror=er=>{ clearInterval(iv); w.terminate(); rej(new Error("Worker 失敗："+er.message)); };
+    w.postMessage({glyphs:pack, em:EM, asc:ASC, desc:DESC,
+      fam:(FAMILY||"").trim()||"筆畫黑體", lat:asciiSafe(LATIN)||"StrokeEngine",
+      styleTW, styleEN, ver:"Version 0.21", sample:smp},
+      pack.map(g=>g.cmds.buffer));
+  });
+}
+async function exportBig(){
+  const chars=ALL.filter(id=>G[id]&&G[id].u);
+  if(chars.length<400){ exportFont(); return; }        /* 少量就走同步的舊路徑 */
+  const q=prompt("要匯出幾個字？（共 "+chars.length.toLocaleString()+" 個）\n\n"+
+    "輪廓已自動化簡，精度直接用 30（最高）就好。\n"+
+    "實測：5,500 字約 15 秒 / 3 MB；13,000 字約 70 秒 / 7 MB。\n\n"+
+    "格式：字數,精度", chars.length+",30");
+  if(!q) return;
+  const [nRaw,pRaw]=q.split(",");
+  const n=Math.max(1,Math.min(chars.length,parseInt(nRaw,10)||chars.length));
+  const NS=Math.max(6,Math.min(30,parseInt(pRaw,10)||30));
+  const t0=Date.now();
+  busy(true,"建置字型","準備中…",0);
+  try{
+    const buf=await buildFontBig(chars.slice(0,n),NS);
+    /* 下載前先驗檔頭，免得給出一個 Windows 說「不是有效字型檔」的東西 */
+    const h=new Uint8Array(buf,0,4);
+    const otto=h[0]===0x4F&&h[1]===0x54&&h[2]===0x54&&h[3]===0x4F;   /* 'OTTO' */
+    const ttf =h[0]===0x00&&h[1]===0x01&&h[2]===0x00&&h[3]===0x00;
+    if(buf.byteLength<2000||!(otto||ttf))
+      throw new Error("產出的檔案不完整（"+buf.byteLength+" bytes）");
+    busy(true,undefined,"完成，下載中…",100);
+    const safe=asciiSafe(LATIN)||"StrokeEngine";
+    const fn=safe+"-"+(presetKey?PNAME_EN[presetKey]:"Custom")+"-"+n+".otf";
+    download(new Blob([buf],{type:"font/otf"}), fn);
+    busy(false);
+    setTimeout(()=>alert(
+      "完成\n\n檔名："+fn+
+      "\n字數："+n.toLocaleString()+
+      "\n大小："+buf.byteLength.toLocaleString()+" bytes （"+(buf.byteLength/1048576).toFixed(2)+" MB）"+
+      "\n耗時："+((Date.now()-t0)/1000).toFixed(0)+" 秒"+
+      "\n\n請在檔案總管對下載的檔案按右鍵→內容，確認大小一樣。\n不一樣就是下載被截斷了，重按一次匯出。"),400);
+  }catch(e){ busy(false); alert("建置失敗："+e.message+"\n\n試試看減少字數或降低精度。"); }
+}
+
+
+/* ==========================================================================
+   展示分頁
+   一般字型只能整個字上一種顏色 —— 因為輪廓早就合併了。
+   這裡每一筆都還是獨立的外框，所以「筆順」可以直接變成顏色。
+   ========================================================================== */
+const SCPAL=[
+  {k:"yan", n:"岩彩",   bg:"#f1ece1", ink:"#2a2118", c:["#b0402f","#c98a2e","#4d7a48","#2f6a8f","#6d4b78"]},
+  {k:"dian",n:"藍晒",   bg:"#0d1a2b", ink:"#dfe8f2", c:["#8fdcef","#4fa4d6","#2f6fb5","#3a4b9c","#9a72d6"]},
+  {k:"mo",  n:"墨分五色",bg:"#f4f2ec", ink:"#121212", c:["#121212","#3d3d3d","#6b6b6b","#9a9a9a","#c2c2c2"]},
+  {k:"ye",  n:"夜市",   bg:"#08080e", ink:"#ffffff", c:["#ff3d81","#ffd23d","#3dffd2","#8a5cff","#ff6b3d"]},
+  {k:"qing",n:"青花",   bg:"#f8f6f0", ink:"#1b3a5c", c:["#16324f","#2d5f8a","#4a86b8","#7fb0d4","#aecfe4"]},
+  {k:"luo", n:"落山風", bg:"#170d12", ink:"#ffeadb", c:["#ff7a4d","#ffb03d","#e8456b","#ab3a7c","#5c2f6b"]},
+  {k:"cha", n:"茶",     bg:"#ece4d4", ink:"#3a2a17", c:["#6b4423","#8f6b3a","#3f5140","#a8582f","#2f3a2e"]}
+];
+let scPal=SCPAL[0], scLay="huge", scCol="stroke", scBlend="normal", scOvr={}, scSeq=0;
+
+SCPAL.forEach(p=>{
+  const b=document.createElement("button");
+  b.className="pal"+(p===scPal?" on":""); b.type="button"; b.title=p.n;
+  b.innerHTML=p.c.map(c=>'<i style="background:'+c+'"></i>').join("")+"<em>"+p.n+"</em>";
+  b.addEventListener("click",()=>{
+    scPal=p;
+    document.querySelectorAll("#scPals .pal").forEach(x=>x.classList.toggle("on",x===b));
+    document.documentElement.style.setProperty("--sbg",p.bg);
+    document.documentElement.style.setProperty("--sink",p.ink);
+    scDraw();
+  });
+  $("scPals").appendChild(b);
+});
+document.documentElement.style.setProperty("--sbg",scPal.bg);
+document.documentElement.style.setProperty("--sink",scPal.ink);
+
+const scLerp=(a,b,t)=>a+(b-a)*t;
+const scHex=h=>{const n=parseInt(h.slice(1),16);return[n>>16&255,n>>8&255,n&255];};
+const scRgb=(r,g,b)=>"#"+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
+function scRamp(t){
+  const c=scPal.c,n=c.length,x=Math.max(0,Math.min(0.9999,t))*(n-1),i=Math.floor(x),f=x-i;
+  const a=scHex(c[i]),b=scHex(c[Math.min(n-1,i+1)]);
+  return scRgb(scLerp(a[0],b[0],f),scLerp(a[1],b[1],f),scLerp(a[2],b[2],f));
+}
+const scHash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0)/4294967295;};
+
+function scDraw(){
+  const svg=$("scArt"); svg.textContent="";
+  const typed=[...$("scTxt").value].filter(c=>c.trim());
+  const list=typed.filter(c=>G[c]&&(G[c].s||G[c].c));
+  const miss=typed.filter(c=>!G[c]);
+  const total=ALL.filter(i=>G[i]&&G[i].u).length;
+  $("scStat").textContent=list.length? (list.length+" 字 · "+scPal.n) : "字庫沒有這些字";
+  $("scHint").textContent = miss.length
+    ? "字庫沒有："+miss.slice(0,14).join(" ")+(miss.length>14?" …":"")+
+      (total<400?"　→ 按上面「載入資料包」解鎖全部字":"")
+    : "點任何一個字可以單獨換色 · 再點一次換下一個顏色";
+  if(!list.length){
+    svg.setAttribute("viewBox","0 0 12 3"); svg.setAttribute("width","520");
+    const t=el("text",{x:6,y:1.9,"text-anchor":"middle","font-size":"1",
+      fill:scPal.ink,opacity:"0.5"});
+    t.textContent = total<400 ? "目前只有 "+total+" 字 · 先載入資料包" : "換幾個字試試";
+    svg.appendChild(t); return;
+  }
+  let cols,gap;
+  if(scLay==="huge"){ cols=list.length; gap=0.06; }
+  else if(scLay==="line"){ cols=list.length; gap=0.10; }
+  else { cols=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4)))); gap=0.14; }
+  const rows=Math.ceil(list.length/cols), step=1+gap;
+  const W=cols*step-gap, H=rows*step-gap, PAD=0.08;
+  svg.setAttribute("viewBox",(-PAD)+" "+(-PAD)+" "+(W+PAD*2)+" "+(H+PAD*2));
+  const px=Math.max(320,Math.min(1500,(W+PAD*2)*Math.min(460,1500/Math.max(1,cols))));
+  svg.setAttribute("width",Math.round(px));
+  svg.setAttribute("height",Math.round(px*(H+PAD*2)/(W+PAD*2)));
+  const defs=el("defs",{}); svg.appendChild(defs);
+
+  list.forEach((ch,i)=>{
+    const cx=(i%cols)*step, cy=Math.floor(i/cols)*step;
+    /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
+    const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
+    if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
+    let cs=[]; try{ cs=glyphContours(ch,F); }catch(e){}
+    const n=Math.max(1,cs.length), ov=scOvr[i+"|"+ch];
+    let ref=null;
+    if(scCol==="charGrad"||scCol==="pageGrad"){
+      const id="scg"+(scSeq++);
+      const lg=el("linearGradient",{id,x1:"0",y1:"1",x2:"1",y2:"0"});
+      const t0=scCol==="pageGrad"? i/Math.max(1,list.length-1||1) : 0;
+      const t1=scCol==="pageGrad"? Math.min(1,t0+0.34) : 1;
+      lg.appendChild(el("stop",{offset:"0%","stop-color":ov!==undefined?scPal.c[ov%scPal.c.length]:scRamp(t0)}));
+      lg.appendChild(el("stop",{offset:"100%","stop-color":ov!==undefined?scPal.c[(ov+2)%scPal.c.length]:scRamp(t1)}));
+      defs.appendChild(lg); ref="url(#"+id+")";
+    }
+    cs.forEach((c,si)=>{
+      let fill;
+      if(ov!==undefined && !ref) fill = scCol==="stroke" ? scPal.c[(ov+si)%scPal.c.length] : scPal.c[ov%scPal.c.length];
+      else if(ref) fill=ref;
+      else if(scCol==="mono") fill=scPal.ink;
+      else if(scCol==="stroke") fill=scRamp(n<2?0:si/(n-1));
+      else fill=scPal.c[Math.floor(scHash(ch+"#"+si+"#"+i)*scPal.c.length)%scPal.c.length];
+      g.appendChild(el("path",{d:svgD(c),fill,"fill-rule":"nonzero"}));
+    });
+    svg.appendChild(g);
+    svg.appendChild(el("rect",{x:cx-gap/2,y:cy-gap/2,width:step,height:step,
+      fill:"transparent",cursor:"pointer","data-key":i+"|"+ch}));
+  });
+}
+$("scArt").addEventListener("click",e=>{
+  const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  scOvr[k]=((scOvr[k]===undefined?-1:scOvr[k])+1)%scPal.c.length; scDraw();
+});
+function scSeg(id,fn){
+  $(id).addEventListener("click",e=>{
+    const b=e.target.closest("button[data-k]"); if(!b) return;
+    document.querySelectorAll("#"+id+" button").forEach(x=>x.classList.toggle("on",x===b));
+    fn(b.dataset.k); scDraw();
+  });
+}
+scSeg("scLayout",k=>scLay=k);
+scSeg("scColor", k=>scCol=k);
+scSeg("scBlend", k=>scBlend=k);
+$("scTxt").addEventListener("input",()=>{scOvr={};scDraw();});
+$("scClear").addEventListener("click",()=>{scOvr={};scDraw();});
+$("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
+$("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
+
+function scSVG(){
+  const svg=$("scArt").cloneNode(true);
+  svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
+  const vb=svg.getAttribute("viewBox").split(" ").map(Number);
+  svg.insertBefore(el("rect",{x:vb[0],y:vb[1],width:vb[2],height:vb[3],fill:scPal.bg}),svg.firstChild);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
+}
+$("scSVG").addEventListener("click",()=>
+  download(new Blob([scSVG()],{type:"image/svg+xml"}),"specimen-"+scPal.k+".svg"));
+$("scPNG").addEventListener("click",()=>{
+  const img=new Image();
+  img.onload=()=>{
+    const vb=$("scArt").getAttribute("viewBox").split(" ").map(Number);
+    const scale=Math.min(3600/vb[2],2600/vb[3],900);
+    const cv=document.createElement("canvas");
+    cv.width=Math.round(vb[2]*scale); cv.height=Math.round(vb[3]*scale);
+    const cx=cv.getContext("2d");
+    cx.fillStyle=scPal.bg; cx.fillRect(0,0,cv.width,cv.height);
+    cx.drawImage(img,0,0,cv.width,cv.height);
+    cv.toBlob(b=>download(b,"specimen-"+scPal.k+".png"),"image/png");
+  };
+  img.onerror=()=>alert("PNG 轉檔失敗，可以先存 SVG。");
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(scSVG());
+});
+
+/* ---- 分頁切換 ---- */
+let MODE="work";
+function setMode(m){
+  MODE=m;
+  document.querySelectorAll(".work").forEach(x=>x.classList.toggle("hide",m!=="work"));
+  $("showcase").classList.toggle("on",m==="show");
+  if(m==="show"){ $("scWt").value=F.weight; $("scRd").value=F.round; scDraw(); }
+  else { schedule(); }
+}
+$("tabs").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-m]"); if(!b) return;
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
+  setMode(b.dataset.m);
+});
+
+if(!HAS_OT) $("btnExport").disabled=true;
+const saved=loadLocal();
+if(saved) restore(saved);
+else document.querySelector('#presets button[data-p="hei"]').classList.add("on");
+mark(); drawAll(); drawSpec(); markEdited(); runQA(); refreshLiveFont();
+</script>
+</body>
+</html>
