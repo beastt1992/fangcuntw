@@ -795,7 +795,7 @@ const EM=1000, ASC=880, DESC=-120;
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
-         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,
+         width:1.00,slant:0.00,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
          seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
@@ -1562,12 +1562,16 @@ function rdp(pts,tol){
 function appendKageTail(S,st,f,wScale){
   if(!st.kage||!S.length||(st.e!=="hook"&&st.e!=="bend")) return {s:S,kind:null};
   const out=S.slice(), A=S[S.length-1].p;
-  const m=clamp(widths(f).hw*wScale*0.52,18,58)*(f.hook===undefined?1:f.hook);
+  /* 實測 Noto 黑體「打」的扌鉤：往左 156、往上 51、18°、長 164（em=1000）。
+     舊的係數 hw*0.52 上限 58 —— 鉤只伸到 51，連拉滿都只有 105，
+     所以看起來像「垂下去抖一下」不像鉤。改成以量到的長度為準。 */
+  const m=clamp(widths(f).hw*wScale*1.62,40,210)*(f.hook===undefined?1:f.hook);
   let C,B;
   if(st.e==="hook"){
-    /* KAGE 的 4 是左上挑鉤：直接改中心線，避免只靠端帽畫出箭頭。 */
-    C=[A[0]-m*0.28,A[1]+m*0.10];
-    B=[A[0]-m*1.30,A[1]+m*0.42];
+    /* 左上挑鉤。往左的量要遠大於往上，才是 18° 那種橫掃的鉤。
+       控制點壓低，讓豎與鉤之間形成明顯轉折而不是平滑續接。 */
+    C=[A[0]-m*0.46,A[1]-m*0.04];
+    B=[A[0]-m*1.50,A[1]+m*0.30];
   }else{
     /* KAGE 的 5 是右上彎尾，常見於力、門、月等折鉤。 */
     C=[A[0]+m*0.58,A[1]+m*0.02];
@@ -2116,7 +2120,7 @@ const AXES=[
   {k:"width",   n:"字寬",  en:"WIDTH",   min:0.72,max:1.24,step:0.01,lo:"窄",  hi:"寬",  f:v=>v.toFixed(2)},
   {k:"slant",   n:"傾斜",  en:"SLANT",   min:-0.30,max:0.30,step:0.01,lo:"左",hi:"右",  f:v=>v.toFixed(2)},
   {k:"taper",   n:"出鋒",  en:"TAPER",   min:0,   max:1.6, step:0.02,lo:"等寬",hi:"收尖",f:v=>v.toFixed(2)},
-  {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
+  {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.0, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
   {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)},
   {k:"press",   n:"提按",  en:"PRESSURE",min:0,   max:1.4, step:0.02,lo:"等粗",hi:"書法",f:v=>v.toFixed(2)},
   {k:"rise",    n:"斜勢",  en:"RISE",    min:0, max:0.16, step:0.002,lo:"水平",hi:"右上",f:v=>((+v)*57.3).toFixed(1)+"°"},
@@ -2128,13 +2132,13 @@ const AXES=[
   {k:"hollow",  n:"中空",  en:"HOLLOW",  min:0,   max:0.9, step:0.02,lo:"實心",hi:"線框",f:v=>(+v).toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
-  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.60,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
   kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
