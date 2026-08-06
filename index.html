@@ -1231,8 +1231,9 @@ function strokeOutline(st,f,wScale,NS){
   const w0=widthAt(st,0,S[0].t,f)*wScale/2,w1=widthAt(st,1,S[n].t,f)*wScale/2;
   /* 兩側各自化簡（頭尾一定保留，端點造型才接得上） */
   const tolBase=f.simp===undefined?1.5:f.simp;
-  let tol=st.kage&&(/^(pie|na|dian|ti|zhe)$/.test(st.t)||st.cv)?Math.min(tolBase,0.90):tolBase;
-  if(st.sk&&/^(辶|糹|門|馬|雨|竹|心|女|月|阝|耳)$/.test(st.sk)) tol=Math.min(tol,0.82);
+  let tol=st.kage&&(/^(pie|na|dian|ti|zhe)$/.test(st.t)||st.cv)?Math.min(tolBase,0.52):tolBase;
+  if(st.ear) tol=Math.min(tol,0.22);
+  else if(st.sk&&/^(辶|糹|門|馬|雨|竹|心|女|月|阝|耳|犭)$/.test(st.sk)) tol=Math.min(tol,0.42);
   const La=rdp(L,tol), Ra=rdp(R,tol);
   const cmds=[["M",La[0][0],La[0][1]]];
   for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
@@ -1668,11 +1669,13 @@ function buildCells(){
  $("tagComp").textContent=ALL.filter(i=>G[i]&&G[i].s&&!G[i].sp).length;
  $("tagCx").textContent=ALL.filter(i=>G[i]&&G[i].c).length;
  $("tagPu").textContent=ALL.filter(i=>G[i]&&G[i].sp).length;
+ /* 換頁／搜尋後立即把輪廓畫進新建立的 SVG。 */
+ requestAnimationFrame(()=>drawAll());
 }
 buildCells();
-$("q").addEventListener("input",e=>{query=e.target.value;page=0;buildCells();mark();scheduleSlow();});
-$("pgPrev").addEventListener("click",()=>{page--;buildCells();mark();scheduleSlow();});
-$("pgNext").addEventListener("click",()=>{page++;buildCells();mark();scheduleSlow();});
+$("q").addEventListener("input",e=>{query=e.target.value;page=0;buildCells();mark();schedule();scheduleSlow();});
+$("pgPrev").addEventListener("click",()=>{page--;buildCells();mark();schedule();scheduleSlow();});
+$("pgNext").addEventListener("click",()=>{page++;buildCells();mark();schedule();scheduleSlow();});
 $("tagComp").textContent=COMP.length;
 $("tagCx").textContent=CXED.length;
 $("tagPu").textContent=PUNCT.length;
@@ -2048,7 +2051,7 @@ function resetGlyph(id){
 }
 const baselineName=()=>PACKRAW?"匯入的 KAGE":"內建出廠值";
 $("btnResetOne").addEventListener("click",()=>{
-  resetGlyph(current);varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
+  resetGlyph(current);applyKnownKageFixes();clearStrokeEstimates();varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
   if(MODE==="show") scDraw();});
 $("btnResetAll").addEventListener("click",async ()=>{
   const n=EDITED.size;
@@ -2060,6 +2063,7 @@ $("btnResetAll").addEventListener("click",async ()=>{
     resetGlyph(id);
     if(++i%800===0){ busy(true,undefined,i.toLocaleString()+" / "+list.length.toLocaleString(),i/list.length*100); await yield_(); }
   }
+  applyKnownKageFixes(); clearStrokeEstimates();
   EDITED.clear();
   varSel=null; buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
   if(MODE==="show") scDraw();
@@ -2094,7 +2098,7 @@ $("btnLoad").addEventListener("click",()=>$("fileIn").click());
 $("fileIn").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=()=>{try{restore(JSON.parse(r.result));saveLocal();}
+  r.onload=()=>{try{restore(JSON.parse(r.result));applyKnownKageFixes();clearStrokeEstimates();schedule();scheduleSlow();saveLocal();}
                 catch(err){alert("讀入失敗："+err.message);}};
   r.readAsText(f); e.target.value="";
 });
@@ -2152,6 +2156,27 @@ function kageBend(A,C,B){
   const v=((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
   return clamp(v,-0.46,0.46);
 }
+function applyKnownKageFixes(){
+  const leftEar=()=>[
+    {t:"zhe",cv:"earLeft",p:[[150,860],[360,860],[405,735],[250,610],[380,530],[365,370],[300,300],[220,300]],
+     h:"conn",e:"earFoot",w:0.90,kage:1,ear:"left"},
+    {t:"shu",p:[[150,860],[150,70]],h:"conn",e:"open",w:0.94,kage:1,ear:"left"}
+  ];
+  const rightEar=()=>[
+    {t:"zhe",cv:"earRight",p:[[640,860],[850,860],[805,735],[950,610],[820,530],[835,370],[900,300],[980,300]],
+     h:"conn",e:"earFoot",w:0.90,kage:1,ear:"right"},
+    {t:"shu",p:[[850,860],[850,70]],h:"conn",e:"open",w:0.94,kage:1,ear:"right"}
+  ];
+  const walk=()=>[
+    {t:"dian",p:[[245,825],[320,750]],h:"point",e:"taperR",w:0.86,kage:1},
+    {t:"zhe",p:[[205,650],[365,650],[295,545],[370,480]],h:"open",e:"open",w:0.80,fr:0.68,kage:1},
+    {t:"na",cv:"cubic",p:[[205,385],[315,270],[600,180],[915,205]],h:"point",e:"taperR",w:0.86,kage:1}
+  ];
+  for(const key of ["u961d-01","u961d-01-var-001"]){ if(G[key]) G[key].s=leftEar(); }
+  if(G["u961d-02"]) G["u961d-02"].s=rightEar();
+  for(const key of Object.keys(G)) if(/^u8fb6(?:-|$)/i.test(key)&&G[key]) G[key].s=walk();
+}
+
 /* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
    u6728      → 木（純字）
    u6728-t    → 木的台灣標準形（-j 日本 -g 中國 -t 台灣 -k 韓國 -v 越南）
@@ -2204,9 +2229,9 @@ function kageToGlyph(data){
                                   [KX(n(c[7])),KY(n(c[8]))],[KX(n(c[9])),KY(n(c[10]))]];
     else { skipped.push(raw); continue; }
 
-    if(a1t===2){                       /* 二次曲線的控制點 → 本系統的 bend（精確可逆） */
+    if(a1t===2){                       /* 二次曲線：完整保留控制點 */
       const st=kageClassify([P[0],P[2]],a3,2,a2,a1t);
-      strokes.push({...st,p:[P[0],P[2]],bend:kageBend(P[0],P[1],P[2])});
+      strokes.push({...st,p:P,cv:"quad",kj:2});
     } else if(a1t===1){
       strokes.push({...kageClassify(P,a3,2,a2,a1t),p:P});
     } else {
@@ -2318,6 +2343,7 @@ function kageApply(){
     if(isNew){ ALL.push(key); if(g.u)(g.c?CXED:COMP).push(key); BASE[key]=JSON.parse(JSON.stringify(g)); }
     n++;
   }
+  applyKnownKageFixes(); clearStrokeEstimates();
   for(const it of kagePending) if(it.ok&&(it.key||it.ch)) touch(it.key||it.ch);
   buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
   $("kmodal").classList.remove("on");
@@ -2445,6 +2471,7 @@ async function loadPack(json,keepMine,quiet){
     if(++i%900===0){ busy(true,undefined,"轉換 "+i.toLocaleString()+" / "+names.length.toLocaleString(),
                           i/names.length*55); await yield_(); }
   }
+  applyKnownKageFixes(); clearStrokeEstimates();
   /* 目標字 → 一層滿框引用，指向該字的來源字形（優先台灣字形） */
   busy(true,undefined,"對應到字…",60);
   let mapped=0,usedT=0;
@@ -2759,8 +2786,9 @@ const scHash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i)
 
 function scDraw(){
   const svg=$("scArt"); svg.textContent="";
-  const typed=[...$("scTxt").value].filter(c=>c.trim());
-  const list=typed.filter(c=>G[c]&&(G[c].s||G[c].c));
+  /* 保留全形空白 U+3000；只排除換行與 tab。 */
+  const typed=[...$("scTxt").value].filter(c=>c!=="\n"&&c!=="\r"&&c!=="\t");
+  const list=typed.filter(c=>G[c]&&(G[c].sp||G[c].s||G[c].c));
   const miss=typed.filter(c=>!G[c]);
   const total=ALL.filter(i=>G[i]&&G[i].u).length;
   $("scStat").textContent=list.length? (list.length+" 字 · "+scPal.n) : "字庫沒有這些字";
