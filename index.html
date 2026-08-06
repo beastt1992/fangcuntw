@@ -89,7 +89,10 @@
   .ctrl-head label{font-size:12.5px;font-weight:500;letter-spacing:.04em}
   .ctrl-head .ro{font-family:var(--mono);font-size:10.5px;color:var(--skel)}
   .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-top:-3px}
-  input[type=range]{width:100%;appearance:none;height:16px;background:transparent;cursor:pointer;display:block}
+  /* touch-action:none 是關鍵 —— 沒有它，手機上一拖滑桿就被瀏覽器
+     判成捲頁手勢，值不會動反而選到背景。 */
+  input[type=range]{width:100%;appearance:none;height:16px;background:transparent;cursor:pointer;display:block;
+    touch-action:none;-webkit-tap-highlight-color:transparent}
   input[type=range]:focus-visible{outline:2px solid var(--skel);outline-offset:1px}
   input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line-2)}
   input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;
@@ -267,6 +270,28 @@
     .scfoot{flex-wrap:wrap;height:auto;padding:10px 12px}
     .scfoot textarea{flex-basis:100%;width:100%}
   }
+
+  /* ---------- 觸控裝置：把所有可拖曳的東西放大到手指按得準 ---------- */
+  @media (pointer:coarse){
+    /* 滑桿本體加高到 40px，指頭落點寬鬆；軌道加粗才看得到自己拖到哪 */
+    input[type=range]{height:40px}
+    input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px}
+    input[type=range]::-moz-range-track{height:4px;border-radius:2px}
+    input[type=range]::-webkit-slider-thumb{width:26px;height:26px;border-width:3px;margin-top:-11px}
+    input[type=range]::-moz-range-thumb{width:22px;height:22px;border-width:3px}
+    .scfoot input[type=range]{height:36px}
+    /* 整列設計軸拉高，滑桿上下都有餘裕，不會誤觸旁邊 */
+    .ctrl{padding:7px 12px 8px}
+    .ctrl-head{padding-bottom:2px}
+    /* 勾選框、分頁鈕、預設鈕的觸控目標放大 */
+    input[type=checkbox]{width:20px;height:20px}
+    .tabs button,.seg button,.presets button{padding:9px 14px}
+    .btn{padding:9px 16px}
+    /* 拖曳編輯的控制點在觸控下要更大 */
+    #bigSvg circle{r:26}
+  }
+  /* 整個 app 不要有點擊灰底閃一下 */
+  *{-webkit-tap-highlight-color:transparent}
   @media (max-width:900px){
     body{overflow:auto}
     .app{height:auto;display:block}
@@ -667,11 +692,11 @@ const EM=1000, ASC=880, DESC=-120;
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
-         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,
+         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
-               'width','slant','taper','hook','dun'];
+               'width','slant','taper','hook','dun','press'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1197,6 +1222,32 @@ function endFactor(kind,x,f,st,isTail){
   }
 }
 const tp=(f,v)=>1+(v-1)*(f.taper===undefined?1:f.taper);
+/* ==========================================================================
+   提按 —— 書法裡每一筆從頭到尾的筆壓節奏
+   實測過：明體和黑體的「橫」身體都是等粗的（明體的個性在收筆的三角，
+   那是另一回事，已由「收筆」軸處理）。真正有提按的是楷書，
+   所以這是第三種風格，預設 0＝維持印刷體的等粗。
+   曲線依永字八法的書寫慣例設計（沙盒無楷書字型可量，這點要誠實）：
+     橫 逆入頓起 → 行筆提細 → 收筆重頓
+     豎 頓起 → 中段略提 → 垂露
+     撇 頓起後漸提出鋒；捺 輕入漸按再出鋒
+   ========================================================================== */
+function pressAt(type,t,f){
+  const g=(f.press===undefined?0:f.press);
+  if(g<=0.001) return 1;
+  const s=Math.sin(Math.PI*t);
+  let v=1;
+  switch(type){
+    case "heng": v=1+0.16*Math.pow(1-t,2)-0.26*s+0.32*Math.pow(t,4); break;
+    case "shu":  v=1+0.20*Math.pow(1-t,2.5)-0.18*s+0.10*Math.pow(t,3); break;
+    case "zhe":  v=1+0.14*Math.pow(1-t,2)-0.16*s+0.18*Math.pow(t,4); break;
+    case "pie":  v=1+0.26*Math.pow(1-t,3); break;      /* 起筆頓，尾端交給出鋒 */
+    case "na":   v=1-0.18*Math.pow(1-t,2.4); break;    /* 輕入 */
+    case "ti":   v=1+0.20*Math.pow(1-t,2.6); break;
+    default: return 1;
+  }
+  return 1+(v-1)*g;
+}
 function baseWidthAt(st,t,tan,f){
   const {hw,sw}=widths(f),k=st.w||1,isK=!!st.kage;
   switch(st.t){
@@ -1216,7 +1267,7 @@ function baseWidthAt(st,t,tan,f){
   }
 }
 function widthAt(st,t,tan,f){
-  let w=baseWidthAt(st,t,tan,f);
+  let w=baseWidthAt(st,t,tan,f)*pressAt(st.t,t,f);
   /* KAGE 頭尾語意是修飾層，不再取代撇／捺／點／提本身的粗細邏輯。 */
   if(st.h) w*=endFactor(st.h,t,f,st,false);
   if(st.e) w*=endFactor(st.e,1-t,f,st,true);
@@ -1847,16 +1898,17 @@ const AXES=[
   {k:"slant",   n:"傾斜",  en:"SLANT",   min:-0.30,max:0.30,step:0.01,lo:"左",hi:"右",  f:v=>v.toFixed(2)},
   {k:"taper",   n:"出鋒",  en:"TAPER",   min:0,   max:1.6, step:0.02,lo:"等寬",hi:"收尖",f:v=>v.toFixed(2)},
   {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
-  {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)}
+  {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)},
+  {k:"press",   n:"提按",  en:"PRESSURE",min:0,   max:1.4, step:0.02,lo:"等粗",hi:"書法",f:v=>v.toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
-  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
+  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
+  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00}
+  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
 const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
@@ -3343,7 +3395,7 @@ $("subGo").addEventListener("click",()=>{
    ========================================================================== */
 const ENGINE_REF={weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
                   gravity:1.00,face:1.00,hand:0.00,finish:0.00,
-                  width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00};
+                  width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
