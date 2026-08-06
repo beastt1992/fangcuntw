@@ -24,6 +24,9 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
+  /* UI 一律不可圈選，只有輸入框和樣張留著讓你選字 */
+  body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  input,textarea,.spec,#qaOut,#kIn,#subTxt{-webkit-user-select:text;user-select:text}
   body{background:var(--paper);color:var(--ink);overflow:hidden;
     font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;font-size:14px;
@@ -664,11 +667,11 @@ const EM=1000, ASC=880, DESC=-120;
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
-         width:1.00,slant:0.00,taper:1.00,hook:1.50,
+         width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
-               'width','slant','taper','hook'];
+               'width','slant','taper','hook','dun'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1385,11 +1388,30 @@ function strokeOutline(st,f,wScale,NS){
   const sampleN=(NS||30)+(st.kage&&(st.cv||st.t==="zhe")?8:0);
   const baseS=sampleSkeleton(SP,st.bend||0,fillet,sampleN,st.cv,st.kj);
   const tail=appendKageTail(baseS,st,f,wScale),S=tail.s,n=S.length-1;
+  /* 頓：折角處把筆畫局部加粗。真的毛筆在轉折時會停頓下壓，
+     黑體留一點意思、明體要明顯。沒有轉折的筆畫完全不受影響。 */
+  const dunAmt=(f.dun===undefined?0:f.dun);
+  let dunAt=null;
+  if(dunAmt>0.001 && S.length>3){
+    /* 找切線方向變化最大的地方＝折角 */
+    let best=-1,bi=-1;
+    for(let i=2;i<S.length-2;i++){
+      const a=unit(S[i-2].t), b=unit(S[i+2].t);
+      const d=1-(a[0]*b[0]+a[1]*b[1]);
+      if(d>best){best=d;bi=i;}
+    }
+    if(best>0.20) dunAt={i:bi,amt:dunAmt*Math.min(1,best)};
+  }
   const L=[],R=[];
   for(let i=0;i<=n;i++){
     const t=i/n,s=S[i],tl=len(s.t);
     const nx=-s.t[1]/tl,ny=s.t[0]/tl;
-    const w=widthAt(st,t,s.t,f)*wScale/2;
+    let w=widthAt(st,t,s.t,f)*wScale/2;
+    if(dunAt){
+      const span=Math.max(2,n*0.13);
+      const k=Math.max(0,1-Math.abs(i-dunAt.i)/span);
+      w*=1+dunAt.amt*0.42*k*k;
+    }
     let up=0;
     if(st.t==="heng"&&f.finish>0) up=f.finish*hw*0.62*smooth(0.80,1,t)*wScale;
     L.push([s.p[0]+nx*(w+up),s.p[1]+ny*(w+up)]);
@@ -1548,6 +1570,9 @@ function collect(id,box,wScale,out,seed,variant,depth,optic){
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
     h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,ws,
+    /* 記下這一筆從哪個字形的第幾筆來、以及它被塞進哪個框 —— 
+       有這些就能從組合字裡直接拖動部件的筆畫，改一次所有用到的字一起變 */
+    src:id, sidx:i, sv:variant||null, bx:[x1,y1,sx,sy],
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
@@ -1821,16 +1846,17 @@ const AXES=[
   {k:"width",   n:"字寬",  en:"WIDTH",   min:0.72,max:1.24,step:0.01,lo:"窄",  hi:"寬",  f:v=>v.toFixed(2)},
   {k:"slant",   n:"傾斜",  en:"SLANT",   min:-0.30,max:0.30,step:0.01,lo:"左",hi:"右",  f:v=>v.toFixed(2)},
   {k:"taper",   n:"出鋒",  en:"TAPER",   min:0,   max:1.6, step:0.02,lo:"等寬",hi:"收尖",f:v=>v.toFixed(2)},
-  {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)}
+  {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
+  {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
-  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
+  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
+  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50}
+  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
 const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
@@ -2019,6 +2045,19 @@ function drawBig(){
       bigSvg.appendChild(el("circle",{cx:w[0],cy:EM-w[1],r:19,fill:"var(--paper)",
         stroke:"var(--skel)","stroke-width":4,cursor:"grab","data-k":"s","data-si":si,"data-pi":pi}));
     }));
+    if(!g.s){
+      /* 組合字本身沒有筆畫，但它裡面的部件有。
+         把那些筆畫的控制點也畫出來，可以直接在這裡調。 */
+      const raw=[]; collect(current,[0,0,EM,EM],1,raw,7,varSel,0,F.optic);
+      raw.forEach((st,ri)=>{
+        if(!st.src||st.sidx===undefined||!st.p) return;
+        const w=warpStroke(st,F);
+        w.p.forEach((pt,pi)=>bigSvg.appendChild(el("circle",{cx:pt[0],cy:EM-pt[1],r:16,
+          fill:"var(--paper)",stroke:"var(--box)","stroke-width":3.5,cursor:"grab",
+          "data-k":"p","data-ri":ri,"data-pi":pi})));
+      });
+      DEEP=raw;
+    } else DEEP=null;
     if(g.c) g.c.forEach((part,ci)=>{
       const [a,b,c,d]=part.box;
       const P=[[a,b],[c,b],[c,d],[a,d]].map(([x,y])=>ptWarp(x,y,F));
@@ -2028,7 +2067,7 @@ function drawBig(){
         fill:"var(--paper)",stroke:"var(--box)","stroke-width":4,cursor:"grab",
         "data-k":"c","data-ci":ci,"data-corner":k})));
     });
-    $("badge").textContent = g.c?"拖曳綠框改配置"
+    $("badge").textContent = g.c?(g.s?"拖曳綠框改配置":"拖曳藍點改部件骨架 · 綠框改配置")
       :(varSel?"編輯「"+VNAME[varSel]+"」變體":"拖曳藍點改基本骨架");
   }
   drawVariantPanel(g);
@@ -2092,7 +2131,7 @@ function tree(id,d=0){
 }
 
 /* ---------- 拖曳 ---------- */
-let drag=null;
+let drag=null, DEEP=null;
 function toEm(evt){
   const p=bigSvg.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;
   const m=bigSvg.getScreenCTM();if(!m)return null;
@@ -2103,6 +2142,7 @@ bigSvg.addEventListener("pointerdown",evt=>{
   const t=evt.target,k=t.dataset&&t.dataset.k;
   if(!editMode||!k)return;
   drag = k==="s"?{k:"s",si:+t.dataset.si,pi:+t.dataset.pi}
+       : k==="p"?{k:"p",ri:+t.dataset.ri,pi:+t.dataset.pi}
                 :{k:"c",ci:+t.dataset.ci,corner:+t.dataset.corner};
   bigSvg.setPointerCapture(evt.pointerId); evt.preventDefault();
 });
@@ -2121,6 +2161,22 @@ bigSvg.addEventListener("pointermove",evt=>{
     } else target=g.s[drag.si];
     const raw=unwarpPoint(em,{...resolved,seed:7*31+drag.si*7},F,drag.pi);
     target.p[drag.pi]=[Math.max(-60,Math.min(1060,raw[0])),Math.max(-60,Math.min(1060,raw[1]))];
+  } else if(drag.k==="p"){
+    /* 部件筆畫：畫面 → 去掉字面變形 → 再除掉那個部件的外框，回到部件自己的座標 */
+    const st=DEEP&&DEEP[drag.ri]; if(!st) return;
+    const tgt=G[st.src]; if(!tgt) return;
+    const base=st.sv&&tgt.v&&tgt.v[st.sv] ? null : tgt.s;
+    let arr;
+    if(st.sv){
+      tgt.v[st.sv]=tgt.v[st.sv]||{};
+      if(!tgt.v[st.sv][st.sidx]) tgt.v[st.sv][st.sidx]=JSON.parse(JSON.stringify(tgt.s[st.sidx]));
+      arr=tgt.v[st.sv][st.sidx];
+    } else { if(!tgt.s||!tgt.s[st.sidx]) return; arr=tgt.s[st.sidx]; }
+    const raw=unwarpPoint(em,st,F,drag.pi);
+    const [bx,by,sx,sy]=st.bx;
+    const lx=(raw[0]-bx)/(sx||1), ly=(raw[1]-by)/(sy||1);
+    arr.p[drag.pi]=[Math.max(-60,Math.min(1060,lx)),Math.max(-60,Math.min(1060,ly))];
+    touch(st.src);
   } else {
     const box=g.c[drag.ci].box;
     const raw=ptUnwarp(em[0],em[1],F);
@@ -3287,7 +3343,7 @@ $("subGo").addEventListener("click",()=>{
    ========================================================================== */
 const ENGINE_REF={weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
                   gravity:1.00,face:1.00,hand:0.00,finish:0.00,
-                  width:1.00,slant:0.00,taper:1.00,hook:1.50};
+                  width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
