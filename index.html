@@ -664,9 +664,11 @@ const EM=1000, ASC=880, DESC=-120;
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
+         width:1.00,slant:0.00,taper:1.00,hook:1.50,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
-const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish'];
+const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
+               'width','slant','taper','hook'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1168,25 +1170,30 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /* KAGE 的每一筆都帶「頭形狀 a2」「尾形狀 a3」，以前我只用了鉤、其他靠方向猜。
    個位數就是形狀：2 接續、3 腳跟、4 鉤、5 彎、7 左出鋒、8 右出鋒、0 開放。
    h/e 有值時就照它畫，沒有才退回舊的靠筆種猜。 */
-function endFactor(kind,x,f,st,isTail){ /* x=0 在該端點，x=1 在另一端 */
+function endFactor(kind,x,f,st,isTail){
+  const T=(f&&f.taper!==undefined)?f.taper:1;
+  const sc=v=>1+(v-1)*T; /* x=0 在該端點，x=1 在另一端 */
   /* 撇、捺、提本身已經有筆型粗細曲線，KAGE 的出鋒代碼只補端點，避免二次收尖。 */
   if(isTail && ((kind==="taperL"&&(st.t==="pie"||st.t==="ti")) ||
                 (kind==="taperR"&&st.t==="na"))) return 1;
   switch(kind){
-    case "taperL": return Math.max(0.10,1-0.90*Math.pow(1-x,1.22));
-    case "taperR": return Math.max(0.14,Math.pow(x,0.58))*(1+0.20*(1-x)*(1-x));
+    case "taperL": return sc(Math.max(0.10,1-0.90*Math.pow(1-x,1.22)));
+    case "taperR": return sc(Math.max(0.14,Math.pow(x,0.58))*(1+0.20*(1-x)*(1-x)));
     case "point":{
       /* 黑體保持飽滿；只有明體程度升高時才逐漸形成尖起筆。 */
       const g=Math.min(1,(f&&f.finish!==undefined?f.finish:0)/0.72);
       if(g<=0.02) return 1;
       return 1-g*(1-Math.max(0.30,Math.pow(x,0.68)));
     }
-    case "hook":   return Math.max(0.20,1-0.82*Math.pow(1-x,1.92));
+    /* 鉤末端原本只剩兩成筆寬，細到看不出來。提高下限並放慢收細，
+       讓它讀得出是一個鉤，而不是一根鬚。 */
+    case "hook":   return Math.max(0.46,1-0.60*Math.pow(1-x,1.70));
     case "bend":   return 0.74+0.26*Math.pow(x,0.60);  /* 彎尾略收，但不畫成鉤 */
     case "kakato": return 1+0.08*Math.pow(1-x,2);      /* 腳跟靠端點微微加厚 */
     default:       return 1;
   }
 }
+const tp=(f,v)=>1+(v-1)*(f.taper===undefined?1:f.taper);
 function baseWidthAt(st,t,tan,f){
   const {hw,sw}=widths(f),k=st.w||1,isK=!!st.kage;
   switch(st.t){
@@ -1194,10 +1201,11 @@ function baseWidthAt(st,t,tan,f){
     case "shu": return sw*k;
     case "zhe":{const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
       return (hw+(sw-hw)*s)*k;}
-    case "pie": return sw*k*Math.max(isK?0.15:0.09,1-(isK?0.82:0.90)*Math.pow(t,isK?1.18:1.30));
-    case "na":  return sw*k*(isK?1.00:1.06)*Math.max(isK?0.19:0.13,Math.pow(t,isK?0.88:0.80))*(1+f.finish*(isK?0.18:0.30)*smooth(0.72,1,t));
-    case "dian":return sw*k*((isK?0.44:0.34)+(isK?0.58:0.72)*Math.pow(t,isK?0.78:0.70));
-    case "ti":  return sw*k*(isK?1.03:1.12)*Math.max(isK?0.16:0.10,1-Math.pow(t,isK?1.03:1.15));
+    /* tp = 出鋒軸：把「偏離等寬的量」整個縮放。tp=0 等寬，tp=1 是原本的行為 */
+    case "pie": return sw*k*tp(f,Math.max(isK?0.15:0.09,1-(isK?0.82:0.90)*Math.pow(t,isK?1.18:1.30)));
+    case "na":  return sw*k*(isK?1.00:1.06)*tp(f,Math.max(isK?0.19:0.13,Math.pow(t,isK?0.88:0.80))*(1+f.finish*(isK?0.18:0.30)*smooth(0.72,1,t)));
+    case "dian":return sw*k*tp(f,(isK?0.44:0.34)+(isK?0.58:0.72)*Math.pow(t,isK?0.78:0.70));
+    case "ti":  return sw*k*(isK?1.03:1.12)*tp(f,Math.max(isK?0.16:0.10,1-Math.pow(t,isK?1.03:1.15)));
     default:{
       const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
       return (hw+(sw-hw)*s)*k;
@@ -1329,7 +1337,7 @@ function rdp(pts,tol){
 function appendKageTail(S,st,f,wScale){
   if(!st.kage||!S.length||(st.e!=="hook"&&st.e!=="bend")) return {s:S,kind:null};
   const out=S.slice(), A=S[S.length-1].p;
-  const m=clamp(widths(f).hw*wScale*0.52,18,58);
+  const m=clamp(widths(f).hw*wScale*0.52,18,58)*(f.hook===undefined?1:f.hook);
   let C,B;
   if(st.e==="hook"){
     /* KAGE 的 4 是左上挑鉤：直接改中心線，避免只靠端帽畫出箭頭。 */
@@ -1552,14 +1560,17 @@ const invG=(v,g)=>{const u=v/EM;return u<0?v:EM*Math.pow(u,1/g);};
 const rnd=s=>{const x=Math.sin(s*12.9898)*43758.5453;return (x-Math.floor(x))*2-1;};
 
 function ptWarp(x,y,f){
-  x=500+(x-500)*f.face; y=500+(y-500)*f.face;
+  x=500+(x-500)*f.face*f.width; y=500+(y-500)*f.face;
   x=powC(x,f.counter);  y=powC(y,f.counter);
-  y=powG(y,f.gravity);  return [x,y];
+  y=powG(y,f.gravity);
+  x+=(y-500)*f.slant;               /* 傾斜放最後，且不動 y，所以完全可逆 */
+  return [x,y];
 }
 function ptUnwarp(x,y,f){
+  x-=(y-500)*f.slant;
   y=invG(y,f.gravity);
   x=invC(x,f.counter);  y=invC(y,f.counter);
-  x=500+(x-500)/f.face; y=500+(y-500)/f.face; return [x,y];
+  x=500+(x-500)/(f.face*f.width); y=500+(y-500)/f.face; return [x,y];
 }
 function orthogonalizeKagePoints(points,st){
   const p=points.map(q=>q.slice());
@@ -1767,16 +1778,20 @@ const AXES=[
   {k:"gravity", n:"重心",  en:"GRAVITY", min:0.84,max:1.18,step:0.01,lo:"高",  hi:"低",  f:v=>v.toFixed(2)},
   {k:"face",    n:"字面率",en:"FACE",    min:0.84,max:1.10,step:0.01,lo:"小",  hi:"大",  f:v=>v.toFixed(2)},
   {k:"hand",    n:"書寫感",en:"HAND",    min:0,   max:1,   step:0.02,lo:"幾何",hi:"手寫",f:v=>v.toFixed(2)},
-  {k:"finish",  n:"收筆",  en:"FINISH",  min:0,   max:1,   step:0.02,lo:"平切",hi:"翹角",f:v=>v.toFixed(2)}
+  {k:"finish",  n:"收筆",  en:"FINISH",  min:0,   max:1,   step:0.02,lo:"平切",hi:"翹角",f:v=>v.toFixed(2)},
+  {k:"width",   n:"字寬",  en:"WIDTH",   min:0.72,max:1.24,step:0.01,lo:"窄",  hi:"寬",  f:v=>v.toFixed(2)},
+  {k:"slant",   n:"傾斜",  en:"SLANT",   min:-0.30,max:0.30,step:0.01,lo:"左",hi:"右",  f:v=>v.toFixed(2)},
+  {k:"taper",   n:"出鋒",  en:"TAPER",   min:0,   max:1.6, step:0.02,lo:"等寬",hi:"收尖",f:v=>v.toFixed(2)},
+  {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0},
-  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0},
+  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
+  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0}
+  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
 const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
@@ -2341,16 +2356,19 @@ const KVAR={ "01":"left", "02":"top", "03":"right", "04":"bottom", "05":"enclose
 
 /* KAGE 頭尾形狀代碼 → 端點造型。看個位數就好（22、32、12 都是接續） */
 function kageEnd(code,isTail){
-  const d=Math.abs(code|0)%10;
-  switch(d){
-    case 2: return "conn";                       /* 接續：延伸一點填實接縫 */
-    case 3: return "kakato";                     /* 腳跟 */
-    case 4: return "hook";                       /* 鉤 */
-    case 5: return "bend";                       /* 彎 */
-    case 7: return isTail?"taperL":"point";      /* 尾=左出鋒(撇)；頭=尖起筆 */
-    case 8: return isTail?"taperR":"point";      /* 尾=右出鋒(捺) */
-    default: return "open";
-  }
+  /* 照 KAGE 原本的判斷方式：
+     鉤與彎看的是 **後兩位**（a3_100 === 4 / 5），不是個位數。
+     這很重要 —— a3=24 的個位數也是 4，但 KAGE 不畫鉤（資料裡有 615 筆），
+     以前用 %10 判斷，口、四、面 的角落就會多出一個戳出去的鉤。
+     延伸語意（接續／腳跟）才是看個位數，跟 cdDrawLine 的 switch(a % 10) 一致。 */
+  const c=Math.abs(code|0), c100=c%100, d=c%10;
+  if(c100===4) return "hook";                    /* 鉤 */
+  if(c100===5) return "bend";                    /* 彎 */
+  if(d===7) return isTail?"taperL":"point";      /* 尾=左出鋒(撇)；頭=尖起筆 */
+  if(d===8) return isTail?"taperR":"point";      /* 尾=右出鋒(捺) */
+  if(d===3) return "kakato";                     /* 腳跟 */
+  if(d===2) return "conn";                       /* 接續：延伸一點填實接縫 */
+  return "open";
 }
 /* 筆種只用來決定粗細家族（橫細豎粗），端點造型一律看 a2/a3 */
 function kageClassify(pts,a3,nseg,a2,a1t){
@@ -3229,7 +3247,8 @@ $("subGo").addEventListener("click",()=>{
    兩邊走同一條 glyphContours，所以永遠不會有「兩套引擎各自漂移」的問題。
    ========================================================================== */
 const ENGINE_REF={weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
-                  gravity:1.00,face:1.00,hand:0.00,finish:0.00};
+                  gravity:1.00,face:1.00,hand:0.00,finish:0.00,
+                  width:1.00,slant:0.00,taper:1.00,hook:1.50};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
