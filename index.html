@@ -28,6 +28,8 @@
     -webkit-font-smoothing:antialiased;font-size:14px;
     padding-top:var(--safe-top); padding-bottom:var(--safe-bottom); box-sizing:border-box}
   .app{height:calc(100dvh - var(--safe-top) - var(--safe-bottom));display:grid;grid-template-rows:auto minmax(0,1fr) auto;position:relative}
+  @media (max-width:700px){:root{--safe-top:max(44px, env(safe-area-inset-top));--safe-bottom:max(10px, env(safe-area-inset-bottom))}}
+  @media (display-mode:standalone) and (max-width:700px){:root{--safe-top:max(54px, env(safe-area-inset-top))}}
   .tabs{display:flex;border:1px solid var(--ink)}
   .tabs button{font-family:inherit;font-size:12.5px;padding:5px 14px;background:var(--paper);
     border:none;cursor:pointer;color:var(--muted);white-space:nowrap;letter-spacing:.05em}
@@ -939,7 +941,7 @@ const dist=(a,b)=>len(sub(a,b));
 const lerp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
 const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a||1e-6)));return t*t*(3-2*t);};
 
-function makeSegs(pts,bend,fillet,cv){
+function makeSegs(pts,bend,fillet,cv,kj){
   const segs=[];
   /* KAGE 類型 6 是三次貝茲：中間兩點是控制點，不是經過點
      KAGE 類型 7 是「直線接二次曲線」：p1→p2 直線，再以 p3 為控制點彎到 p4
@@ -964,7 +966,9 @@ function makeSegs(pts,bend,fillet,cv){
   let cur=pts[0];
   for(let i=1;i<pts.length-1;i++){
     const P=pts[i],N=pts[i+1];
-    const r=Math.min(fillet,dist(cur,P)*0.45,dist(P,N)*0.45);
+    const leg1=dist(cur,P),leg2=dist(P,N);
+    const joinScale=kj===4?clamp(leg2/150,0.58,1.18):(kj===3?0.78:1);
+    const r=Math.min(fillet*joinScale,leg1*0.42,leg2*0.42);
     const A1=add(P,mul(unit(sub(cur,P)),r)), B1=add(P,mul(unit(sub(N,P)),r));
     if(dist(cur,A1)>1) segs.push({q:0,a:cur,b:A1});
     segs.push({q:1,a:A1,c:P,b:B1});
@@ -973,8 +977,8 @@ function makeSegs(pts,bend,fillet,cv){
   segs.push({q:0,a:cur,b:pts[pts.length-1]});
   return segs;
 }
-function sampleSkeleton(pts,bend,fillet,N,cv){
-  const segs=makeSegs(pts,bend,fillet,cv);
+function sampleSkeleton(pts,bend,fillet,N,cv,kj){
+  const segs=makeSegs(pts,bend,fillet,cv,kj);
   const L=segs.map(s=> s.c3 ? (dist(s.a,s.c1)+dist(s.c1,s.c2)+dist(s.c2,s.b))*0.86
                     : s.q  ? (dist(s.a,s.c)+dist(s.c,s.b))*0.92
                     : dist(s.a,s.b));
@@ -1159,8 +1163,35 @@ function rdp(pts,tol){
   const out=[]; for(let k=0;k<n;k++) if(keep[k]) out.push(pts[k]);
   return out;
 }
+function appendKageTail(S,st,f,wScale){
+  if(!st.kage||!S.length||(st.e!=="hook"&&st.e!=="bend")) return {s:S,kind:null};
+  const out=S.slice(), A=S[S.length-1].p;
+  const m=clamp(widths(f).hw*wScale*0.52,18,58);
+  let C,B;
+  if(st.e==="hook"){
+    /* KAGE 的 4 是左上挑鉤：直接改中心線，避免只靠端帽畫出箭頭。 */
+    C=[A[0]-m*0.28,A[1]+m*0.10];
+    B=[A[0]-m*1.30,A[1]+m*0.42];
+  }else{
+    /* KAGE 的 5 是右上彎尾，常見於力、門、月等折鉤。 */
+    C=[A[0]+m*0.58,A[1]+m*0.02];
+    B=[A[0]+m*0.78,A[1]+m*1.28];
+  }
+  const steps=5;
+  for(let i=1;i<=steps;i++){
+    const t=i/steps,u=1-t;
+    out.push({
+      p:[u*u*A[0]+2*u*t*C[0]+t*t*B[0],u*u*A[1]+2*u*t*C[1]+t*t*B[1]],
+      t:[2*u*(C[0]-A[0])+2*t*(B[0]-C[0]),2*u*(C[1]-A[1])+2*t*(B[1]-C[1])]
+    });
+  }
+  return {s:out,kind:st.e};
+}
 function strokeOutline(st,f,wScale,NS){
-  const {hw}=widths(f),fillet=hw*(0.10+0.62*f.round)*(st.fr||1);
+  const {hw}=widths(f);
+  const fillet=(st.kage&&st.t==="zhe")
+    ? hw*(0.035+0.28*f.round)*(st.fr||1)
+    : hw*(0.10+0.62*f.round)*(st.fr||1);
   let SP=st.p;
   if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"){
     SP=st.p.map(q=>q.slice());
@@ -1178,7 +1209,9 @@ function strokeOutline(st,f,wScale,NS){
       SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
     }
   }
-  const S=sampleSkeleton(SP,st.bend||0,fillet,NS||30,st.cv),n=S.length-1;
+  const sampleN=(NS||30)+(st.kage&&(st.cv||st.t==="zhe")?8:0);
+  const baseS=sampleSkeleton(SP,st.bend||0,fillet,sampleN,st.cv,st.kj);
+  const tail=appendKageTail(baseS,st,f,wScale),S=tail.s,n=S.length-1;
   const L=[],R=[];
   for(let i=0;i<=n;i++){
     const t=i/n,s=S[i],tl=len(s.t);
@@ -1189,10 +1222,14 @@ function strokeOutline(st,f,wScale,NS){
     L.push([s.p[0]+nx*(w+up),s.p[1]+ny*(w+up)]);
     R.push([s.p[0]-nx*w,s.p[1]-ny*w]);
   }
-  const C=caps(st,f),T0=unit(S[0].t),T1=unit(S[n].t);
+  const C=caps(st,f);
+  if(tail.kind==="hook") C.b="flat";
+  else if(tail.kind==="bend") C.b=Math.min(f.round,0.22);
+  const T0=unit(S[0].t),T1=unit(S[n].t);
   const w0=widthAt(st,0,S[0].t,f)*wScale/2,w1=widthAt(st,1,S[n].t,f)*wScale/2;
   /* 兩側各自化簡（頭尾一定保留，端點造型才接得上） */
-  const tol=f.simp===undefined?1.5:f.simp;
+  const tolBase=f.simp===undefined?1.5:f.simp;
+  const tol=st.kage&&(/^(pie|na|dian|ti|zhe)$/.test(st.t)||st.cv)?Math.min(tolBase,0.95):tolBase;
   const La=rdp(L,tol), Ra=rdp(R,tol);
   const cmds=[["M",La[0][0],La[0][1]]];
   for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
@@ -1258,6 +1295,18 @@ function estimateStrokeCount(id,stack,depth){
   if(g.c) for(const p of g.c) n+=estimateStrokeCount(p.r,next,(depth||0)+1);
   n=Math.max(1,n); STROKE_EST.set(id,n); return n;
 }
+function componentStyleKey(id){
+  if([...String(id)].length===1) return id;
+  const m=/^u([0-9a-f]{4,6})(?:-|$)/i.exec(String(id));
+  if(!m) return id;
+  try{return String.fromCodePoint(parseInt(m[1],16));}catch(e){return id;}
+}
+const COMPONENT_DENSITY_CAP={
+  "糹":0.86,"糸":0.88,"金":0.88,"馬":0.87,"門":0.89,"雨":0.89,
+  "言":0.91,"車":0.91,"隹":0.90,"酉":0.91,"足":0.92,"月":0.92,
+  "女":0.93,"心":0.92,"辶":0.91,"竹":0.93,"父":0.93,"又":0.94,
+  "火":0.94,"力":0.94,"疒":0.93,"犭":0.92
+};
 function opticalWeightScale(id,sx,sy){
   const ax=Math.max(0.04,Math.abs(sx)),ay=Math.max(0.04,Math.abs(sy));
   const minDim=Math.min(ax,ay),area=Math.sqrt(ax*ay);
@@ -1268,22 +1317,28 @@ function opticalWeightScale(id,sx,sy){
   let floor=n>=12?0.42:n>=9?0.47:n>=6?0.53:n>=4?0.60:0.66;
   if(narrow&&n>=8) floor-=0.04;
   if(narrow&&n>=12) floor-=0.04;
-  if(/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹|月|用|冊|網|西|目|日|田|白|酉)$/.test(id)) floor-=0.04;
-  return Math.min(1,Math.max(clamp(floor,0.34,0.72),Math.pow(geometric,0.82)));
+  const denseFamily=/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹|月|用|冊|網|西|目|日|田|白|酉)$/;
+  if(denseFamily.test(componentStyleKey(id))) floor-=0.04;
+  let densityCap=n>=16?0.88:n>=13?0.90:n>=11?0.92:n>=9?0.94:n>=7?0.97:1;
+  const sk=componentStyleKey(id);
+  if(denseFamily.test(sk)&&n>=7) densityCap-=0.015;
+  if(COMPONENT_DENSITY_CAP[sk]) densityCap=Math.min(densityCap,COMPONENT_DENSITY_CAP[sk]);
+  const scaled=Math.max(clamp(floor,0.34,0.72),Math.pow(geometric,0.82));
+  return Math.min(densityCap,scaled);
 }
 function collect(id,box,wScale,out,seed,variant,depth){
   const g=G[id]; if(!g||(depth||0)>8) return;
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
   /* box 已經是相對整個 em 的絕對位置，不再把父層 ws 重複相乘；深層 KAGE 引用不會越來越細。 */
-  const ws=opticalWeightScale(id,sx,sy);
+  const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy));
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
-    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,r:st.r,rk:st.rk,ws,
+    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,ws,
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
     const [a,b,c,d]=part.box;
-    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],1,out,seed*13+i*101,part.v,(depth||0)+1);
+    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1);
   });
 }
 const powC=(v,g)=>{const u=(v-500)/500,s=u<0?-1:1;return 500+500*s*Math.pow(Math.abs(u),g);};
@@ -1302,8 +1357,19 @@ function ptUnwarp(x,y,f){
   x=invC(x,f.counter);  y=invC(y,f.counter);
   x=500+(x-500)/f.face; y=500+(y-500)/f.face; return [x,y];
 }
+function orthogonalizeKagePoints(points,st){
+  const p=points.map(q=>q.slice());
+  if(!st.kage||st.cv||p.length<2) return p;
+  for(let i=1;i<p.length;i++){
+    const a=p[i-1],b=p[i],dx=b[0]-a[0],dy=b[1]-a[1];
+    if(Math.abs(dx)<=14&&Math.abs(dy)>=55) b[0]=a[0];
+    else if(Math.abs(dy)<=14&&Math.abs(dx)>=55) b[1]=a[1];
+  }
+  return p;
+}
 function warpStroke(st,f){
-  let p=st.p.map(([x,y])=>ptWarp(x,y,f));
+  const source=orthogonalizeKagePoints(st.p,st);
+  let p=source.map(([x,y])=>ptWarp(x,y,f));
   let bend=st.bend||0, hp=null;
   if(st.t==="heng"&&f.finish>0&&p.length===2) p[1]=[p[1][0],p[1][1]+f.finish*13];
   if(f.hand>0&&p.length>1){
@@ -1340,7 +1406,7 @@ function glyphContours(id,f,variant,NS){
 function glyphSkeleton(id,f,variant){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
   return warp(raw,f).filter(st=>st.p.length>1).map(st=>
-    "M "+sampleSkeleton(st.p,st.bend||0,40,22,st.cv).map(s=>fx(s.p[0])+" "+fx(EM-s.p[1])).join(" L "));
+    "M "+sampleSkeleton(st.p,st.bend||0,40,22,st.cv,st.kj).map(s=>fx(s.p[0])+" "+fx(EM-s.p[1])).join(" L "));
 }
 function strokeCount(id){const o=[];collect(id,[0,0,EM,EM],1,o,7,null,0);return o.length;}
 function contourCount(id){const o=[];collect(id,[0,0,EM,EM],1,o,7,null,0);
@@ -2130,7 +2196,7 @@ function kageToGlyph(data){
       const st=kageClassify(P,a3,P.length,a2,a1t);
       if(a1t===6)      strokes.push({...st,p:P,cv:"cubic"});     /* 三次貝茲 */
       else if(a1t===7) strokes.push({...st,p:P,cv:"lineQuad"});  /* 直線＋二次曲線 */
-      else             strokes.push({...st,p:P,fr:a1t===3?0.48:1.15});
+      else             strokes.push({...st,p:P,kj:a1t,fr:a1t===3?0.48:1.15});
     }
   }
   return {strokes,parts,skipped};
