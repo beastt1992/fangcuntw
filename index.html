@@ -502,6 +502,22 @@
 
   /* 展示頁沒有疊圖，「對照」在那裡跟「方寸」輸出一樣 —— 藏起來免得誤會 */
   body.in-show #engines button[data-e="compare"]{display:none}
+
+  /* ==========================================================================
+     手機鍵盤跳出來會把整頁放大
+     原因：iOS Safari 只要輸入框的字級小於 16px，一聚焦就自動放大整頁，
+     而且放大之後不會自己縮回去 —— 所以後面每個操作都變得很難按。
+     解法是把字級提到 16px，不是用 maximum-scale=1 關掉縮放：
+     那會害到真的需要放大的人，而且 iOS 10 之後根本不理那個設定。
+     滑桿、勾選框、色票不會觸發放大，排除掉免得版面被撐開。
+     ========================================================================== */
+  @media (pointer:coarse){
+    input:not([type=range]):not([type=checkbox]):not([type=color]):not([type=file]),
+    textarea, select{ font-size:16px !important }
+    /* 順便關掉連點兩下放大（那個也會讓按鈕反應變慢） */
+    button, .btn, .seg button, .pal, .tabs button, label, summary,
+    input[type=checkbox], input[type=range]{ touch-action:manipulation }
+  }
 </style>
 </head>
 <body>
@@ -2725,7 +2741,17 @@ function snapshot(){
     edits[id]=e;
   }
   const ax={}; for(const k of AXKEYS) ax[k]=F[k];
-  return {v:20,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,masters:{...MASTERS},edits};
+  /* 展示頁的東西以前完全沒存 —— 關掉 app 就沒了。
+     個別配色、搬字、單字調軸都是實際的工作成果，一定要留住。 */
+  const show={
+    txt:($("scTxt")&&$("scTxt").value)||"", lay:scLay, pal:scPal&&scPal.k,
+    col:scCol, blend:scBlend,
+    align:scAlignMode, scale:scScale, gx:scGxAdj, gy:scGyAdj,
+    ovr:{...scOvr}, custom:{...scCustom}, off:{...scOff}, axovr:{...scAxOvr}
+  };
+  const spec=($("specIn")&&$("specIn").value)||"";
+  return {v:21,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,
+          masters:{...MASTERS},edits,show,spec};
 }
 function restore(data){
   if(!data) return;
@@ -2748,7 +2774,52 @@ function restore(data){
   document.querySelectorAll("#presets button").forEach(x=>
     x.classList.toggle("on",!!presetKey&&x.dataset.p===presetKey));
   EDITED.clear(); for(const id in (data.edits||{})) if(G[id]) EDITED.add(id);
+  /* 展示頁：舊檔（v20 以前）沒有這一段，缺就沿用現況，不要清掉 */
+  const sh=data.show;
+  if(sh){
+    if($("scTxt") && sh.txt!==undefined) $("scTxt").value=sh.txt;
+    if(sh.lay && sh.lay!=="line"){                 /* line 已廢，退回巨字 */
+      scLay=sh.lay;
+      document.querySelectorAll("#scLayout button").forEach(x=>
+        x.classList.toggle("on", x.dataset.k===scLay));
+    }
+    if(sh.pal){
+      const p2=SCPAL.find(x=>x.k===sh.pal);
+      if(p2){
+        scPal=p2;
+        /* 調色盤沒有統一的重繪函式：按鈕的 .on 與兩個 CSS 變數都要自己同步 */
+        const btns=document.querySelectorAll("#scPals .pal");
+        btns.forEach((x,i)=>x.classList.toggle("on", SCPAL[i]===p2));
+        document.documentElement.style.setProperty("--sbg",p2.bg);
+        document.documentElement.style.setProperty("--sink",p2.ink);
+      }
+    }
+    if(sh.col){ scCol=sh.col;
+      document.querySelectorAll("#scColor button").forEach(x=>
+        x.classList.toggle("on", x.dataset.k===scCol)); }
+    if(sh.blend){ scBlend=sh.blend;
+      document.querySelectorAll("#scBlend button").forEach(x=>
+        x.classList.toggle("on", x.dataset.k===scBlend)); }
+    if(sh.align){ scAlignMode=sh.align;
+      document.querySelectorAll("#scAlign button").forEach(x=>
+        x.classList.toggle("on", x.dataset.k===scAlignMode)); }
+    if(typeof sh.scale==="number"){ scScale=sh.scale;
+      if($("scSize")){ $("scSize").value=scScale; $("scSizeV").textContent=scScale.toFixed(2); } }
+    if(typeof sh.gx==="number"){ scGxAdj=sh.gx;
+      if($("scGx")){ $("scGx").value=scGxAdj;
+        $("scGxV").textContent=scGxAdj===0?"預設":(scGxAdj>0?"+":"")+scGxAdj.toFixed(2); } }
+    if(typeof sh.gy==="number"){ scGyAdj=sh.gy;
+      if($("scGy")){ $("scGy").value=scGyAdj;
+        $("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2); } }
+    scOvr=sh.ovr?{...sh.ovr}:{};
+    scCustom=sh.custom?{...sh.custom}:{};
+    scOff=sh.off?{...sh.off}:{};
+    scAxOvr=sh.axovr?{...sh.axovr}:{};
+    if(typeof scAxLabel==="function") scAxLabel();
+  }
+  if(data.spec!==undefined && $("specIn")) $("specIn").value=data.spec;
   varSel=null; buildCells(); mark(); schedule(); scheduleSlow(); markEdited();
+  if(MODE==="show") scDraw();
 }
 function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(snapshot()));}catch(e){}}
 function loadLocal(){try{const s=localStorage.getItem(KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
