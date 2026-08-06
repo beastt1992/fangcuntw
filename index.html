@@ -1,4 +1,46 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+  方寸 FANGCUN — 參數化中文字型工作室
+  https://github.com/beastt1992   ·   DBeast
+
+  這個檔案用到的第三方成果與授權：
+
+  ── opentype.js （字型檔編碼）── MIT License ────────────────────────────────
+  Copyright (c) 2020 Frederik De Bleser
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+  https://github.com/opentypejs/opentype.js
+
+  ── 字形資料：GlyphWiki（グリフウィキ）─────────────────────────────────────
+  https://glyphwiki.org/
+  GlyphWiki 官方載明：登記其上的資料、文件與產生的字型，使用皆為自由無償，
+  投稿時著作權讓渡予 GlyphWiki 且不主張著作人格權，以確保自由利用不受妨礙。
+  （法律上不要求標示，這裡標示是出於敬意 —— 這個專案完全建立在它的資料之上。）
+
+  ── 校準參考（僅用於量測，未內含於本檔）──────────────────────────────────
+  Noto Sans / Serif CJK   SIL Open Font License 1.1   Google
+  全字庫正楷體 TW-Kai      中華民國國家發展委員會 CNS11643
+  KAGE engine             GPL-3.0 — 僅在開發環境作為對照組，未包含於此檔
+
+  本檔案不含任何 GPL 授權的程式碼。
+================================================================================
+-->
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -518,6 +560,15 @@
     button, .btn, .seg button, .pal, .tabs button, label, summary,
     input[type=checkbox], input[type=range]{ touch-action:manipulation }
   }
+
+  .about{border:1px solid var(--line-2);background:var(--paper-2,var(--paper));padding:12px 14px;
+    font-size:12px;line-height:1.8;color:var(--muted)}
+  .about h4{font-size:9px;font-family:var(--mono);letter-spacing:.16em;color:var(--ink);
+    margin:12px 0 3px;font-weight:400}
+  .about h4:first-child{margin-top:0}
+  .about p{margin:0}
+  .about b{color:var(--ink);font-weight:400}
+  .about em{font-style:normal;opacity:.8}
 </style>
 </head>
 <body>
@@ -781,8 +832,28 @@
   <div class="modal" id="qamodal">
     <div class="sheet" style="width:min(880px,100%)">
       <header><b>自我檢查</b><span>REGRESSION</span>
-        <button class="btn ghost sm" id="qaClose" type="button" style="margin-left:auto">關閉</button></header>
+        <button class="btn ghost sm" id="qaAbout" type="button" style="margin-left:auto">關於／授權</button>
+        <button class="btn ghost sm" id="qaClose" type="button">關閉</button></header>
       <div class="body">
+        <div class="about" id="aboutBox" hidden>
+          <h4>方寸 FANGCUN</h4>
+          <p>參數化中文字型工作室。存骨架不存輪廓，一根滑桿改一萬三千字。</p>
+          <h4>字形資料</h4>
+          <p><b>GlyphWiki（グリフウィキ）</b> · glyphwiki.org<br>
+            官方載明：登記其上的資料、文件與產生的字型，使用皆為自由無償。
+            投稿時著作權讓渡予 GlyphWiki 且不主張著作人格權，以確保自由利用不受妨礙。<br>
+            <em>法律上不要求標示。這裡標示是出於敬意 —— 這個專案完全建立在它的資料之上。</em></p>
+          <h4>程式庫</h4>
+          <p><b>opentype.js</b> — MIT License · Copyright (c) 2020 Frederik De Bleser<br>
+            用於把輪廓編碼成 OTF 字型檔。完整授權條文在本檔原始碼開頭。</p>
+          <h4>校準參考（僅用於量測，未內含於本檔）</h4>
+          <p>Noto Sans / Serif CJK（SIL OFL 1.1, Google）· 全字庫正楷體 TW-Kai（國發會 CNS11643）<br>
+            KAGE engine（GPL-3.0）僅在開發環境作為對照組，<b>未包含於此檔</b>，
+            所以本檔不受 GPL 拘束。</p>
+          <h4>你做出來的字型</h4>
+          <p>依 GlyphWiki 的授權，<b>匯出的字型是你的，可以自由使用、散布、商用。</b><br>
+            這不是法律意見；有疑慮請自行確認 glyphwiki.org 的授權頁面。</p>
+        </div>
         <p class="tip">拿一組固定的字（涵蓋辶阝訁氵忄扌亻糹門和標點）跑一遍，檢查有沒有空輪廓、NaN、爆框。<br>
           按「存成基準」記下現在的數字；之後任何人改過的版本回來，再跑一次就知道**哪個字變了、變多少**。</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3779,10 +3850,28 @@ function scSetMove(on){
 }
 $("scMoveOn").addEventListener("click",()=>scSetMove(!scMoveMode));
 $("scMoveClr").addEventListener("click",()=>{ scOff={}; scDraw(); });
+/* 種子只有「錯位 / 粗細不均 / 書寫感」三根軸會吃。三根都是 0 的話，
+   重骰在數學上完全沒有作用 —— 按了畫面不會有任何變化，看起來就像壞掉。
+   所以三根都關著時，第一次按先給一點量，讓它真的會動。 */
+const RND_AXES=["scatter","wobble","hand"];
+const rndOff=()=>RND_AXES.every(k=>(F[k]||0)<0.01);
+function scSeedLabel(){
+  const el2=$("scSeedV"); if(!el2) return;
+  el2.textContent = rndOff() ? "尚未開啟隨機" : "種子 "+F.seed;
+}
 $("scReroll").addEventListener("click",()=>{
+  const wasOff=rndOff();
+  if(wasOff){                       /* 先開一點，不然按了沒反應 */
+    F.scatter=0.26; F.wobble=0.34;
+    presetKey=null;
+    document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
+    document.querySelectorAll("#scPreset button").forEach(x=>x.classList.remove("on"));
+  }
   F.seed=1+Math.floor(Math.random()*999);
-  $("scSeedV").textContent="種子 "+F.seed;
+  scSeedLabel();
   syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+  if(wasOff) $("scHint").textContent=
+    "已開啟錯位與粗細不均 —— 再按「重骰」會換一組隨機；在「更多」裡可以調強弱或關掉";
 });
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
@@ -4527,6 +4616,7 @@ function scBuildPresets(){
     seg.appendChild(b);
   }
   document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
+  if(typeof scSeedLabel==="function") scSeedLabel();
 }
 $("scReset").addEventListener("click",()=>{
   if(scAxMode&&scAxKey){                 /* 單字模式：只清這個字 */
@@ -4537,6 +4627,12 @@ $("scReset").addEventListener("click",()=>{
   scAxOvr={};                            /* 全域重設也把所有單字設定清掉 */
   document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
   scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+});
+
+
+$("qaAbout").addEventListener("click",()=>{
+  const b=$("aboutBox"); b.hidden=!b.hidden;
+  $("qaAbout").textContent=b.hidden?"關於／授權":"收起";
 });
 
 /* ---- 分頁切換 ---- */
