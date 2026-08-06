@@ -255,6 +255,32 @@
   .schint{position:absolute;left:14px;bottom:10px;font-family:var(--mono);font-size:10px;
     letter-spacing:.1em;color:var(--sink,#2a2118);opacity:.45;pointer-events:none;
     max-width:calc(100% - 28px)}
+
+  /* ---------- 展示頁：可收合的設計軸面板 ---------- */
+  .scrow{display:flex;gap:10px;align-items:center;width:100%}
+  .scrow textarea{flex:1;min-width:0}
+  .scdisc{display:flex;align-items:center;gap:6px;flex:none}
+  .scdisc i{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid currentColor;transition:transform .18s}
+  .scdisc[aria-expanded="true"] i{transform:rotate(180deg)}
+  .scaxes{width:100%;border-top:1px solid var(--line);margin-top:9px;padding-top:9px}
+  .scpanel{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:var(--paper-2,var(--paper))}
+  .scpanel>.g{display:flex;align-items:center;gap:7px}
+  .scpanel label{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)}
+  @media (pointer:coarse){ .scpanel{gap:11px;padding:10px 12px} }
+  .scaxhead{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap}
+  .scgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(206px,1fr));
+    gap:3px 18px;max-height:34vh;overflow:auto}
+  .scax{display:flex;align-items:center;gap:9px;padding:3px 0}
+  .scax label{font-size:11.5px;color:var(--muted);white-space:nowrap;width:52px;flex:none}
+  .scax input[type=range]{flex:1;min-width:60px}
+  .scax b{font-family:var(--mono);font-size:10px;color:var(--ink);width:44px;text-align:right;flex:none;font-weight:400}
+  @media (pointer:coarse){
+    .scgrid{grid-template-columns:1fr;max-height:38vh;gap:0}
+    .scax label{width:56px;font-size:12.5px}
+    .scax{padding:5px 0}
+  }
   .scfoot{display:flex;align-items:center;gap:11px;padding:0 14px;height:50px;
     border-top:1px solid var(--ink);background:var(--paper)}
   .scfoot textarea{flex:1;min-width:80px;height:34px;min-height:34px;max-height:96px;resize:vertical;
@@ -539,6 +565,12 @@
         <div class="seg" id="scLayout">
           <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button><button data-k="line">排句</button>
         </div></div>
+      <button class="btn ghost sm scdisc" id="scPalBtn" type="button" aria-expanded="false">
+        <span id="scPalT">配色</span><i></i></button>
+      <span class="spacer"></span>
+      <button class="btn sm" id="scPNG" type="button">存 PNG</button>
+    </div>
+    <div class="scpanel" id="scPalPanel" hidden>
       <div class="g"><label>上色</label>
         <div class="seg" id="scColor">
           <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
@@ -549,20 +581,30 @@
         <div class="seg" id="scBlend"><button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div>
       </div>
       <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
-      <span class="spacer"></span>
-      <button class="btn ghost sm" id="scClear" type="button">清除個別配色</button>
-      <button class="btn ghost sm" id="scSVG" type="button">存 SVG</button>
-      <button class="btn sm" id="scPNG" type="button">存 PNG</button>
+      <div class="g">
+        <button class="btn ghost sm" id="scClear" type="button">清除個別配色</button>
+        <button class="btn ghost sm" id="scSVG" type="button">存 SVG</button>
+      </div>
     </div>
     <div class="scstage" id="scStage">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="schint" id="scHint">點任何一個字可以單獨換色</div>
     </div>
     <div class="scfoot">
-      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">森林</textarea>
-      <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
-      <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
-      <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
+      <div class="scrow">
+        <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">森林</textarea>
+        <button class="btn ghost sm scdisc" id="scMore" type="button" aria-expanded="false">
+          <span id="scMoreT">設計軸</span><i></i></button>
+        <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
+      </div>
+      <div class="scaxes" id="scAxes" hidden>
+        <div class="scaxhead">
+          <div class="seg" id="scPreset"></div>
+          <span class="spacer"></span>
+          <button class="btn ghost sm" id="scReset" type="button">回到預設</button>
+        </div>
+        <div class="scgrid" id="scGrid"></div>
+      </div>
     </div>
   </section>
 
@@ -2529,10 +2571,83 @@ function drawSpec(){
   s.scrollLeft=0;
 }
 
-function syncShowAxes(){
-  if($("scWt")) $("scWt").value=F.weight;
-  if($("scRd")) $("scRd").value=F.round;
+/* ---------- 展示頁的設計軸面板 ----------
+   跟工作台共用同一張 AXES 表，所以新增軸不用改兩個地方。
+   預設收起來，畫布才不會被吃掉；展開狀態記在 localStorage。 */
+function buildShowAxes(){
+  const grid=$("scGrid"); if(!grid||grid.childElementCount) return;
+  for(const a of AXES){
+    const row=document.createElement("div"); row.className="scax";
+    const lb=document.createElement("label"); lb.textContent=a.n; row.appendChild(lb);
+    const r=document.createElement("input");
+    r.type="range"; r.min=a.min; r.max=a.max; r.step=a.step; r.value=F[a.k];
+    r.dataset.k=a.k; r.id="scax_"+a.k;
+    row.appendChild(r);
+    const v=document.createElement("b"); v.id="scaxv_"+a.k; v.textContent=a.f(F[a.k]);
+    row.appendChild(v);
+    r.addEventListener("input",e=>{
+      F[a.k]=+e.target.value;
+      v.textContent=a.f(F[a.k]);
+      presetKey=null;
+      document.querySelectorAll("#scPreset button").forEach(x=>x.classList.remove("on"));
+      document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
+      scDraw(); scheduleSlow(); saveLocal();
+    });
+    grid.appendChild(row);
+  }
+  const seg=$("scPreset");
+  if(seg && !seg.childElementCount){
+    for(const k of Object.keys(PRESETS)){
+      const b=document.createElement("button");
+      b.type="button"; b.dataset.p=k; b.textContent=PNAME[k]||k;
+      b.addEventListener("click",()=>{
+        Object.assign(F,PRESETS[k]); presetKey=k;
+        document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
+        document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
+        syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+      });
+      seg.appendChild(b);
+    }
+  }
 }
+function syncShowAxes(){
+  buildShowAxes();
+  for(const a of AXES){
+    const r=$("scax_"+a.k), v=$("scaxv_"+a.k);
+    if(r) r.value=F[a.k];
+    if(v) v.textContent=a.f(F[a.k]);
+  }
+  document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
+}
+const SCOPEN="fangcun-scaxes-open";
+function setShowAxes(open){
+  const box=$("scAxes"), btn=$("scMore");
+  if(!box||!btn) return;
+  box.hidden=!open;
+  btn.setAttribute("aria-expanded",open?"true":"false");
+  $("scMoreT").textContent=open?"收起":"設計軸";
+  try{ localStorage.setItem(SCOPEN,open?"1":"0"); }catch(e){}
+  if(open) syncShowAxes();
+}
+$("scMore").addEventListener("click",()=>setShowAxes($("scAxes").hidden));
+const SCPAL_KEY="fangcun-scpal-open";
+function setPalPanel(open){
+  const box=$("scPalPanel"), btn=$("scPalBtn");
+  if(!box||!btn) return;
+  box.hidden=!open;
+  btn.setAttribute("aria-expanded",open?"true":"false");
+  $("scPalT").textContent=open?"收起":"配色";
+  try{ localStorage.setItem(SCPAL_KEY,open?"1":"0"); }catch(e){}
+}
+$("scPalBtn").addEventListener("click",()=>setPalPanel($("scPalPanel").hidden));
+try{
+  setPalPanel(localStorage.getItem(SCPAL_KEY)==="1");
+  if(localStorage.getItem(SCOPEN)==="1") setShowAxes(true);
+}catch(e){}
+$("scReset").addEventListener("click",()=>{
+  Object.assign(F,PRESETS[presetKey]||PRESETS.hei);
+  syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+});
 $("presets").addEventListener("click",e=>{
   const b=e.target.closest("button[data-p]");if(!b)return;
   Object.assign(F,PRESETS[b.dataset.p]); presetKey=b.dataset.p;   /* simp 不在預設裡，保持不變 */
@@ -3350,8 +3465,6 @@ $("scTxt").addEventListener("keydown",e=>{
 });
 $("scTxt").addEventListener("input",()=>{scOvr={};scFitInput();scDraw();});
 $("scClear").addEventListener("click",()=>{scOvr={};scDraw();});
-$("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
-$("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
 
 function scSVG(){
   const svg=$("scArt").cloneNode(true);
@@ -3497,7 +3610,7 @@ $("engines").addEventListener("click",e=>{
   ENGINE=b.dataset.e;
   paintEngineUI();
   buildCells(); mark(); schedule(); scheduleSlow();
-  if(MODE==="show") scDraw();
+  if(MODE==="show"){ buildShowAxes(); scDraw(); }
 });
 
 
