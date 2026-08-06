@@ -619,6 +619,9 @@
         <div class="sclay-g"><label>自訂色</label>
           <input type="color" id="scPick" value="#c2453a">
           <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
+        <div class="sclay-g"><label>隨機</label>
+          <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
+          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
         <div class="sclay-g"><label>搬字</label>
           <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
           <button class="btn ghost sm" id="scMoveClr" type="button">歸位</button></div>
@@ -793,10 +796,12 @@ const EM=1000, ASC=880, DESC=-120;
    對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
 const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
          width:1.00,slant:0.00,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,
+         seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
-               'width','slant','taper','hook','dun','press','rise'];
+               'width','slant','taper','hook','dun','press','rise',
+               'seed','scatter','wobble','spike','hollow'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1405,6 +1410,17 @@ function baseWidthAt(st,t,tan,f){
 }
 function widthAt(st,t,tan,f){
   let w=baseWidthAt(st,t,tan,f)*pressAt(st.t,t,f);
+  if(f.spike>0){
+    const g=Math.min(1,f.spike), e=0.30*g;         /* 兩端各 30% 收成尖 */
+    if(t<e)   w*= 1-g*(1-Math.pow(t/e,0.75));
+    if(t>1-e) w*= 1-g*(1-Math.pow((1-t)/e,0.75));
+  }
+  if(f.wobble>0){
+    /* 粗細不均：整筆一個倍率，加上沿筆長的緩慢起伏 —— 手寫／毛筆的隨性感 */
+    const sd=(st.seed||1)+(f.seed|0)*331;
+    w*= 1 + rnd(sd*1.31)*f.wobble*0.42
+         + Math.sin(t*Math.PI*(1.5+rnd(sd*2.7)*0.8)+rnd(sd*3.3)*3)*f.wobble*0.18;
+  }
   /* KAGE 頭尾語意是修飾層，不再取代撇／捺／點／提本身的粗細邏輯。 */
   if(st.h) w*=endFactor(st.h,t,f,st,false);
   if(st.e) w*=endFactor(st.e,1-t,f,st,true);
@@ -1426,6 +1442,7 @@ function caps(st,f){
     /* 明體：橫畫開放的收筆長出三角（うろこ） */
     const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
     const ha = (st.h==="point" && f.finish<=0.3) ? r : (CAP_OF[st.h] || r);
+    if(f.spike>0.02) return {a:"pt", b:"pt"};
     return {a: ha, b: uroko ? "uroko" : (CAP_OF[st.e] || r)};
   }
   switch(st.t){
@@ -1555,6 +1572,16 @@ function strokeOutline(st,f,wScale,NS){
     ? hw*(0.035+0.28*f.round)*(st.fr||1)
     : hw*(0.10+0.62*f.round)*(st.fr||1);
   let SP=st.p;
+  if(f.spike>0 && st.p.length>1){
+    /* 尖角：兩端沿切線衝出去，寬度收成尖。標準字那種銳利流線感就是這個。 */
+    SP=SP.map(q=>q.slice());
+    const m=SP.length-1;
+    const ext=hw*f.spike*1.05;
+    const d0=unit([SP[0][0]-SP[1][0], SP[0][1]-SP[1][1]]);
+    const d1=unit([SP[m][0]-SP[m-1][0], SP[m][1]-SP[m-1][1]]);
+    SP[0]=[SP[0][0]+d0[0]*ext, SP[0][1]+d0[1]*ext];
+    SP[m]=[SP[m][0]+d1[0]*ext, SP[m][1]+d1[1]*ext];
+  }
   if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"||st.hj||st.ej){
     SP=st.p.map(q=>q.slice());
     /* 延伸量按該筆、該端和部件縮放計算；舊版固定用全域半筆寬，小偏旁會突出。 */
@@ -1633,6 +1660,14 @@ function strokeContours(st,f,wScale,NS){
   if(st.t==="dot"){
     const [cx,cy]=st.p[0];
     return [orient(circleContour(cx,cy,hw*(st.rk||1)*wScale),-1)];
+  }
+  if(f.hollow>0.01){
+    /* 中空：同一條骨架畫兩次，內圈用反向繞向挖掉 —— 線框標準字 */
+    const outer=strokeOutline(st,f,wScale,NS);
+    const {hw:HW}=widths(f);
+    const ring=Math.max(0.10,1-f.hollow);           /* 內圈相對外圈的寬度 */
+    const inner=strokeOutline({...st,w:(st.w||1)*ring},f,wScale,NS);
+    return [outer, inner.slice().reverse()];
   }
   return [strokeOutline(st,f,wScale,NS)];
 }
@@ -1811,13 +1846,23 @@ function warpStroke(st,f){
     p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa, c[1]+(x-c[0])*sa+(y-c[1])*ca]);
   }
   if(st.t==="heng"&&f.finish>0&&p.length===2) p[1]=[p[1][0],p[1][1]+f.finish*13];
+  if(f.scatter>0&&p.length>1){
+    /* 錯位：整筆往隨機方向推開並微轉。做標準字時的「散排」效果。 */
+    const sd=st.seed+(f.seed|0)*977;
+    const dx=rnd(sd*1.7)*f.scatter*90, dy=rnd(sd*2.3+11)*f.scatter*90;
+    const a=rnd(sd*3.1+29)*f.scatter*0.16;
+    const c=[p.reduce((s2,q)=>s2+q[0],0)/p.length, p.reduce((s2,q)=>s2+q[1],0)/p.length];
+    const ca=Math.cos(a), sa=Math.sin(a);
+    p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa+dx, c[1]+(x-c[0])*sa+(y-c[1])*ca+dy]);
+  }
   if(f.hand>0&&p.length>1){
-    const a=rnd(st.seed)*f.hand*0.05;
+    const sdH=st.seed+(f.seed|0)*613;
+    const a=rnd(sdH)*f.hand*0.05;
     const c=[p.reduce((s,q)=>s+q[0],0)/p.length,p.reduce((s,q)=>s+q[1],0)/p.length];
-    const j=[rnd(st.seed+11)*f.hand*16,rnd(st.seed+29)*f.hand*16];
+    const j=[rnd(sdH+11)*f.hand*16,rnd(sdH+29)*f.hand*16];
     const ca=Math.cos(a),sa=Math.sin(a);
     p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa+j[0],c[1]+(x-c[0])*sa+(y-c[1])*ca+j[1]]);
-    bend+=rnd(st.seed+53)*f.hand*0.055;
+    bend+=rnd(sdH+53)*f.hand*0.055;
     hp={a,c,j};
   }
   return {...st,p,bend,hp};
@@ -2057,16 +2102,22 @@ const AXES=[
   {k:"hook",    n:"鉤長",  en:"HOOK",    min:0,   max:2.6, step:0.02,lo:"短",  hi:"長",  f:v=>v.toFixed(2)},
   {k:"dun",     n:"頓",    en:"DUN",     min:0,   max:1.4, step:0.02,lo:"無",  hi:"重",  f:v=>v.toFixed(2)},
   {k:"press",   n:"提按",  en:"PRESSURE",min:0,   max:1.4, step:0.02,lo:"等粗",hi:"書法",f:v=>v.toFixed(2)},
-  {k:"rise",    n:"斜勢",  en:"RISE",    min:0, max:0.16, step:0.002,lo:"水平",hi:"右上",f:v=>((+v)*57.3).toFixed(1)+"°"}
+  {k:"rise",    n:"斜勢",  en:"RISE",    min:0, max:0.16, step:0.002,lo:"水平",hi:"右上",f:v=>((+v)*57.3).toFixed(1)+"°"},
+  /* ---- 以下是「風格化」軸：目的是做標準字，會大幅改變字形，不是微調 ---- */
+  {k:"seed",    n:"隨機種子",en:"SEED",   min:1,   max:999, step:1,   lo:"",   hi:"",    f:v=>String(v|0)},
+  {k:"scatter", n:"錯位",  en:"SCATTER", min:0,   max:1.2, step:0.02,lo:"整齊",hi:"散亂",f:v=>(+v).toFixed(2)},
+  {k:"wobble",  n:"粗細不均",en:"WOBBLE", min:0,  max:1.0, step:0.02,lo:"均勻",hi:"隨性",f:v=>(+v).toFixed(2)},
+  {k:"spike",   n:"尖角",  en:"SPIKE",   min:0,   max:1.4, step:0.02,lo:"無",  hi:"銳利",f:v=>(+v).toFixed(2)},
+  {k:"hollow",  n:"中空",  en:"HOLLOW",  min:0,   max:0.9, step:0.02,lo:"實心",hi:"線框",f:v=>(+v).toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
-  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25,rise:0.045},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95,rise:0.100},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00},
+  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.50,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.60,dun:1.00,press:1.00,rise:0.114},
+  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.60,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00},
   kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
@@ -3529,6 +3580,11 @@ function scSetMove(on){
 }
 $("scMoveOn").addEventListener("click",()=>scSetMove(!scMoveMode));
 $("scMoveClr").addEventListener("click",()=>{ scOff={}; scDraw(); });
+$("scReroll").addEventListener("click",()=>{
+  F.seed=1+Math.floor(Math.random()*999);
+  $("scSeedV").textContent="種子 "+F.seed;
+  syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+});
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
     const b=e.target.closest("button[data-k]"); if(!b) return;
@@ -3681,7 +3737,7 @@ $("subGo").addEventListener("click",()=>{
 const ENGINE_REF={weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
                   gravity:1.00,face:1.00,hand:0.00,finish:0.00,
                   width:1.00,slant:0.00,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-                  miter:0};
+                  seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,miter:0};
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
