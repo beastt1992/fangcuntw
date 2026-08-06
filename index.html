@@ -494,7 +494,6 @@
     <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
     <button class="btn ghost sm" id="btnSubset" type="button">挑字匯出</button>
     <button class="btn ghost sm" id="btnSVG2" type="button">向量匯出</button>
-    <button class="btn ghost sm" id="btnFam" type="button">匯出字族</button>
     <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
     <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
@@ -702,17 +701,27 @@
 
   <div class="modal" id="fammodal">
     <div class="sheet" style="width:min(700px,100%)">
-      <header><b>匯出字族</b><span>FAMILY</span>
+      <header><b>匯出 OTF</b><span>EXPORT</span>
         <button class="btn ghost sm" id="famClose" type="button" style="margin-left:auto">關閉</button></header>
       <div class="body">
-        <p class="tip">一次做出多個字重，name 表寫成同一個家族。<br>
-          裝好之後在 Word、InDesign 裡會併成一個字型，直接切粗細，不是四個獨立字型。</p>
+        <p class="tip">勾一個就是單一字重；勾多個會做成同一個字族 —— name 表寫在一起，
+          裝好之後 Word、InDesign 只會看到一個字型，用粗細選單切換。</p>
         <div id="famList"></div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:10px;
+                    padding-top:10px;border-top:1px solid var(--line)">
+          <div class="g"><label style="font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)">字數</label>
+            <input type="number" id="famN" min="1" step="1"
+              style="width:92px;font-family:var(--mono);font-size:12px;padding:5px 7px;
+                     background:var(--paper);border:1px solid var(--line-2);color:var(--ink)"></div>
+          <div class="g"><label style="font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted)">精度</label>
+            <input type="range" id="famNS" min="6" max="30" step="1" value="30" style="width:110px">
+            <b id="famNSV" style="font-family:var(--mono);font-size:10px;font-weight:400">30</b></div>
+        </div>
         <p class="tip" id="famStat">—</p>
       </div>
       <footer>
-        <span class="tip">字型名稱用左欄那兩格。每個字重都是完整字集，會跑一陣子。</span>
-        <button class="btn grow" id="famGo" type="button">開始匯出</button>
+        <span class="tip">字型名稱用左欄那兩格。精度 30 就是最高，輪廓已自動化簡，不用調。</span>
+        <button class="btn grow" id="famGo" type="button">匯出</button>
       </footer>
     </div>
   </div>
@@ -2804,7 +2813,7 @@ $("btnResetAxes").addEventListener("click",()=>{
   if(MODE==="show") scDraw(); else schedule();
   scheduleSlow(); saveLocal();
 });
-$("btnExport").addEventListener("click",exportBig);
+$("btnExport").addEventListener("click",()=>{ $("fammodal").classList.add("on"); famBuildUI(); famStat(); });
 $("specIn").addEventListener("input",drawSpec);
 $("btnSave").addEventListener("click",()=>download(
   new Blob([JSON.stringify(snapshot(),null,1)],{type:"application/json"}),"strokeengine-project.json"));
@@ -3431,40 +3440,7 @@ async function buildFontBig(chars,NS,over){
       pack.map(g=>g.cmds.buffer));
   });
 }
-async function exportBig(){
-  const chars=ALL.filter(id=>G[id]&&G[id].u);
-  if(chars.length<400){ exportFont(); return; }        /* 少量就走同步的舊路徑 */
-  const q=prompt("要匯出幾個字？（共 "+chars.length.toLocaleString()+" 個）\n\n"+
-    "輪廓已自動化簡，精度直接用 30（最高）就好。\n"+
-    "實測：5,500 字約 15 秒 / 3 MB；13,000 字約 70 秒 / 7 MB。\n\n"+
-    "格式：字數,精度", chars.length+",30");
-  if(!q) return;
-  const [nRaw,pRaw]=q.split(",");
-  const n=Math.max(1,Math.min(chars.length,parseInt(nRaw,10)||chars.length));
-  const NS=Math.max(6,Math.min(30,parseInt(pRaw,10)||30));
-  const t0=Date.now();
-  busy(true,"建置字型","準備中…",0);
-  try{
-    const buf=await buildFontBig(chars.slice(0,n),NS);
-    /* 下載前先驗檔頭，免得給出一個 Windows 說「不是有效字型檔」的東西 */
-    const h=new Uint8Array(buf,0,4);
-    const otto=h[0]===0x4F&&h[1]===0x54&&h[2]===0x54&&h[3]===0x4F;   /* 'OTTO' */
-    const ttf =h[0]===0x00&&h[1]===0x01&&h[2]===0x00&&h[3]===0x00;
-    if(buf.byteLength<2000||!(otto||ttf))
-      throw new Error("產出的檔案不完整（"+buf.byteLength+" bytes）");
-    busy(true,undefined,"完成，下載中…",100);
-    const safe=asciiSafe(LATIN)||"FangcunHei";
-    const fn=safe+"-"+(presetKey?PNAME_EN[presetKey]:"Custom")+"-"+n+".otf";
-    download(new Blob([buf],{type:"font/otf"}), fn);
-    busy(false);
-    setTimeout(()=>alert(
-      "完成\n\n檔名："+fn+
-      "\n字數："+n.toLocaleString()+
-      "\n大小："+buf.byteLength.toLocaleString()+" bytes （"+(buf.byteLength/1048576).toFixed(2)+" MB）"+
-      "\n耗時："+((Date.now()-t0)/1000).toFixed(0)+" 秒"+
-      "\n\n請在檔案總管對下載的檔案按右鍵→內容，確認大小一樣。\n不一樣就是下載被截斷了，重按一次匯出。"),400);
-  }catch(e){ busy(false); alert("建置失敗："+e.message+"\n\n試試看減少字數或降低精度。"); }
-}
+/* 舊的單一字重匯出已併進「匯出 OTF」視窗，函式移除 */
 
 
 /* ==========================================================================
@@ -4229,11 +4205,11 @@ function drawUsage(){
    ========================================================================== */
 const FAMILY_STYLES=[
   {k:"Thin",       tw:"極細", w:100, mul:0.46, on:false},
-  {k:"Light",      tw:"細",   w:300, mul:0.70, on:true },
+  {k:"Light",      tw:"細",   w:300, mul:0.70, on:false},
   {k:"Regular",    tw:"標準", w:400, mul:1.00, on:true },
   {k:"Medium",     tw:"中黑", w:500, mul:1.22, on:false},
-  {k:"Bold",       tw:"粗",   w:700, mul:1.55, on:true },
-  {k:"Black",      tw:"特粗", w:900, mul:2.00, on:true }
+  {k:"Bold",       tw:"粗",   w:700, mul:1.55, on:false},
+  {k:"Black",      tw:"特粗", w:900, mul:2.00, on:false}
 ];
 function famBuildUI(){
   const box=$("famList"); if(!box||box.childElementCount) return;
@@ -4256,20 +4232,30 @@ function famBuildUI(){
 }
 function famStat(){
   const n=FAMILY_STYLES.filter(s=>s.on).length;
-  const chars=ALL.filter(id=>G[id]&&G[id].u).length;
+  const total=ALL.filter(id=>G[id]&&G[id].u).length;
+  const el=$("famN");
+  if(el && !el.value) el.value=total;
+  if(el){ el.max=total; }
+  const cnt=Math.max(1,Math.min(total,parseInt(el?el.value:total,10)||total));
   $("famStat").innerHTML = n
-    ? "選了 <b>"+n+"</b> 個字重 × "+chars.toLocaleString()+" 字。滑桿是相對目前字重（"+F.weight+"）的倍率。"
+    ? "<b>"+n+"</b> 個字重 × "+cnt.toLocaleString()+" 字"+
+      (n>1?"（會做成同一個字族）":"")+"。滑桿是相對目前字重（"+F.weight+"）的倍率。"
     : "至少選一個字重";
   $("famGo").disabled = n===0;
 }
-$("btnFam").addEventListener("click",()=>{ $("fammodal").classList.add("on"); famBuildUI(); famStat(); });
+$("famN")&&$("famN").addEventListener("input",famStat);
+$("famNS")&&$("famNS").addEventListener("input",e=>{ $("famNSV").textContent=e.target.value; });
+
 $("famClose").addEventListener("click",()=>$("fammodal").classList.remove("on"));
 $("fammodal").addEventListener("click",e=>{ if(e.target===$("fammodal")) $("fammodal").classList.remove("on"); });
 
 async function famExport(){
   const picked=FAMILY_STYLES.filter(s=>s.on);
   if(!picked.length||!HAS_OT) return;
-  const ids=ALL.filter(id=>G[id]&&G[id].u);
+  const all=ALL.filter(id=>G[id]&&G[id].u);
+  const want=Math.max(1,Math.min(all.length,parseInt($("famN").value,10)||all.length));
+  const NS=Math.max(6,Math.min(30,parseInt($("famNS").value,10)||30));
+  const ids=all.slice(0,want);
   const fam=(FAMILY||"").trim()||"方寸黑體";
   const lat=asciiSafe(LATIN)||"FangcunHei";
   $("fammodal").classList.remove("on");
@@ -4279,19 +4265,23 @@ async function famExport(){
     busy(true,"匯出字族",st.tw+"（"+(i+1)+"/"+picked.length+"）…",Math.round(i/picked.length*100));
     await yield_();
     const f={...F,weight:Math.max(8,Math.round(F.weight*st.mul))};
-    const buf=await buildFontBig(ids,30,{f,styleTW:st.tw,styleEN:st.k,usWeight:st.w});
+    const buf=await buildFontBig(ids,NS,{f,styleTW:st.tw,styleEN:st.k,usWeight:st.w});
     const h=new Uint8Array(buf,0,4);
     if(buf.byteLength<2000||!(h[0]===0x4F&&h[1]===0x54&&h[2]===0x54&&h[3]===0x4F)){
       alert(st.tw+" 產出的檔案不完整，跳過"); continue;
     }
-    download(new Blob([buf],{type:"font/otf"}), lat+"-"+st.k+".otf");
+    download(new Blob([buf],{type:"font/otf"}),
+      lat+"-"+st.k+(picked.length===1?"-"+ids.length:"")+".otf");
     done.push(st.tw);
     await new Promise(r=>setTimeout(r,1200));   /* 讓瀏覽器把上一個下載處理完 */
   }
   busy(false);
-  setTimeout(()=>alert("字族匯出完成\n\n"+done.join("、")+"\n\n"+
-    "全部安裝之後，Word 或 InDesign 的字型清單裡只會看到一個「"+fam+
-    "」，粗細用一般的字重選單切換。"),400);
+  setTimeout(()=>alert(picked.length===1
+    ? "匯出完成\n\n"+done[0]+" · "+ids.length.toLocaleString()+" 字\n\n"+
+      "請在檔案總管對下載的檔案按右鍵→內容，確認大小正常。"
+    : "字族匯出完成\n\n"+done.join("、")+"\n\n"+
+      "全部安裝之後，Word 或 InDesign 的字型清單裡只會看到一個「"+fam+
+      "」，粗細用一般的字重選單切換。"),400);
 }
 $("famGo").addEventListener("click",()=>famExport().catch(e=>{busy(false);alert("匯出失敗："+e.message);}));
 
