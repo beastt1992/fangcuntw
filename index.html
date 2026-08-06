@@ -469,6 +469,14 @@
   .famrow input[type=range]{flex:1;min-width:70px}
   .famrow em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink);width:34px;text-align:right}
   @media (pointer:coarse){ .famrow{padding:9px 0} .famrow input[type=checkbox]{width:20px;height:20px} }
+
+  /* 視窗在手機上要避開 home indicator，而且只有 .body 負責捲動 ——
+     內層元素若各自有捲軸，手指會捲到它裡面去，外層就卡住不動。 */
+  .sheet .body{overscroll-behavior:contain}
+  @media (pointer:coarse){
+    .sheet footer{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+    .sheet{max-height:min(92dvh, 92svh)}
+  }
 </style>
 </head>
 <body>
@@ -1417,7 +1425,21 @@ function endFactor(kind,x,f,st,isTail){
     }
     /* 鉤末端原本只剩兩成筆寬，細到看不出來。提高下限並放慢收細，
        讓它讀得出是一個鉤，而不是一根鬚。 */
-    case "hook":   return Math.max(0.46,1-0.60*Math.pow(1-x,1.70));
+    case "hook":{
+      /* 鵝頭：實測 Noto Serif／Noto Sans／標楷體的「亅」，
+         筆身都是平的 1.00，到轉折處反而**鼓到 2.5–3.5 倍**，再收成尖。
+         我原本是「一路遞減、轉折處最細 0.69」—— 剛好相反。
+         x = 距離這一端的比例（0 在鉤尖，1 在另一端）。
+         appendKageTail 加了 5 個點，約佔參數範圍的 13%，所以鉤身在 x<0.15。 */
+      const BULGE=0.15;                       /* 頓的位置 */
+      if(x>0.30) return 1;                    /* 筆身維持等粗 */
+      if(x>=BULGE){                           /* 進轉折前先頓出來 */
+        const u=(0.30-x)/(0.30-BULGE);
+        return 1+0.34*u*u;
+      }
+      const u=x/BULGE;                        /* 鉤身：從頓收到尖 */
+      return Math.max(0.26,0.26+1.08*Math.pow(u,0.80));
+    }
     case "bend":   return 0.74+0.26*Math.pow(x,0.60);  /* 彎尾略收，但不畫成鉤 */
     case "kakato": return 1+0.08*Math.pow(1-x,2);      /* 腳跟靠端點微微加厚 */
     default:       return 1;
@@ -4084,16 +4106,17 @@ function svScan(){
     ? "<b>"+n+"</b> 個字"+(miss.length?"　·　字庫沒有："+miss.slice(0,10).join(" "):"")
     : ($("svTxt").value.trim()? "這些字字庫裡都沒有" : "貼上文字");
   $("svGo").disabled = n===0;
+  if($("svAnim")) $("svAnim").disabled = n===0;
   /* 預覽 */
   const wrap=$("svPrev"); wrap.textContent="";
   if(!n) return;
   const {svg}=svBuild(true);
   const box=document.createElement("div");
-  box.style.cssText="border:1px solid var(--line-2);background:var(--paper);padding:10px;overflow:auto";
+  box.style.cssText="border:1px solid var(--line-2);background:var(--paper);padding:10px;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain";
   box.innerHTML=svg;
   const el2=box.querySelector("svg");
   if(el2){ el2.removeAttribute("width"); el2.removeAttribute("height");
-           el2.style.cssText="max-width:100%;height:auto;max-height:34vh;display:block;margin:0 auto"; }
+           el2.style.cssText="max-width:100%;height:auto;max-height:26vh;display:block;margin:0 auto"; }
   wrap.appendChild(box);
 }
 
