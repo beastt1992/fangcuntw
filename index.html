@@ -431,6 +431,24 @@
     .scmore-ax{padding:6px 0}
     .scmore-ax label{width:60px;font-size:12.5px}
   }
+
+  /* ---------- 展示頁排版控制（只新增 .sclay* 三個 class） ---------- */
+  .sclay{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+    gap:2px 18px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  .sclay-g{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}
+  .sclay-g>label{font-size:11.5px;color:var(--muted);white-space:nowrap;width:54px;flex:none}
+  .sclay-g input[type=range]{flex:1;min-width:70px}
+  .sclay-g>b{font-family:var(--mono);font-size:10px;color:var(--ink);
+    width:44px;text-align:right;flex:none;font-weight:400}
+  .sclay-g input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line-2);
+    background:var(--paper);cursor:pointer;flex:none}
+  .btn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  @media (pointer:coarse){
+    .sclay{grid-template-columns:1fr;gap:0}
+    .sclay-g{padding:6px 0}
+    .sclay-g>label{width:60px;font-size:12.5px}
+    .sclay-g input[type=color]{width:44px;height:34px}
+  }
 </style>
 </head>
 <body>
@@ -586,6 +604,25 @@
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <div class="scmore" id="scMoreBox" hidden>
+      <div class="sclay">
+        <div class="sclay-g"><label>對齊</label>
+          <div class="seg" id="scAlign">
+            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
+            ><button data-k="right">靠右</button>
+          </div></div>
+        <div class="sclay-g"><label>大小</label>
+          <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
+        <div class="sclay-g"><label>字距</label>
+          <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
+        <div class="sclay-g"><label>行距</label>
+          <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
+        <div class="sclay-g"><label>自訂色</label>
+          <input type="color" id="scPick" value="#c2453a">
+          <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
+        <div class="sclay-g"><label>搬字</label>
+          <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
+          <button class="btn ghost sm" id="scMoveClr" type="button">歸位</button></div>
+      </div>
       <div class="scmore-in" id="scGrid"></div>
     </div>
   </section>
@@ -3321,6 +3358,11 @@ function scRamp(t){
 }
 const scHash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0)/4294967295;};
 
+/* ---------- 展示頁排版狀態（全部新增，不動既有變數） ---------- */
+let scAlignMode="center", scScale=1, scGxAdj=0, scGyAdj=0;
+let scPickMode=false, scMoveMode=false;
+let scCustom={};        /* key → 自訂色 */
+let scOff={};           /* key → [dx,dy] 個別位移，單位是「一個字面」 */
 function scDraw(){
   const svg=$("scArt"); svg.textContent="";
   const raw=$("scTxt").value.replace(/\r\n?/g,"\n");
@@ -3367,23 +3409,42 @@ function scDraw(){
     positions=list.map((ch,i)=>({ch,row:Math.floor(i/cols),col:i%cols}));
   }
 
-  const step=1+gap;
-  const W=cols*step-gap, H=rows*step-gap, PAD=0.08;
-  svg.setAttribute("viewBox",(-PAD)+" "+(-PAD)+" "+(W+PAD*2)+" "+(H+PAD*2));
-  const px=Math.max(320,Math.min(1500,(W+PAD*2)*Math.min(460,1500/Math.max(1,cols))));
+  const gapX=Math.max(-0.28,gap+scGxAdj), gapY=Math.max(-0.28,gap+scGyAdj);
+  const stepX=1+gapX, stepY=1+gapY;
+  const step=stepX;                       /* 舊變數名沿用，避免動到下面的程式 */
+  /* 個別位移可能把字推到框外，把 viewBox 撐開才不會被裁掉 */
+  let oMinX=0,oMaxX=0,oMinY=0,oMaxY=0;
+  for(const k in scOff){ const o=scOff[k];
+    if(o[0]<oMinX)oMinX=o[0]; if(o[0]>oMaxX)oMaxX=o[0];
+    if(o[1]<oMinY)oMinY=o[1]; if(o[1]>oMaxY)oMaxY=o[1]; }
+  const W=cols*stepX-gapX, H=rows*stepY-gapY, PAD=0.08;
+  svg.setAttribute("viewBox",(-PAD+oMinX)+" "+(-PAD+oMinY)+" "+
+    (W+PAD*2+oMaxX-oMinX)+" "+(H+PAD*2+oMaxY-oMinY));
+  const px=Math.max(200,Math.min(2600,
+    (W+PAD*2)*Math.min(460,1500/Math.max(1,cols))*scScale));
   svg.setAttribute("width",Math.round(px));
   svg.setAttribute("height",Math.round(px*(H+PAD*2)/(W+PAD*2)));
   const defs=el("defs",{}); svg.appendChild(defs);
 
+  const rowLens=[];
+  for(const q of positions) rowLens[q.row]=(rowLens[q.row]||0)+1;
   positions.forEach((it,i)=>{
-    const ch=it.ch, cx=it.col*step, cy=it.row*step;
+    const ch=it.ch;
+    /* 對齊：每一行依自己的字數在最寬那行裡靠左／置中／靠右。
+       行長度要從實際排出來的 positions 算 —— 自動換行時 lines 只有一列，拿它會算錯。 */
+    const rowLen=rowLens[it.row]||cols;
+    const slack=(cols-rowLen)*stepX;
+    const alignDx = scAlignMode==="center" ? slack/2 : (scAlignMode==="right" ? slack : 0);
+    const key0=it.row+"|"+it.col+"|"+ch;
+    const off=scOff[key0]||[0,0];
+    const cx=it.col*stepX+alignDx+off[0], cy=it.row*stepY+off[1];
     /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
     const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
     let cs=[]; try{ cs=glyphContours(ch,FA()); }catch(e){}
-    const n=Math.max(1,cs.length), key=it.row+"|"+it.col+"|"+ch, ov=scOvr[key];
+    const n=Math.max(1,cs.length), key=key0, ov=scOvr[key], cust=scCustom[key];
     let ref=null;
-    if(scCol==="charGrad"||scCol==="pageGrad"){
+    if((scCol==="charGrad"||scCol==="pageGrad") && !cust){
       const id="scg"+(scSeq++);
       const lg=el("linearGradient",{id,x1:"0",y1:"1",x2:"1",y2:"0"});
       const t0=scCol==="pageGrad"? i/Math.max(1,positions.length-1||1) : 0;
@@ -3394,7 +3455,8 @@ function scDraw(){
     }
     cs.forEach((c,si)=>{
       let fill;
-      if(ov!==undefined && !ref) fill = scCol==="stroke" ? scPal.c[(ov+si)%scPal.c.length] : scPal.c[ov%scPal.c.length];
+      if(cust) fill=cust;
+      else if(ov!==undefined && !ref) fill = scCol==="stroke" ? scPal.c[(ov+si)%scPal.c.length] : scPal.c[ov%scPal.c.length];
       else if(ref) fill=ref;
       else if(scCol==="mono") fill=scPal.ink;
       else if(scCol==="stroke") fill=scRamp(n<2?0:si/(n-1));
@@ -3402,14 +3464,71 @@ function scDraw(){
       g.appendChild(el("path",{d:svgD(c),fill,"fill-rule":"nonzero"}));
     });
     svg.appendChild(g);
-    svg.appendChild(el("rect",{x:cx-gap/2,y:cy-gap/2,width:step,height:step,
-      fill:"transparent",cursor:"pointer","data-key":key}));
+    svg.appendChild(el("rect",{x:cx-gapX/2,y:cy-gapY/2,width:stepX,height:stepY,
+      fill:"transparent",cursor:scMoveMode?"grab":"pointer","data-key":key}));
   });
 }
 $("scArt").addEventListener("click",e=>{
+  if(scMoveMode||scDragging) return;                 /* 搬字模式不換色 */
   const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  if(scPickMode){ scCustom[k]=$("scPick").value; scDraw(); return; }
+  delete scCustom[k];                                /* 換回調色盤就清掉自訂色 */
   scOvr[k]=((scOvr[k]===undefined?-1:scOvr[k])+1)%scPal.c.length; scDraw();
 });
+
+/* ---------- 拖曳個別字 ---------- */
+let scDragging=null;
+$("scArt").addEventListener("pointerdown",e=>{
+  if(!scMoveMode) return;
+  const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  const svg=$("scArt"), box=svg.getBoundingClientRect();
+  const vb=svg.getAttribute("viewBox").split(/\s+/).map(Number);
+  const unitX=vb[2]/box.width, unitY=vb[3]/box.height;   /* 螢幕 px → 字面單位 */
+  scDragging={k,x:e.clientX,y:e.clientY,unitX,unitY,base:(scOff[k]||[0,0]).slice()};
+  svg.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+$("scArt").addEventListener("pointermove",e=>{
+  if(!scDragging) return;
+  const d=scDragging;
+  scOff[d.k]=[d.base[0]+(e.clientX-d.x)*d.unitX, d.base[1]+(e.clientY-d.y)*d.unitY];
+  scDraw();
+});
+$("scArt").addEventListener("pointerup",()=>{ scDragging=null; });
+$("scArt").addEventListener("pointercancel",()=>{ scDragging=null; });
+
+/* ---------- 排版控制 ---------- */
+$("scAlign").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-k]"); if(!b) return;
+  document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x===b));
+  scAlignMode=b.dataset.k; scDraw();
+});
+function scNum(id,vid,set,fmt){
+  $(id).addEventListener("input",e=>{
+    set(+e.target.value); $(vid).textContent=fmt(+e.target.value); scDraw();
+  });
+}
+scNum("scSize","scSizeV",v=>scScale=v,v=>v.toFixed(2));
+scNum("scGx","scGxV",v=>scGxAdj=v,v=>v===0?"預設":(v>0?"+":"")+v.toFixed(2));
+scNum("scGy","scGyV",v=>scGyAdj=v,v=>v===0?"預設":(v>0?"+":"")+v.toFixed(2));
+$("scPickOn").addEventListener("click",()=>{
+  scPickMode=!scPickMode;
+  $("scPickOn").setAttribute("aria-pressed",scPickMode?"true":"false");
+  $("scPickOn").textContent=scPickMode?"點字上色中":"點字上色";
+  if(scPickMode&&scMoveMode) scSetMove(false);
+  $("scHint").textContent=scPickMode?"點任何一個字，套用左邊選的顏色":"點任何一個字可單獨換色";
+});
+function scSetMove(on){
+  scMoveMode=on;
+  $("scMoveOn").setAttribute("aria-pressed",on?"true":"false");
+  $("scMoveOn").textContent=on?"拖曳中":"拖曳個別字";
+  if(on&&scPickMode){ scPickMode=false;
+    $("scPickOn").setAttribute("aria-pressed","false"); $("scPickOn").textContent="點字上色"; }
+  $("scHint").textContent=on?"直接把字拖到想要的位置 · 按「歸位」還原":"點任何一個字可單獨換色";
+  scDraw();
+}
+$("scMoveOn").addEventListener("click",()=>scSetMove(!scMoveMode));
+$("scMoveClr").addEventListener("click",()=>{ scOff={}; scDraw(); });
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
     const b=e.target.closest("button[data-k]"); if(!b) return;
@@ -3438,7 +3557,7 @@ $("scTxt").addEventListener("keydown",e=>{
   box.dispatchEvent(new Event("input",{bubbles:true}));
 });
 $("scTxt").addEventListener("input",()=>{scOvr={};scFitInput();scDraw();});
-$("scClear").addEventListener("click",()=>{scOvr={};scDraw();});
+$("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();});
 $("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
 $("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
 
