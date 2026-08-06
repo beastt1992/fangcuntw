@@ -19,6 +19,7 @@
     --line:#ddd6c4; --line-2:#b7ad95; --grid:#c2453a;
     --skel:#2f7fbf; --box:#3f7d4e; --muted:#7d7460; --ok:#3f7d4e;
     --w1:#b8862b; --w2:#c2453a;
+    --safe-top:0px; --safe-bottom:0px;
     --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -690,8 +691,13 @@ const G = {
 "辶":{u:0x8FB6,s:[{t:"dian",p:[[286,904],[398,796]],bend:-0.08},
                   {t:"zhe",p:[[188,724],[434,724],[232,502],[428,432]],fr:4},
                   {t:"na",p:[[204,332],[902,142]],bend:-0.16}]},
-"阝":{u:0x961D,s:[{t:"zhe",p:[[298,890],[684,890],[696,682],[312,618]],fr:3},
-                  {t:"shu",p:[[298,890],[298,72]]}]},
+"阝":{u:0x961D,
+  s:[{t:"zhe",cv:"earLeft",p:[[150,870],[375,870],[350,770],[245,620],[440,490],[430,270],[205,270]],
+       h:"conn",e:"earFoot",w:0.90,kage:1,ear:"left"},
+     {t:"shu",p:[[150,870],[150,70]],h:"conn",e:"open",w:0.94,kage:1,ear:"left"}],
+  v:{right:{0:{cv:"earRight",p:[[625,870],[850,870],[825,770],[930,620],[735,490],[745,270],[970,270]],
+                 h:"conn",e:"earFoot",ear:"right"},
+             1:{p:[[850,870],[850,70]],ear:"right"}}}},
 "疒":{u:0x7592,s:[{t:"dian",p:[[468,956],[502,856]],bend:-0.05},
                   {t:"heng",p:[[160,856],[884,856]]},
                   {t:"pie",p:[[204,856],[104,116]],bend:0.08},
@@ -946,6 +952,10 @@ function makeSegs(pts,bend,fillet,cv,kj){
   /* KAGE 類型 6 是三次貝茲：中間兩點是控制點，不是經過點
      KAGE 類型 7 是「直線接二次曲線」：p1→p2 直線，再以 p3 為控制點彎到 p4
      以前把它們當折線轉圓角，辶、之、廴 這類部件就會歪掉 */
+  if(cv==="quad"&&pts.length===3){
+    /* KAGE 類型 2：保留完整二次貝茲控制點；舊版 bend 會遺失控制點沿弦方向的位置。 */
+    return [{q:1,a:pts[0],c:pts[1],b:pts[2]}];
+  }
   if(cv==="cubic"&&pts.length===4){
     /* KAGE 三次曲線保留形狀，但將控制點輕微拉回弦線，避免父、又、火之類過度飄。 */
     const r1=lerp(pts[0],pts[3],1/3), r2=lerp(pts[0],pts[3],2/3);
@@ -955,6 +965,17 @@ function makeSegs(pts,bend,fillet,cv,kj){
   if(cv==="lineQuad"&&pts.length===4){
     const mc=lerp(pts[1],pts[3],0.5), c=lerp(pts[2],mc,0.12);
     return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c,b:pts[3]}];
+  }
+  if(cv==="earLeft"&&pts.length===7){
+    /* 左耳旁：頂橫、上段內收、下段外鼓後水平回鋒。 */
+    return [{q:0,a:pts[0],b:pts[1]},
+            {q:1,a:pts[1],c:pts[2],b:pts[3]},
+            {c3:1,a:pts[3],c1:pts[4],c2:pts[5],b:pts[6]}];
+  }
+  if(cv==="earRight"&&pts.length===7){
+    return [{q:0,a:pts[0],b:pts[1]},
+            {q:1,a:pts[1],c:pts[2],b:pts[3]},
+            {c3:1,a:pts[3],c1:pts[4],c2:pts[5],b:pts[6]}];
   }
   if(pts.length===2){
     const [A,B]=pts;
@@ -1056,7 +1077,7 @@ function widthAt(st,t,tan,f){
   }
   return w;
 }
-const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"hook",
+const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"hook",earFoot:"flat",
               conn:"flat",kakato:"kakato",bend:"bend"};
 function caps(st,f){
   const r=f.round;
@@ -1166,12 +1187,18 @@ function rdp(pts,tol){
 function appendKageTail(S,st,f,wScale){
   if(!st.kage||!S.length||(st.e!=="hook"&&st.e!=="bend")) return {s:S,kind:null};
   const out=S.slice(), A=S[S.length-1].p;
-  const m=clamp(widths(f).hw*wScale*0.52,18,58);
+  let m=clamp(widths(f).hw*wScale*0.52,18,58);
+  if(st.ear) m*=0.72;
   let C,B;
   if(st.e==="hook"){
-    /* KAGE 的 4 是左上挑鉤：直接改中心線，避免只靠端帽畫出箭頭。 */
-    C=[A[0]-m*0.28,A[1]+m*0.10];
-    B=[A[0]-m*1.30,A[1]+m*0.42];
+    /* KAGE 的 4 是左上挑鉤；耳旁的鉤更短、更直，避免像箭頭。 */
+    if(st.ear==="right"){
+      C=[A[0]+m*0.18,A[1]+m*0.12];
+      B=[A[0]+m*0.92,A[1]+m*0.34];
+    }else{
+      C=[A[0]-m*(st.ear?0.16:0.28),A[1]+m*0.10];
+      B=[A[0]-m*(st.ear?0.92:1.30),A[1]+m*(st.ear?0.34:0.42)];
+    }
   }else{
     /* KAGE 的 5 是右上彎尾，常見於力、門、月等折鉤。 */
     C=[A[0]+m*0.58,A[1]+m*0.02];
@@ -1305,7 +1332,7 @@ const COMPONENT_DENSITY_CAP={
   "糹":0.86,"糸":0.88,"金":0.88,"馬":0.87,"門":0.89,"雨":0.89,
   "言":0.91,"車":0.91,"隹":0.90,"酉":0.91,"足":0.92,"月":0.92,
   "女":0.93,"心":0.92,"辶":0.91,"竹":0.93,"父":0.93,"又":0.94,
-  "火":0.94,"力":0.94,"疒":0.93,"犭":0.92
+  "火":0.94,"力":0.94,"疒":0.93,"犭":0.92,"阝":0.86
 };
 function opticalWeightScale(id,sx,sy){
   const ax=Math.max(0.04,Math.abs(sx)),ay=Math.max(0.04,Math.abs(sy));
@@ -1315,6 +1342,7 @@ function opticalWeightScale(id,sx,sy){
   const narrow=ax<0.62||ay<0.62;
   /* 複雜部件要比簡單偏旁更敢縮細，否則糹、金、馬、門塞進半格會糊成一團。 */
   let floor=n>=12?0.42:n>=9?0.47:n>=6?0.53:n>=4?0.60:0.66;
+  if(narrow&&n<=5) floor-=0.045;
   if(narrow&&n>=8) floor-=0.04;
   if(narrow&&n>=12) floor-=0.04;
   const denseFamily=/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹|月|用|冊|網|西|目|日|田|白|酉)$/;
@@ -1323,6 +1351,7 @@ function opticalWeightScale(id,sx,sy){
   const sk=componentStyleKey(id);
   if(denseFamily.test(sk)&&n>=7) densityCap-=0.015;
   if(COMPONENT_DENSITY_CAP[sk]) densityCap=Math.min(densityCap,COMPONENT_DENSITY_CAP[sk]);
+  if(ax<0.43&&n<=6) densityCap=Math.min(densityCap,0.87);
   const scaled=Math.max(clamp(floor,0.34,0.72),Math.pow(geometric,0.82));
   return Math.min(densityCap,scaled);
 }
@@ -1333,7 +1362,7 @@ function collect(id,box,wScale,out,seed,variant,depth){
   const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy));
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
-    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,ws,
+    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,ear:st.ear,r:st.r,rk:st.rk,ws,
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
@@ -2117,7 +2146,8 @@ function kageClassify(pts,a3,nseg,a2,a1t){
   const ax=Math.abs(dx),ay=Math.abs(dy);
   const horiz=ax/Math.max(1,L), vert=ay/Math.max(1,L);
   const shortDominant=L<170 && (ax>115&&ay<L*0.20 || ay>115&&ax<L*0.20);
-  if(structural&&nseg>2) t="zhe";
+  if(e==="hook" && a1t!==1) t="zhe";   /* 曲線鉤屬折鉤，不可誤判成捺而一路加粗 */
+  else if(structural&&nseg>2) t="zhe";
   else if(L<170 && !shortDominant) t="dian";
   else{
     if(vert<0.28) t="heng";
@@ -2135,6 +2165,41 @@ function kageBend(A,C,B){
   const v=((C[0]-mx)*(-dy/L)+(C[1]-my)*(dx/L))/L;
   return clamp(v,-0.46,0.46);
 }
+function repairKageStrokeJoins(strokes){
+  /* GlyphWiki 有些連續曲線以 7/8 出鋒分段，但端點其實完全相接。
+     若兩段方向連續，就改成接續端，避免耳旁、走之旁等接點縮成針尖。 */
+  for(let i=0;i<strokes.length;i++){
+    const a=strokes[i]; if(!a.p||a.p.length<2) continue;
+    const ae=a.p[a.p.length-1], at=unit(sub(ae,a.p[a.p.length-2]));
+    for(let j=0;j<strokes.length;j++){
+      if(i===j) continue;
+      const b=strokes[j]; if(!b.p||b.p.length<2) continue;
+      const bs=b.p[0]; if(dist(ae,bs)>9) continue;
+      const bt=unit(sub(b.p[1],bs));
+      const dot=at[0]*bt[0]+at[1]*bt[1];
+      if(dot<0.18) continue;
+      const tailCandidate=(a.e==="taperL"||a.e==="taperR"||a.e==="point"||a.e==="open");
+      const headCandidate=(b.h==="point"||b.h==="open"||b.h==="taperL"||b.h==="taperR");
+      if(tailCandidate&&headCandidate){ a.e="conn"; b.h="conn"; }
+    }
+  }
+  return strokes;
+}
+function applyKnownKageFixes(){
+  const leftEar=()=>[
+    {t:"zhe",cv:"earLeft",p:[[140,860],[365,860],[340,760],[240,615],[435,485],[425,265],[200,265]],
+     h:"conn",e:"earFoot",w:0.90,kage:1,ear:"left"},
+    {t:"shu",p:[[140,860],[140,70]],h:"conn",e:"open",w:0.94,kage:1,ear:"left"}
+  ];
+  const rightEar=()=>[
+    {t:"zhe",cv:"earRight",p:[[635,860],[860,860],[835,760],[940,615],[745,485],[755,265],[980,265]],
+     h:"conn",e:"earFoot",w:0.90,kage:1,ear:"right"},
+    {t:"shu",p:[[860,860],[860,70]],h:"conn",e:"open",w:0.94,kage:1,ear:"right"}
+  ];
+  for(const key of ["u961d-01","u961d-01-var-001"]){ if(G[key]) G[key].s=leftEar(); }
+  if(G["u961d-02"]) G["u961d-02"].s=rightEar();
+}
+
 /* GlyphWiki 字形名 → {ch 對應的字, suf 字尾, key 我們用的鍵}
    u6728      → 木（純字）
    u6728-t    → 木的台灣標準形（-j 日本 -g 中國 -t 台灣 -k 韓國 -v 越南）
@@ -2187,9 +2252,9 @@ function kageToGlyph(data){
                                   [KX(n(c[7])),KY(n(c[8]))],[KX(n(c[9])),KY(n(c[10]))]];
     else { skipped.push(raw); continue; }
 
-    if(a1t===2){                       /* 二次曲線的控制點 → 本系統的 bend（精確可逆） */
+    if(a1t===2){                       /* 二次曲線：完整保留控制點 */
       const st=kageClassify([P[0],P[2]],a3,2,a2,a1t);
-      strokes.push({...st,p:[P[0],P[2]],bend:kageBend(P[0],P[1],P[2])});
+      strokes.push({...st,p:P,cv:"quad",kj:2});
     } else if(a1t===1){
       strokes.push({...kageClassify(P,a3,2,a2,a1t),p:P});
     } else {
@@ -2199,6 +2264,7 @@ function kageToGlyph(data){
       else             strokes.push({...st,p:P,kj:a1t,fr:a1t===3?0.48:1.15});
     }
   }
+  repairKageStrokeJoins(strokes);
   return {strokes,parts,skipped};
 }
 /* 一行 → {ch, data}；吃 dump 格式、「字 資料」、或只有資料 */
@@ -2301,6 +2367,8 @@ function kageApply(){
     if(isNew){ ALL.push(key); if(g.u)(g.c?CXED:COMP).push(key); BASE[key]=JSON.parse(JSON.stringify(g)); }
     n++;
   }
+  applyKnownKageFixes();
+  clearStrokeEstimates();
   for(const it of kagePending) if(it.ok&&(it.key||it.ch)) touch(it.key||it.ch);
   buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
   $("kmodal").classList.remove("on");
@@ -2428,6 +2496,8 @@ async function loadPack(json,keepMine,quiet){
     if(++i%900===0){ busy(true,undefined,"轉換 "+i.toLocaleString()+" / "+names.length.toLocaleString(),
                           i/names.length*55); await yield_(); }
   }
+  applyKnownKageFixes();
+  clearStrokeEstimates();
   /* 目標字 → 一層滿框引用，指向該字的來源字形（優先台灣字形） */
   busy(true,undefined,"對應到字…",60);
   let mapped=0,usedT=0;
