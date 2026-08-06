@@ -19,6 +19,7 @@
     --line:#ddd6c4; --line-2:#b7ad95; --grid:#c2453a;
     --skel:#2f7fbf; --box:#3f7d4e; --muted:#7d7460; --ok:#3f7d4e;
     --w1:#b8862b; --w2:#c2453a;
+    --safe-top:0px; --safe-bottom:0px;
     --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -164,17 +165,18 @@
   .hint{font-size:10.5px;color:var(--muted);line-height:1.6;
     border-top:1px dashed var(--line-2);padding-top:7px}
 
-  .foot{border-top:1px solid var(--ink);display:flex;align-items:stretch;height:118px;flex:none}
+  .foot{border-top:1px solid var(--ink);display:flex;align-items:stretch;height:100px;flex:none}
   .foot .lbl{flex:none;width:112px;border-right:1px solid var(--line-2);padding:9px 12px;
     display:flex;flex-direction:column;justify-content:center;gap:3px}
   .foot .lbl b{font-size:12px;letter-spacing:.05em}
   .foot .lbl span{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted)}
   .foot .live{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;
-    padding:8px 14px;gap:7px;overflow:hidden}
-  .specimen{height:56px;flex:none;display:flex;align-items:baseline;gap:18px;
-    white-space:nowrap;overflow:hidden;padding-top:6px}
-  .specimen span{line-height:1.3;display:block}
-  .specimen .s1{font-size:34px}.specimen .s2{font-size:20px}.specimen .s3{font-size:13px}
+    padding:7px 14px;gap:6px;overflow:hidden}
+  .specimen{height:46px;flex:none;display:flex;align-items:center;white-space:nowrap;
+    overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding:0 2px}
+  .specimen span{line-height:1;display:block;flex:none}
+  .specimen .s1{font-size:clamp(24px,2.25vw,36px)}
+  .specimen .s2,.specimen .s3{display:none}
   .specimen.live{font-family:"SEPreview",sans-serif}
   .foot input[type=text]{font-family:inherit;font-size:12px;padding:5px 8px;width:100%;flex:none;
     background:var(--paper);border:1px solid var(--line-2);color:var(--ink)}
@@ -235,9 +237,10 @@
     max-width:calc(100% - 28px)}
   .scfoot{display:flex;align-items:center;gap:11px;padding:0 14px;height:50px;
     border-top:1px solid var(--ink);background:var(--paper)}
-  .scfoot input[type=text]{flex:1;min-width:80px;font-family:inherit;font-size:14px;padding:6px 9px;
-    background:var(--paper);border:1px solid var(--line-2);color:var(--ink)}
-  .scfoot input[type=text]:focus{outline:none;border-color:var(--ink)}
+  .scfoot textarea{flex:1;min-width:80px;height:34px;min-height:34px;max-height:96px;resize:vertical;
+    font-family:inherit;font-size:14px;line-height:1.45;padding:6px 9px;box-sizing:border-box;
+    background:var(--paper);border:1px solid var(--line-2);color:var(--ink);white-space:pre-wrap}
+  .scfoot textarea:focus{outline:none;border-color:var(--ink)}
   .scfoot input[type=range]{width:96px}
   @media (max-width:900px){
     #showcase{position:static;display:none}
@@ -245,7 +248,7 @@
     .scbar{flex-wrap:wrap;height:auto;padding:10px 12px}
     .scstage{min-height:56vh;background:var(--sbg,#f1ece1)}
     .scfoot{flex-wrap:wrap;height:auto;padding:10px 12px}
-    .scfoot input[type=text]{flex-basis:100%}
+    .scfoot textarea{flex-basis:100%;width:100%}
   }
   @media (max-width:900px){
     body{overflow:auto}
@@ -259,6 +262,112 @@
     .foot{flex-wrap:wrap;height:auto}
     .foot .lbl{width:100%;border-right:none;border-bottom:1px solid var(--line-2)}
     .foot .stat{border-left:none;border-top:1px solid var(--line-2);width:100%}
+  }
+
+
+  /* ---------- 手機工作區 ---------- */
+  .mobile-panes{display:none}
+  @media (max-width:700px){
+    :root{--safe-top:max(44px,env(safe-area-inset-top));--safe-bottom:max(8px,env(safe-area-inset-bottom))}
+    html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+    body{padding-top:var(--safe-top);padding-bottom:var(--safe-bottom)}
+    .app{height:calc(100dvh - var(--safe-top) - var(--safe-bottom));display:grid;
+      grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
+
+    .bar{height:50px;min-height:50px;box-sizing:border-box;flex-wrap:nowrap;padding:6px 8px;gap:8px;
+      overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .bar::-webkit-scrollbar,.scbar::-webkit-scrollbar,.tagrow::-webkit-scrollbar,.modes::-webkit-scrollbar{display:none}
+    .brand{flex:none;position:sticky;left:0;z-index:3;background:var(--paper);padding-right:5px}
+    .brand b{font-size:18px}.brand span{display:none}
+    .tabs,.presets{flex:none}
+    .tabs button,.presets button{min-height:36px;padding:5px 10px;font-size:12px}
+    .bar>.spacer{display:none}
+    .bar .btn{flex:none;min-height:36px;padding:5px 10px;font-size:12px}
+    .bar #btnExport{position:sticky;right:0;z-index:3;box-shadow:-8px 0 10px var(--paper)}
+
+    .mid{grid-row:2;min-height:0;display:flex;flex-direction:column;overflow:hidden;border-top:none}
+    .mobile-panes{display:flex;flex:none;height:42px;border-bottom:1px solid var(--ink);background:var(--paper);z-index:4}
+    .mobile-panes button{flex:1;border:0;border-right:1px solid var(--line-2);background:var(--paper);color:var(--muted);
+      font:600 13px/1 inherit;letter-spacing:.06em;min-height:42px}
+    .mobile-panes button:last-child{border-right:0}
+    .mobile-panes button.on{background:var(--ink);color:var(--paper)}
+    .mid>.pane{display:none;flex:1;min-height:0;border:0!important;overflow:hidden}
+    .mid>.pane.mobile-on{display:flex}
+    .pane h2{height:42px;min-height:42px;padding:0 10px;font-size:13px}
+    .pane h2 em{font-size:9px}
+    #q{width:min(52vw,210px)!important;font-size:14px!important;min-height:34px}
+    #hCount{display:none}
+    .scroll{overflow:auto;-webkit-overflow-scrolling:touch}
+    .tagrow{flex:none;overflow-x:auto;white-space:nowrap;padding:6px 10px;gap:12px;min-height:38px;box-sizing:border-box}
+    .tag{flex:none;font-size:10.5px}
+    .gridwrap{height:auto;min-height:0;flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+    .cells{grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:clamp(112px,34vw,146px);gap:7px;padding:8px}
+    .cell{min-height:108px;border-width:1px}
+    .cell .cap{font-size:10px;padding:4px 6px;min-height:24px}
+    .cell .cap b{font-size:14px}
+    .qa{padding:9px 10px}
+    .ctrl{padding:9px 10px}
+    input[type=range]{height:24px}
+
+    .bigbox{flex:none;max-height:46vh;min-height:230px;overflow:hidden}
+    .bigbox svg{height:min(46vh,430px);width:100%;object-fit:contain}
+    .modes{overflow-x:auto;white-space:nowrap;gap:14px;padding:7px 10px;min-height:42px;box-sizing:border-box}
+    .modes>*{flex:none}
+    .sect,.meta{padding-left:10px;padding-right:10px}
+
+    .foot{grid-row:3;height:78px;min-height:78px;display:block;overflow:hidden;background:var(--paper)}
+    .foot .lbl,.foot .stat{display:none}
+    .foot .live{width:100%;height:100%;box-sizing:border-box;padding:6px 8px;gap:4px;justify-content:center}
+    .specimen{height:32px;padding:0;overflow-x:auto}
+    .specimen .s1{font-size:25px}
+    .foot input[type=text]{height:32px;box-sizing:border-box;font-size:14px}
+
+    #showcase{position:static;grid-row:2 / 4;display:none;min-height:0;height:auto;background:var(--sbg,#f1ece1)}
+    #showcase.on{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+    .scbar{height:48px;min-height:48px;box-sizing:border-box;flex-wrap:nowrap;padding:6px 8px;gap:9px;
+      overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+    .scbar>.g,.scbar>.btn{flex:none}
+    .scbar>.spacer{display:none}
+    .scbar .seg button{min-height:34px;padding:4px 9px;font-size:11px}
+    .pal{min-height:34px}.pal em{font-size:10px}.pal i{height:18px}
+    .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
+    #scArt{max-width:100%;max-height:100%;width:auto;height:auto}
+    .schint{left:8px;bottom:6px;font-size:9px}
+    .scfoot{height:auto;min-height:112px;display:grid;grid-template-columns:1fr 1fr auto;gap:7px;padding:8px;
+      align-items:center;box-sizing:border-box}
+    .scfoot textarea{grid-column:1 / -1;width:100%;min-width:0;height:42px;min-height:42px;max-height:112px;
+      resize:none;font-size:15px;padding:8px}
+    .scfoot .g{display:flex;align-items:center;gap:6px;min-width:0}
+    .scfoot .g label{white-space:nowrap;flex:none}
+    .scfoot .g input[type=range]{width:100%;min-width:72px}
+    #scStat{grid-column:1 / -1;overflow:hidden;text-overflow:ellipsis}
+
+    .modal{padding:8px;align-items:flex-end}
+    .sheet{max-height:94dvh;width:100%}
+    .sheet header{padding:10px 12px}.sheet .body{padding:10px 12px}.sheet footer{padding:9px 12px;flex-wrap:wrap}
+    .prev{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .modal{padding:0;background:rgba(22,19,13,.34)}
+    .sheet{width:100%!important;max-width:none!important;max-height:92dvh;border-left:0;border-right:0;border-bottom:0}
+    .sheet header{min-height:48px;padding:10px 12px}
+    .sheet .body{padding:12px;gap:12px}
+    .sheet footer{padding:10px 12px;position:sticky;bottom:0;background:var(--paper)}
+    .sheet textarea{font-size:14px;min-height:130px}
+    .sheet input[type=text]{font-size:16px!important;min-height:40px}
+  }
+  @media (display-mode:standalone) and (max-width:700px){
+    :root{--safe-top:max(54px,env(safe-area-inset-top))}
+  }
+  @media (max-width:370px){
+    .cells{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:150px}
+    .brand b{font-size:17px}
+    .tabs button,.presets button,.bar .btn{padding-left:8px;padding-right:8px}
+  }
+  @media (max-width:900px) and (orientation:landscape){
+    .cells{grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:118px}
+    .bigbox{min-height:180px;max-height:58vh}
+    .bigbox svg{height:min(58vh,390px)}
+    .foot{height:68px;min-height:68px}
+    .specimen{display:none}
   }
 </style>
 </head>
@@ -289,8 +398,13 @@
   </div>
 
   <div class="mid work">
+    <nav class="mobile-panes" id="mobilePaneNav" aria-label="手機工作區">
+      <button type="button" data-pane="axes">設計</button>
+      <button type="button" data-pane="glyphs" class="on">字庫</button>
+      <button type="button" data-pane="edit">編輯</button>
+    </nav>
 
-    <section class="pane">
+    <section class="pane" data-mobile-pane="axes">
       <h2>設計軸 <button class="btn ghost sm" id="btnResetAxes" type="button">重設設計軸</button></h2>
       <div class="scroll" id="ctrls"></div>
       <div class="qa">
@@ -305,7 +419,7 @@
       </div>
     </section>
 
-    <section class="pane">
+    <section class="pane mobile-on" data-mobile-pane="glyphs">
       <h2>字樣
         <input type="text" id="q" placeholder="搜尋字或部件名…" spellcheck="false"
                style="font-family:inherit;font-size:12px;padding:3px 8px;width:150px;margin-left:auto;
@@ -326,7 +440,7 @@
       <div class="gridwrap"><div class="cells" id="cells"></div></div>
     </section>
 
-    <section class="pane">
+    <section class="pane" data-mobile-pane="edit">
       <h2>檢視與編輯 <em id="mGlyph">木</em></h2>
       <div class="bigbox" id="bigBox">
         <svg id="bigSvg" viewBox="-26 -26 1052 1052"></svg>
@@ -388,7 +502,7 @@
       <div class="schint" id="scHint">點任何一個字可以單獨換色</div>
     </div>
     <div class="scfoot">
-      <input type="text" id="scTxt" spellcheck="false" value="森林" placeholder="打字看看…">
+      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">森林</textarea>
       <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
       <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
@@ -474,7 +588,7 @@
   <div class="foot work">
     <div class="lbl"><b>實裝測試</b><span>LIVE @FONT-FACE</span></div>
     <div class="live">
-      <div class="specimen" id="spec"><span class="s1"></span><span class="s2"></span><span class="s3"></span></div>
+      <div class="specimen" id="spec" aria-label="字型單行預覽"><span class="s1"></span><span class="s2" aria-hidden="true"></span><span class="s3" aria-hidden="true"></span></div>
       <input type="text" id="specIn" value="「這是好天，早上看星。」" spellcheck="false" aria-label="預覽文字">
     </div>
     <div class="stat">
@@ -1644,23 +1758,42 @@ function buildCells(){
   const cap=document.createElement("div");cap.className="cap";
   cap.innerHTML='<b>'+(id==="　"?"␣":id)+'</b><span>'+(g.ids||strokeCount(id)+"畫")+'</span>';
   btn.appendChild(cap);
-  btn.addEventListener("click",()=>{current=id;varSel=null;mark();drawBig();});
+  btn.addEventListener("click",()=>{
+    current=id;varSel=null;mark();drawBig();
+    if(matchMedia("(max-width:700px)").matches) setMobilePane("edit");
+  });
   $("cells").appendChild(btn); cellPaths.set(id,paths);
  });
  $("hCount").textContent=ALL.length.toLocaleString()+" GLYPHS";
  $("tagComp").textContent=ALL.filter(i=>G[i]&&G[i].s&&!G[i].sp).length;
  $("tagCx").textContent=ALL.filter(i=>G[i]&&G[i].c).length;
  $("tagPu").textContent=ALL.filter(i=>G[i]&&G[i].sp).length;
+ /* 換頁／搜尋後立即把輪廓畫進新建立的 SVG。 */
+ requestAnimationFrame(()=>drawAll());
 }
 buildCells();
-$("q").addEventListener("input",e=>{query=e.target.value;page=0;buildCells();mark();scheduleSlow();});
-$("pgPrev").addEventListener("click",()=>{page--;buildCells();mark();scheduleSlow();});
-$("pgNext").addEventListener("click",()=>{page++;buildCells();mark();scheduleSlow();});
+$("q").addEventListener("input",e=>{query=e.target.value;page=0;buildCells();mark();schedule();scheduleSlow();});
+$("pgPrev").addEventListener("click",()=>{page--;buildCells();mark();schedule();scheduleSlow();});
+$("pgNext").addEventListener("click",()=>{page++;buildCells();mark();schedule();scheduleSlow();});
 $("tagComp").textContent=COMP.length;
 $("tagCx").textContent=CXED.length;
 $("tagPu").textContent=PUNCT.length;
 $("statCounts").textContent="部件 "+COMP.length+" · 組合 "+CXED.length+" · 標點 "+PUNCT.length;
 const mark=()=>document.querySelectorAll(".cell").forEach(c=>c.classList.toggle("on",c.dataset.id===current));
+function setMobilePane(key){
+  const nav=$("mobilePaneNav");
+  if(!nav) return;
+  nav.querySelectorAll("button[data-pane]").forEach(b=>b.classList.toggle("on",b.dataset.pane===key));
+  document.querySelectorAll('.mid>.pane[data-mobile-pane]').forEach(p=>p.classList.toggle("mobile-on",p.dataset.mobilePane===key));
+  requestAnimationFrame(()=>{
+    if(key==="glyphs") drawAll();
+    if(key==="edit") drawBig();
+  });
+}
+$("mobilePaneNav").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-pane]"); if(!b) return;
+  setMobilePane(b.dataset.pane);
+});
 
 /* 匯入的 KAGE 原始資料 —— 它就是基準線，「還原」一律退回到這裡 */
 let PACKRAW=null;
@@ -2014,7 +2147,6 @@ function restore(data){
   }
   document.querySelectorAll("#presets button").forEach(x=>
     x.classList.toggle("on",!!presetKey&&x.dataset.p===presetKey));
-  clearStrokeEstimates();          /* 讀入的專案可能改過筆畫結構 */
   EDITED.clear(); for(const id in (data.edits||{})) if(G[id]) EDITED.add(id);
   varSel=null; buildCells(); mark(); schedule(); scheduleSlow(); markEdited();
 }
@@ -2024,7 +2156,6 @@ function loadLocal(){try{const s=localStorage.getItem(KEY);return s?JSON.parse(s
 function resetGlyph(id){
   const src=pristine(id);
   if(!src) return;
-  clearStrokeEstimates();          /* 還原會換掉整組筆畫，筆數快取必須失效 */
   delete G[id].s; delete G[id].v; delete G[id].c;
   if(src.s) G[id].s=src.s;
   if(src.v) G[id].v=src.v;
@@ -2033,7 +2164,7 @@ function resetGlyph(id){
 }
 const baselineName=()=>PACKRAW?"匯入的 KAGE":"內建出廠值";
 $("btnResetOne").addEventListener("click",()=>{
-  resetGlyph(current);varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
+  resetGlyph(current);clearStrokeEstimates();varSel=null;schedule();scheduleSlow();markEdited();saveLocal();
   if(MODE==="show") scDraw();});
 $("btnResetAll").addEventListener("click",async ()=>{
   const n=EDITED.size;
@@ -2045,6 +2176,7 @@ $("btnResetAll").addEventListener("click",async ()=>{
     resetGlyph(id);
     if(++i%800===0){ busy(true,undefined,i.toLocaleString()+" / "+list.length.toLocaleString(),i/list.length*100); await yield_(); }
   }
+  clearStrokeEstimates();
   EDITED.clear();
   varSel=null; buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
   if(MODE==="show") scDraw();
@@ -2054,14 +2186,24 @@ $("btnResetAll").addEventListener("click",async ()=>{
 function drawSpec(){
   const ok=[...$("specIn").value].filter(ch=>G[ch]).join("")||"這是好天";
   const s=$("spec");
-  s.children[0].textContent=ok; s.children[1].textContent=ok; s.children[2].textContent=ok+ok;
+  s.children[0].textContent=ok;
+  if(s.children[1]) s.children[1].textContent="";
+  if(s.children[2]) s.children[2].textContent="";
+  s.scrollLeft=0;
 }
 
+function syncShowAxes(){
+  if($("scWt")) $("scWt").value=F.weight;
+  if($("scRd")) $("scRd").value=F.round;
+}
 $("presets").addEventListener("click",e=>{
   const b=e.target.closest("button[data-p]");if(!b)return;
   Object.assign(F,PRESETS[b.dataset.p]); presetKey=b.dataset.p;   /* simp 不在預設裡，保持不變 */
   document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x===b));
-  schedule(); scheduleSlow(); saveLocal();
+  syncShowAxes();
+  if(MODE==="show") scDraw();
+  else schedule();
+  scheduleSlow(); saveLocal();
 });
 $("inSkel").addEventListener("change",e=>{showSkel=e.target.checked;drawBig();});
 $("inEdit").addEventListener("change",e=>{editMode=e.target.checked;drawBig();});
@@ -2069,7 +2211,9 @@ $("qaFilter").addEventListener("change",e=>{qaOnly=e.target.checked;paintQA();})
 $("btnResetAxes").addEventListener("click",()=>{
   for(const k of AXKEYS) F[k]=F_DEFAULT[k]; presetKey="hei";
   document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p==="hei"));
-  schedule(); scheduleSlow(); saveLocal();
+  syncShowAxes();
+  if(MODE==="show") scDraw(); else schedule();
+  scheduleSlow(); saveLocal();
 });
 $("btnExport").addEventListener("click",exportBig);
 $("specIn").addEventListener("input",drawSpec);
@@ -2079,7 +2223,7 @@ $("btnLoad").addEventListener("click",()=>$("fileIn").click());
 $("fileIn").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=()=>{try{restore(JSON.parse(r.result));saveLocal();}
+  r.onload=()=>{try{restore(JSON.parse(r.result));clearStrokeEstimates();schedule();scheduleSlow();saveLocal();}
                 catch(err){alert("讀入失敗："+err.message);}};
   r.readAsText(f); e.target.value="";
 });
@@ -2303,6 +2447,7 @@ function kageApply(){
     if(isNew){ ALL.push(key); if(g.u)(g.c?CXED:COMP).push(key); BASE[key]=JSON.parse(JSON.stringify(g)); }
     n++;
   }
+  clearStrokeEstimates();
   for(const it of kagePending) if(it.ok&&(it.key||it.ch)) touch(it.key||it.ch);
   buildCells(); mark(); markEdited(); schedule(); scheduleSlow(); saveLocal();
   $("kmodal").classList.remove("on");
@@ -2430,6 +2575,7 @@ async function loadPack(json,keepMine,quiet){
     if(++i%900===0){ busy(true,undefined,"轉換 "+i.toLocaleString()+" / "+names.length.toLocaleString(),
                           i/names.length*55); await yield_(); }
   }
+  clearStrokeEstimates();
   /* 目標字 → 一層滿框引用，指向該字的來源字形（優先台灣字形） */
   busy(true,undefined,"對應到字…",60);
   let mapped=0,usedT=0;
@@ -2437,7 +2583,7 @@ async function loadPack(json,keepMine,quiet){
     const m=/^u([0-9a-f]{4,5})$/.exec(name); if(!m) continue;
     const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
     const ch=String.fromCodePoint(cp);
-    if(mine.has(ch)) continue;                       /* 保留他自己調過的字 */
+    if(mine.has(ch)) continue;                       /* 只保留使用者自己調過的字 */
     const t=name+"-t";
     const src=G[t]?t:(G[name]?name:null); if(!src) continue;
     if(src===t) usedT++;
@@ -2446,6 +2592,7 @@ async function loadPack(json,keepMine,quiet){
     mapped++;
   }
   KAGE_EXACT=false;
+  clearStrokeEstimates();
   /* 保留下來的那些字，仍然算「已修改」（基準線是 KAGE，不是他的版本） */
   EDITED.clear(); for(const id of mine) if(G[id]) EDITED.add(id);
   busy(true,undefined,"重建畫面…",90);
@@ -2744,15 +2891,28 @@ const scHash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i)
 
 function scDraw(){
   const svg=$("scArt"); svg.textContent="";
-  const typed=[...$("scTxt").value].filter(c=>c.trim());
-  const list=typed.filter(c=>G[c]&&(G[c].s||G[c].c));
-  const miss=typed.filter(c=>!G[c]);
+  const raw=$("scTxt").value.replace(/\r\n?/g,"\n");
+  const sourceLines=raw.split("\n");
+  const manualBreak=sourceLines.length>1;
+  const miss=[];
+  const lines=sourceLines.map(line=>{
+    const out=[];
+    for(const c of [...line]){
+      if(c==="\t") continue;
+      if(G[c]&&(G[c].sp||G[c].s||G[c].c)) out.push(c);
+      else miss.push(c);
+    }
+    return out;
+  });
+  const list=lines.flat();
   const total=ALL.filter(i=>G[i]&&G[i].u).length;
-  $("scStat").textContent=list.length? (list.length+" 字 · "+scPal.n) : "字庫沒有這些字";
+  $("scStat").textContent=list.length
+    ? (list.length+" 字"+(manualBreak?" · "+lines.length+" 行":"")+" · "+scPal.n)
+    : "字庫沒有這些字";
   $("scHint").textContent = miss.length
     ? "字庫沒有："+miss.slice(0,14).join(" ")+(miss.length>14?" …":"")+
       (total<400?"　→ 按上面「載入資料包」解鎖全部字":"")
-    : "點任何一個字可以單獨換色 · 再點一次換下一個顏色";
+    : "Ctrl / Cmd + Enter 換行 · 點任何一個字可單獨換色";
   if(!list.length){
     svg.setAttribute("viewBox","0 0 12 3"); svg.setAttribute("width","520");
     const t=el("text",{x:6,y:1.9,"text-anchor":"middle","font-size":"1",
@@ -2760,11 +2920,22 @@ function scDraw(){
     t.textContent = total<400 ? "目前只有 "+total+" 字 · 先載入資料包" : "換幾個字試試";
     svg.appendChild(t); return;
   }
-  let cols,gap;
-  if(scLay==="huge"){ cols=list.length; gap=0.06; }
-  else if(scLay==="line"){ cols=list.length; gap=0.10; }
-  else { cols=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4)))); gap=0.14; }
-  const rows=Math.ceil(list.length/cols), step=1+gap;
+
+  let gap,positions=[],cols,rows;
+  if(manualBreak){
+    gap=scLay==="grid"?0.14:(scLay==="line"?0.10:0.06);
+    rows=Math.max(1,lines.length);
+    cols=Math.max(1,...lines.map(x=>x.length));
+    lines.forEach((line,row)=>line.forEach((ch,col)=>positions.push({ch,row,col})));
+  }else{
+    if(scLay==="huge"){ cols=list.length; gap=0.06; }
+    else if(scLay==="line"){ cols=list.length; gap=0.10; }
+    else { cols=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4)))); gap=0.14; }
+    rows=Math.ceil(list.length/cols);
+    positions=list.map((ch,i)=>({ch,row:Math.floor(i/cols),col:i%cols}));
+  }
+
+  const step=1+gap;
   const W=cols*step-gap, H=rows*step-gap, PAD=0.08;
   svg.setAttribute("viewBox",(-PAD)+" "+(-PAD)+" "+(W+PAD*2)+" "+(H+PAD*2));
   const px=Math.max(320,Math.min(1500,(W+PAD*2)*Math.min(460,1500/Math.max(1,cols))));
@@ -2772,18 +2943,18 @@ function scDraw(){
   svg.setAttribute("height",Math.round(px*(H+PAD*2)/(W+PAD*2)));
   const defs=el("defs",{}); svg.appendChild(defs);
 
-  list.forEach((ch,i)=>{
-    const cx=(i%cols)*step, cy=Math.floor(i/cols)*step;
+  positions.forEach((it,i)=>{
+    const ch=it.ch, cx=it.col*step, cy=it.row*step;
     /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
     const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
     let cs=[]; try{ cs=glyphContours(ch,F); }catch(e){}
-    const n=Math.max(1,cs.length), ov=scOvr[i+"|"+ch];
+    const n=Math.max(1,cs.length), key=it.row+"|"+it.col+"|"+ch, ov=scOvr[key];
     let ref=null;
     if(scCol==="charGrad"||scCol==="pageGrad"){
       const id="scg"+(scSeq++);
       const lg=el("linearGradient",{id,x1:"0",y1:"1",x2:"1",y2:"0"});
-      const t0=scCol==="pageGrad"? i/Math.max(1,list.length-1||1) : 0;
+      const t0=scCol==="pageGrad"? i/Math.max(1,positions.length-1||1) : 0;
       const t1=scCol==="pageGrad"? Math.min(1,t0+0.34) : 1;
       lg.appendChild(el("stop",{offset:"0%","stop-color":ov!==undefined?scPal.c[ov%scPal.c.length]:scRamp(t0)}));
       lg.appendChild(el("stop",{offset:"100%","stop-color":ov!==undefined?scPal.c[(ov+2)%scPal.c.length]:scRamp(t1)}));
@@ -2800,7 +2971,7 @@ function scDraw(){
     });
     svg.appendChild(g);
     svg.appendChild(el("rect",{x:cx-gap/2,y:cy-gap/2,width:step,height:step,
-      fill:"transparent",cursor:"pointer","data-key":i+"|"+ch}));
+      fill:"transparent",cursor:"pointer","data-key":key}));
   });
 }
 $("scArt").addEventListener("click",e=>{
@@ -2817,7 +2988,24 @@ function scSeg(id,fn){
 scSeg("scLayout",k=>scLay=k);
 scSeg("scColor", k=>scCol=k);
 scSeg("scBlend", k=>scBlend=k);
-$("scTxt").addEventListener("input",()=>{scOvr={};scDraw();});
+function scFitInput(){
+  const e=$("scTxt");
+  e.style.height="34px";
+  e.style.height=Math.min(96,Math.max(34,e.scrollHeight))+"px";
+}
+$("scTxt").addEventListener("keydown",e=>{
+  if(e.key!=="Enter") return;
+  /* 電腦用 Ctrl / Cmd + Enter；手機沒有修飾鍵，直接用鍵盤的換行鍵。 */
+  const mobileInput=matchMedia("(pointer:coarse)").matches||matchMedia("(max-width:700px)").matches;
+  if(mobileInput) return;
+  if(!(e.ctrlKey||e.metaKey)){ e.preventDefault(); return; }
+  e.preventDefault();
+  const box=e.currentTarget, a=box.selectionStart, b=box.selectionEnd;
+  box.value=box.value.slice(0,a)+"\n"+box.value.slice(b);
+  box.selectionStart=box.selectionEnd=a+1;
+  box.dispatchEvent(new Event("input",{bubbles:true}));
+});
+$("scTxt").addEventListener("input",()=>{scOvr={};scFitInput();scDraw();});
 $("scClear").addEventListener("click",()=>{scOvr={};scDraw();});
 $("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
 $("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
@@ -2935,8 +3123,11 @@ function setMode(m){
   MODE=m;
   document.querySelectorAll(".work").forEach(x=>x.classList.toggle("hide",m!=="work"));
   $("showcase").classList.toggle("on",m==="show");
-  if(m==="show"){ $("scWt").value=F.weight; $("scRd").value=F.round; scDraw(); }
-  else { schedule(); }
+  if(m==="show"){ syncShowAxes(); scFitInput(); scDraw(); }
+  else {
+    if(matchMedia("(max-width:700px)").matches) setMobilePane("glyphs");
+    schedule();
+  }
 }
 $("tabs").addEventListener("click",e=>{
   const b=e.target.closest("button[data-m]"); if(!b) return;
@@ -2962,7 +3153,10 @@ async function boot(){
   const saved=loadLocal();
   if(saved) restore(saved);
   else document.querySelector('#presets button[data-p="hei"]').classList.add("on");
+  /* 舊版 localStorage 可能把已修正的 KAGE 部件覆蓋回去；啟動最後再跑一次引擎遷移。 */
+  clearStrokeEstimates();
   buildCells(); mark(); drawAll(); drawSpec(); markEdited(); runQA(); refreshLiveFont();
+  requestAnimationFrame(()=>runGlyphRegression());
   busy(false);
 }
 boot();
