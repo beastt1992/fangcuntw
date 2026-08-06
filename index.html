@@ -256,6 +256,50 @@
     letter-spacing:.1em;color:var(--sink,#2a2118);opacity:.45;pointer-events:none;
     max-width:calc(100% - 28px)}
 
+
+  /* ---------- 手機：可展開的面板改成「浮在下方的面板」 ----------
+     內嵌展開會把畫布往下推、自己被視窗底部切掉，而且滑桿點不到。
+     改成 fixed 貼齊底部、自己捲動、避開瀏海與 home indicator。 */
+  .sheethd{display:none}
+  .sheetback{display:none}
+  /* 可橫向捲動的工具列：右緣加一道漸層，讓「後面還有東西」看得出來。
+     沒有這個，內容被切在螢幕邊上看起來就像壞掉。 */
+  .bar,.scbar,.tabs{position:relative}
+  .barwrap{position:relative}
+  .barwrap::after{content:"";position:absolute;right:0;top:0;bottom:0;width:26px;pointer-events:none;
+    background:linear-gradient(90deg,transparent,var(--paper) 78%);opacity:0;transition:opacity .2s}
+  .barwrap.more::after{opacity:1}
+  @media (pointer:coarse){
+    .sheetback{display:block;position:fixed;inset:0;z-index:39;background:rgba(22,19,13,.28)}
+    .sheetback[hidden]{display:none}
+    .scpanel,.scaxes{
+      position:fixed;left:0;right:0;bottom:0;z-index:40;
+      max-height:min(66vh,560px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+      background:var(--paper);border:none;border-top:1px solid var(--ink);
+      border-radius:16px 16px 0 0;box-shadow:0 -12px 34px rgba(22,19,13,.20);
+      margin:0;padding:0 14px calc(18px + env(safe-area-inset-bottom));
+      display:block}
+    .scpanel[hidden],.scaxes[hidden]{display:none}
+    .sheethd{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:2;
+      background:var(--paper);padding:12px 0 10px;margin-bottom:2px;
+      border-bottom:1px solid var(--line)}
+    .sheethd::before{content:"";position:absolute;top:5px;left:50%;transform:translateX(-50%);
+      width:38px;height:4px;border-radius:2px;background:var(--line-2)}
+    .sheethd b{font-size:14px;letter-spacing:.05em}
+    .sheethd button{margin-left:auto}
+    .scpanel>.g{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;padding:9px 0;
+      border-bottom:1px solid var(--line)}
+    .scpanel>.g:last-child{border-bottom:none}
+    .scpanel .seg{flex-wrap:wrap}
+    .scpanel .pals{flex-wrap:wrap;gap:7px}
+    .scaxes{border-top:1px solid var(--ink);margin-top:0;padding-top:0}
+    .scaxhead{padding-top:9px}
+    .scgrid{max-height:none;overflow:visible}
+    /* 面板浮起來之後，底下那排就不用再留空間 */
+    .scfoot{flex-wrap:nowrap}
+    /* 展示模式下預設列已經在設計軸面板裡了，頭列不用再擠一份 */
+    body.in-show #presets{display:none}
+  }
   /* ---------- 展示頁：可收合的設計軸面板 ---------- */
   .scrow{display:flex;gap:10px;align-items:center;width:100%}
   .scrow textarea{flex:1;min-width:0}
@@ -571,6 +615,7 @@
       <button class="btn sm" id="scPNG" type="button">存 PNG</button>
     </div>
     <div class="scpanel" id="scPalPanel" hidden>
+      <div class="sheethd"><b>配色</b><button class="btn ghost sm" data-close="scPalPanel" type="button">完成</button></div>
       <div class="g"><label>上色</label>
         <div class="seg" id="scColor">
           <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
@@ -598,6 +643,7 @@
         <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
       </div>
       <div class="scaxes" id="scAxes" hidden>
+        <div class="sheethd"><b>設計軸</b><button class="btn ghost sm" data-close="scAxes" type="button">完成</button></div>
         <div class="scaxhead">
           <div class="seg" id="scPreset"></div>
           <span class="spacer"></span>
@@ -610,6 +656,8 @@
 
 
 
+
+  <div class="sheetback" id="sheetBack" hidden></div>
 
   <div class="modal" id="svgmodal">
     <div class="sheet" style="width:min(820px,100%)">
@@ -2623,26 +2671,50 @@ const SCOPEN="fangcun-scaxes-open";
 function setShowAxes(open){
   const box=$("scAxes"), btn=$("scMore");
   if(!box||!btn) return;
+  if(open && isSheet() && !$("scPalPanel").hidden) setPalPanel(false);
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
   $("scMoreT").textContent=open?"收起":"設計軸";
   try{ localStorage.setItem(SCOPEN,open?"1":"0"); }catch(e){}
   if(open) syncShowAxes();
+  syncBackdrop();
 }
-$("scMore").addEventListener("click",()=>setShowAxes($("scAxes").hidden));
 const SCPAL_KEY="fangcun-scpal-open";
+/* 觸控裝置上兩個面板都是浮在下方的，一次只能開一個，
+   而且要有遮罩可以點外面關掉 —— 不然滑桿會跟畫布搶手勢。 */
+const isSheet=()=>window.matchMedia("(pointer:coarse)").matches;
+function syncBackdrop(){
+  const b=$("sheetBack"); if(!b) return;
+  b.hidden = !(isSheet() && (!$("scAxes").hidden || !$("scPalPanel").hidden));
+}
 function setPalPanel(open){
   const box=$("scPalPanel"), btn=$("scPalBtn");
   if(!box||!btn) return;
+  if(open && isSheet() && !$("scAxes").hidden) setShowAxes(false);
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
   $("scPalT").textContent=open?"收起":"配色";
   try{ localStorage.setItem(SCPAL_KEY,open?"1":"0"); }catch(e){}
+  syncBackdrop();
 }
+$("scMore").addEventListener("click",()=>setShowAxes($("scAxes").hidden));
 $("scPalBtn").addEventListener("click",()=>setPalPanel($("scPalPanel").hidden));
+$("sheetBack").addEventListener("click",()=>{ setShowAxes(false); setPalPanel(false); });
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-close]"); if(!b) return;
+  if(b.dataset.close==="scAxes") setShowAxes(false); else setPalPanel(false);
+});
+addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&isSheet()){ setShowAxes(false); setPalPanel(false); }
+});
+matchMedia("(pointer:coarse)").addEventListener?.("change",syncBackdrop);
 try{
-  setPalPanel(localStorage.getItem(SCPAL_KEY)==="1");
-  if(localStorage.getItem(SCOPEN)==="1") setShowAxes(true);
+  /* 手機上預設都收起來，畫布才完整；桌機才沿用上次的狀態 */
+  if(isSheet()){ setPalPanel(false); setShowAxes(false); }
+  else{
+    setPalPanel(localStorage.getItem(SCPAL_KEY)==="1");
+    if(localStorage.getItem(SCOPEN)==="1") setShowAxes(true);
+  }
 }catch(e){}
 $("scReset").addEventListener("click",()=>{
   Object.assign(F,PRESETS[presetKey]||PRESETS.hei);
@@ -3933,10 +4005,32 @@ $("svGo").addEventListener("click",()=>{
   $("svgmodal").classList.remove("on");
 });
 
+
+/* 幫可橫向捲動的列加上「還有更多」的漸層提示 */
+function markScrollable(el){
+  if(!el) return;
+  const upd=()=>{
+    const w=el.parentElement;
+    if(!w||!w.classList.contains("barwrap")) return;
+    w.classList.toggle("more", el.scrollWidth-el.clientWidth-el.scrollLeft>6);
+  };
+  el.addEventListener("scroll",upd,{passive:true});
+  addEventListener("resize",upd);
+  setTimeout(upd,80); setTimeout(upd,600);
+}
+for(const id of ["bar","scbar"]){
+  const el=document.querySelector("."+id);
+  if(!el) continue;
+  const wrap=document.createElement("div"); wrap.className="barwrap";
+  el.parentNode.insertBefore(wrap,el); wrap.appendChild(el);
+  markScrollable(el);
+}
+
 /* ---- 分頁切換 ---- */
 let MODE="work";
 function setMode(m){
   MODE=m;
+  document.body.classList.toggle("in-show", m==="show");
   document.querySelectorAll(".work").forEach(x=>x.classList.toggle("hide",m!=="work"));
   $("showcase").classList.toggle("on",m==="show");
   if(m==="show"){ syncShowAxes(); scFitInput(); scDraw(); }
