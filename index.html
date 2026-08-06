@@ -37,6 +37,12 @@
   .tabs button+button{border-left:1px solid var(--ink)}
   .tabs button.on{background:var(--ink);color:var(--paper)}
   .work.hide{display:none}
+  .cmp-ref{fill:none;stroke:var(--grid);stroke-width:5;opacity:.55}
+  .cmp-legend{position:absolute;left:10px;top:10px;display:flex;gap:12px;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;pointer-events:none}
+  .cmp-legend i{font-style:normal;display:flex;align-items:center;gap:4px;color:var(--muted)}
+  .cmp-legend i b{width:14px;height:3px;display:block}
+  .axlock{opacity:.4;pointer-events:none}
 
   .bar{display:flex;align-items:center;gap:12px;padding:0 12px;height:50px;
     border-bottom:1px solid var(--ink);overflow:hidden}
@@ -379,6 +385,10 @@
     <div class="tabs" id="tabs">
       <button data-m="work" class="on">工作台</button><button data-m="show">展示</button>
     </div>
+    <div class="tabs" id="engines" title="原樣＝忠於 GlyphWiki 資料；方寸＝套用你的設計軸">
+      <button data-e="fangcun" class="on">方寸</button><button data-e="reference">原樣</button
+      ><button data-e="compare">對照</button>
+    </div>
     <div class="presets" id="presets">
       <button data-p="hei">黑體</button><button data-p="yuan">圓體</button
       ><button data-p="ming">明體</button><button data-p="hand">手寫</button
@@ -388,6 +398,7 @@
     <span class="spacer"></span>
     <button class="btn ghost sm" id="btnInstall" type="button" style="display:none">安裝</button>
     <button class="btn ghost sm" id="btnSubset" type="button">挑字匯出</button>
+    <button class="btn ghost sm" id="btnQA" type="button">自我檢查</button>
     <button class="btn ghost sm" id="btnPack" type="button">載入資料包</button>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
     <button class="btn ghost sm" id="btnKage" type="button">匯入 KAGE</button>
@@ -443,6 +454,10 @@
     <section class="pane" data-mobile-pane="edit">
       <h2>檢視與編輯 <em id="mGlyph">木</em></h2>
       <div class="bigbox" id="bigBox">
+        <div class="cmp-legend" id="cmpLegend" style="display:none">
+          <i><b style="background:var(--ink)"></b>方寸</i>
+          <i><b style="background:var(--grid)"></b>原樣</i>
+        </div>
         <svg id="bigSvg" viewBox="-26 -26 1052 1052"></svg>
         <div class="badge" id="badge">EDIT</div>
       </div>
@@ -510,6 +525,27 @@
   </section>
 
 
+
+  <div class="modal" id="qamodal">
+    <div class="sheet" style="width:min(880px,100%)">
+      <header><b>自我檢查</b><span>REGRESSION</span>
+        <button class="btn ghost sm" id="qaClose" type="button" style="margin-left:auto">關閉</button></header>
+      <div class="body">
+        <p class="tip">拿一組固定的字（涵蓋辶阝訁氵忄扌亻糹門和標點）跑一遍，檢查有沒有空輪廓、NaN、爆框。<br>
+          按「存成基準」記下現在的數字；之後任何人改過的版本回來，再跑一次就知道**哪個字變了、變多少**。</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn sm" id="qaRun" type="button">開始檢查</button>
+          <button class="btn ghost sm" id="qaSave" type="button" disabled>存成基準</button>
+          <button class="btn ghost sm" id="qaClear" type="button">清除基準</button>
+          <span class="tip" id="qaStat">—</span>
+        </div>
+        <div id="qaOut" style="font-family:var(--mono);font-size:11px;line-height:1.75;
+             max-height:46vh;overflow:auto;white-space:pre;color:var(--muted)"></div>
+      </div>
+      <footer><span class="tip" id="qaVerdict">—</span></footer>
+    </div>
+  </div>
+
   <div class="modal" id="submodal">
     <div class="sheet" style="width:min(760px,100%)">
       <header><b>挑字匯出</b><span>SUBSET</span>
@@ -517,7 +553,7 @@
       <div class="body">
         <p class="tip">只做招牌、菜單、標題那幾個字的時候用這個。<br>
           貼上你要的文字，重複的會自動去掉，只把用到的字打包成一個很小的字型檔。</p>
-        <textarea id="subTxt" spellcheck="false" placeholder="青埔指南&#10;建築師事務所&#10;本日推薦　冰滴咖啡"></textarea>
+        <textarea id="subTxt" spellcheck="false" placeholder="春日書店&#10;本日推薦　冰滴咖啡&#10;新書上架　二樓座位"></textarea>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn ghost sm" id="subFromSpec" type="button">帶入樣張文字</button>
           <button class="btn ghost sm" id="subPunc" type="button">加上常用標點</button>
@@ -612,12 +648,13 @@
 
 const EM=1000, ASC=880, DESC=-120;
 /* 出廠值對照 Noto Sans CJK TC 實測校準：
-   字重 80 + 字面率 1.05 → 黑度中位 0.2994（Noto 是 0.2980）、字面寬 0.911
-   原本的 78 / 1.00 偏細也偏小（黑度 0.277、字面寬 0.868） */
-const F={weight:80,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
+   在黑度都對齊 Noto 0.298 的條件下掃過視覺補償，拐點在 0.4–0.55：
+   補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
+   對 KAGE 的吻合度代價只有 0.756 → 0.74。字重 76 是該補償量下對齊 Noto 的值。 */
+const F={weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0.00,finish:0.00,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
-const AXKEYS=['weight','contrast','round','counter','gravity','face','hand','finish'];
+const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1415,36 +1452,31 @@ function componentStyleKey(id){
   if(!m) return id;
   try{return String.fromCodePoint(parseInt(m[1],16));}catch(e){return id;}
 }
-const COMPONENT_DENSITY_CAP={
-  "糹":0.86,"糸":0.88,"金":0.88,"馬":0.87,"門":0.89,"雨":0.89,
-  "言":0.91,"車":0.91,"隹":0.90,"酉":0.91,"足":0.92,"月":0.92,
-  "女":0.93,"心":0.92,"辶":0.91,"竹":0.93,"父":0.93,"又":0.94,
-  "火":0.94,"力":0.94,"疒":0.93,"犭":0.92
-};
-function opticalWeightScale(id,sx,sy){
+/* 部件被壓進小格時把筆畫調細，避免糊成一團。
+   強度由「視覺補償」那根軸控制：0 = 完全忠於資料，1 = 全量補償。
+   只看筆數和外框大小推導 —— 不再有寫死的部件名單，換資料也不會失準。 */
+function opticalWeightScale(id,sx,sy,optic){
+  const g=optic===undefined?1:optic;
+  if(g<=0.001) return 1;
   const ax=Math.max(0.04,Math.abs(sx)),ay=Math.max(0.04,Math.abs(sy));
   const minDim=Math.min(ax,ay),area=Math.sqrt(ax*ay);
   const geometric=0.72*minDim+0.28*area;
   const n=estimateStrokeCount(id);
   const narrow=ax<0.62||ay<0.62;
-  /* 複雜部件要比簡單偏旁更敢縮細，否則糹、金、馬、門塞進半格會糊成一團。 */
+  /* 筆畫越多、格子越窄，越敢縮細 */
   let floor=n>=12?0.42:n>=9?0.47:n>=6?0.53:n>=4?0.60:0.66;
-  if(narrow&&n>=8) floor-=0.04;
+  if(narrow&&n>=8)  floor-=0.04;
   if(narrow&&n>=12) floor-=0.04;
-  const denseFamily=/^(門|鬥|馬|魚|鳥|龜|齒|言|金|雨|糸|糹|車|隹|月|用|冊|網|西|目|日|田|白|酉)$/;
-  if(denseFamily.test(componentStyleKey(id))) floor-=0.04;
-  let densityCap=n>=16?0.88:n>=13?0.90:n>=11?0.92:n>=9?0.94:n>=7?0.97:1;
-  const sk=componentStyleKey(id);
-  if(denseFamily.test(sk)&&n>=7) densityCap-=0.015;
-  if(COMPONENT_DENSITY_CAP[sk]) densityCap=Math.min(densityCap,COMPONENT_DENSITY_CAP[sk]);
+  const densityCap=n>=16?0.87:n>=13?0.89:n>=11?0.91:n>=9?0.93:n>=7?0.96:1;
   const scaled=Math.max(clamp(floor,0.34,0.72),Math.pow(geometric,0.82));
-  return Math.min(densityCap,scaled);
+  const full=Math.min(densityCap,scaled);
+  return 1+(full-1)*g;                 /* 依軸線性內插回 1（不補償） */
 }
-function collect(id,box,wScale,out,seed,variant,depth){
+function collect(id,box,wScale,out,seed,variant,depth,optic){
   const g=G[id]; if(!g||(depth||0)>8) return;
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
   /* box 已經是相對整個 em 的絕對位置，不再把父層 ws 重複相乘；深層 KAGE 引用不會越來越細。 */
-  const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy));
+  const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy,optic));
   const S=resolveStrokes(g,variant);
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
     h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,ws,
@@ -1452,7 +1484,7 @@ function collect(id,box,wScale,out,seed,variant,depth){
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
   if(g.c) g.c.forEach((part,i)=>{
     const [a,b,c,d]=part.box;
-    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1);
+    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1,optic);
   });
 }
 const powC=(v,g)=>{const u=(v-500)/500,s=u<0?-1:1;return 500+500*s*Math.pow(Math.abs(u),g);};
@@ -1512,13 +1544,13 @@ function unwarpPoint(w,st,f,pi){
 const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
 
 function glyphContours(id,f,variant,NS){
-  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   const out=[];
   for(const st of warp(raw,f)) out.push(...strokeContours(st,f,st.ws,NS));
   return out;
 }
 function glyphSkeleton(id,f,variant){
-  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0);
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   return warp(raw,f).filter(st=>st.p.length>1).map(st=>
     "M "+sampleSkeleton(st.p,st.bend||0,40,22,st.cv,st.kj).map(s=>fx(s.p[0])+" "+fx(EM-s.p[1])).join(" L "));
 }
@@ -1596,7 +1628,7 @@ function runQA(){
   const raw={};
   const ORDER=VIEW.slice(page*PAGE,(page+1)*PAGE).filter(id=>G[id]&&!G[id].sp);
   for(const id of ORDER){
-    const ds=glyphContours(id,F,null,16).map(svgD);
+    const ds=glyphContours(id,FA(),null,16).map(svgD);
     const iR=raster(ds,ctxRef,REF), iS=raster(ds,ctxSm,SMALL);
     raw[id]={m:measure(iR,REF),hR:holeCount(iR,REF,4),hS:holeCount(iS,SMALL,1)};
   }
@@ -1670,6 +1702,7 @@ const $=id=>document.getElementById(id);
 
 const AXES=[
   {k:"weight",  n:"字重",  en:"WEIGHT",  min:34,  max:150, step:1,   lo:"細",  hi:"粗",  f:v=>v},
+  {k:"optic",   n:"視覺補償", en:"OPTICAL", min:0, max:1, step:0.02, lo:"忠於資料", hi:"小字清晰", f:v=>(+v).toFixed(2)},
   {k:"contrast",n:"對比",  en:"CONTRAST",min:0.62,max:1.90,step:0.02,lo:"均勻",hi:"強烈",f:v=>v.toFixed(2)},
   {k:"round",   n:"圓角",  en:"ROUND",   min:0,   max:1,   step:0.02,lo:"尖",  hi:"圓",  f:v=>v.toFixed(2)},
   {k:"counter", n:"中宮",  en:"COUNTER", min:0.78,max:1.30,step:0.01,lo:"鬆",  hi:"緊",  f:v=>v.toFixed(2)},
@@ -1679,13 +1712,13 @@ const AXES=[
   {k:"finish",  n:"收筆",  en:"FINISH",  min:0,   max:1,   step:0.02,lo:"平切",hi:"翹角",f:v=>v.toFixed(2)}
 ];
 const PRESETS={
-  hei:{weight:80,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0},
-  yuan:{weight:88,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0},
-  ming:{weight:62,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95},
-  hand:{weight:58,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34},
-  title:{weight:135,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0},
+  hei:{weight:76,optic:0.45,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0},
+  ming:{weight:60,optic:0.35,contrast:1.78,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kage:{weight:52,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0}
+  kage:{weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0}
 };
 const PNAME={hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kage:"原樣"};
 const PNAME_EN={hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kage:"Source"};
@@ -1851,14 +1884,22 @@ function drawBig(){
   bigSvg.appendChild(el("line",{x1:0,y1:0,x2:EM,y2:EM,...dash}));
   bigSvg.appendChild(el("line",{x1:EM,y1:0,x2:0,y2:EM,...dash}));
 
-  const cs=glyphContours(current,F,varSel);
+  const cs=glyphContours(current,FA(),varSel);
   cs.forEach(c=>bigSvg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)",
-    "fill-rule":"nonzero",opacity:editMode?.55:1})));
-  if(showSkel||editMode) glyphSkeleton(current,F,varSel).forEach(d=>bigSvg.appendChild(
+    "fill-rule":"nonzero",opacity:editMode?.55:(ENGINE==="compare"?.62:1)})));
+  if(ENGINE==="compare"){
+    /* 原樣的輪廓用線框疊上去，一眼看出設計軸把形狀推到哪 */
+    try{
+      glyphContours(current,axesOf("reference"),varSel).forEach(c=>
+        bigSvg.appendChild(el("path",{d:svgD(c),class:"cmp-ref"})));
+    }catch(e){}
+  }
+  if(showSkel||editMode) glyphSkeleton(current,FA(),varSel).forEach(d=>bigSvg.appendChild(
     el("path",{d,fill:"none",stroke:"var(--skel)","stroke-width":3,
       "stroke-dasharray":"13 7 3 7",opacity:.9})));
 
   $("bigBox").classList.toggle("editing",editMode);
+  $("cmpLegend").style.display = ENGINE==="compare" ? "" : "none";
   if(editMode){
     const S=resolveStrokes(g,varSel);
     if(S) S.forEach((st,si)=>st.p.forEach((pt,pi)=>{
@@ -1987,7 +2028,7 @@ bigSvg.addEventListener("pointercancel",endDrag);
 function drawAll(){
   AXES.forEach(ax=>{ax.input.value=F[ax.k];ro[ax.k].textContent=ax.f(F[ax.k]);});
   cellPaths.forEach((paths,id)=>{
-    const cs=glyphContours(id,F,null,14);
+    const cs=glyphContours(id,FA(),null,14);
     for(let i=0;i<paths.length;i++) paths[i].setAttribute("d",cs[i]?svgD(cs[i]):"");
   });
   drawBig();
@@ -2018,7 +2059,7 @@ function buildFont(){
     if(!G[id].u) continue;               /* 匯入的 GlyphWiki 部件沒有碼位，不進字型 */
     glyphs.push(new opentype.Glyph({
       name:"uni"+G[id].u.toString(16).toUpperCase().padStart(4,"0"),
-      unicode:G[id].u,advanceWidth:EM,path:toOtPath(glyphContours(id,F))}));
+      unicode:G[id].u,advanceWidth:EM,path:toOtPath(glyphContours(id,FA()))}));
   }
 
   const font=new opentype.Font({familyName:lat,styleName:styleEN,
@@ -2064,7 +2105,7 @@ async function refreshLiveFontSmall(){
     const glyphs=[notdef,new opentype.Glyph({name:"space",unicode:0x20,advanceWidth:EM/2,path:new opentype.Path()})];
     for(const ch of need) glyphs.push(new opentype.Glyph({
       name:"uni"+G[ch].u.toString(16).toUpperCase(),unicode:G[ch].u,
-      advanceWidth:EM,path:toOtPath(glyphContours(ch,F))}));
+      advanceWidth:EM,path:toOtPath(glyphContours(ch,FA()))}));
     const font=new opentype.Font({familyName:"SEPrev",styleName:"Regular",
       unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
     const buf=font.toArrayBuffer();
@@ -2774,7 +2815,7 @@ function getWorker(){
 }
 function cmdsOf(id,NS){
   const out=[];
-  for(const c of glyphContours(id,F,null,NS)){
+  for(const c of glyphContours(id,FA(),null,NS)){
     for(const k of c){
       if(k[0]==="M") out.push(0,k[1],k[2]);
       else if(k[0]==="L") out.push(1,k[1],k[2]);
@@ -2948,7 +2989,7 @@ function scDraw(){
     /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
     const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
-    let cs=[]; try{ cs=glyphContours(ch,F); }catch(e){}
+    let cs=[]; try{ cs=glyphContours(ch,FA()); }catch(e){}
     const n=Math.max(1,cs.length), key=it.row+"|"+it.col+"|"+ch, ov=scOvr[key];
     let ref=null;
     if(scCol==="charGrad"||scCol==="pageGrad"){
@@ -3057,7 +3098,7 @@ function subScan(){
   for(const ch of have.slice(0,120)){
     const cell=document.createElement("div"); cell.className="pcell";
     const svg=el("svg",{viewBox:"-14 -14 1028 1028",preserveAspectRatio:"xMidYMid meet"});
-    try{ glyphContours(ch,F,null,20).forEach(c=>svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
+    try{ glyphContours(ch,FA(),null,20).forEach(c=>svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
     cell.appendChild(svg);
     const cap=document.createElement("div"); cap.className="pc";
     cap.innerHTML='<b>'+(ch==="\u3000"?"\u2423":ch)+'</b><span></span>';
@@ -3091,7 +3132,7 @@ $("subGo").addEventListener("click",()=>{
                   new opentype.Glyph({name:"space",unicode:0x20,advanceWidth:EM/2,path:new opentype.Path()})];
     for(const ch of subList)
       glyphs.push(new opentype.Glyph({name:"uni"+G[ch].u.toString(16).toUpperCase(),
-        unicode:G[ch].u, advanceWidth:EM, path:toOtPath(glyphContours(ch,F,null,30))}));
+        unicode:G[ch].u, advanceWidth:EM, path:toOtPath(glyphContours(ch,FA(),null,30))}));
     const font=new opentype.Font({familyName:lat,styleName:styleEN,
       unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
     font.names.fontFamily     ={en:lat,"zh-TW":fam};
@@ -3115,6 +3156,178 @@ $("subGo").addEventListener("click",()=>{
     setTimeout(()=>alert("完成\n\n"+subList.length+" 個字 · "+(buf.byteLength/1024).toFixed(0)+" KB"+
       "\n\n這個檔只含你挑的字，裝起來很快。"),350);
   }catch(e){ alert("匯出失敗："+(e.message||e)); }
+});
+
+
+/* ==========================================================================
+   雙引擎
+   「引擎」不是兩份幾何程式碼 —— 那會多出一整套要維護的東西，
+   而且 KAGE 官方引擎是 GPL-3.0，包進來整個 app 就得跟著 GPL。
+   這裡的引擎 = 一組鎖定的設計軸。原樣＝忠於資料那組，方寸＝你調的那組，
+   兩邊走同一條 glyphContours，所以永遠不會有「兩套引擎各自漂移」的問題。
+   ========================================================================== */
+const ENGINE_REF={weight:52,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
+                  gravity:1.00,face:1.00,hand:0.00,finish:0.00};
+let ENGINE="fangcun";                     /* fangcun | reference | compare */
+const isRef=()=>ENGINE==="reference";
+/* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
+function axesOf(which){
+  return which==="reference" ? {...F,...ENGINE_REF} : F;
+}
+const FA=()=>axesOf(isRef()?"reference":"fangcun");
+
+function paintEngineUI(){
+  document.querySelectorAll("#engines button").forEach(b=>
+    b.classList.toggle("on",b.dataset.e===ENGINE));
+  /* 原樣模式鎖住設計軸，避免以為在調卻沒反應 */
+  const lock=isRef();
+  $("ctrls").classList.toggle("axlock",lock);
+  $("presets").classList.toggle("axlock",lock);
+  const st=$("statAxes");
+  if(lock) st.textContent="原樣模式 · 設計軸已鎖定，顯示的是 GlyphWiki 資料本來的樣子";
+}
+$("engines").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-e]"); if(!b) return;
+  ENGINE=b.dataset.e;
+  paintEngineUI();
+  buildCells(); mark(); schedule(); scheduleSlow();
+  if(MODE==="show") scDraw();
+});
+
+
+/* ==========================================================================
+   回歸測試
+   「越改越糟」的真正原因不是誰比較會改，是沒有辦法知道一次改動是變好還變壞。
+   固定字集 ＋ 存基準 ＋ 逐字比對，就能把這件事變成可驗收的。
+   ========================================================================== */
+const QA_CORPUS=[
+  "木","口","日","月","目","田","女","心","門","馬","言","車","米",
+  "這","過","還","道","進","連","近","遠",
+  "陳","部","都","郭","院","陽","隊",
+  "說","語","請","謝","讀","話","設","計",
+  "河","海","清","洗","法","沒",
+  "情","快","性","怕",
+  "打","找","把","提","接",
+  "你","他","住","做","使",
+  "紅","經","結","給",
+  "問","間","開","關","聞",
+  "繼","鬱","蟲","廳","體",
+  "。","，","、","：","！","？","「","」","（","）"
+];
+const QA_KEY="fangcun-qa-baseline";
+let qaLast=null;
+
+/* 用 canvas 光柵化，量黑度與內白數；同時檢查結構有沒有壞 */
+function glyphStats(id,f,N){
+  N=N||40;
+  const out={ok:false,contours:0,points:0,ink:0,holes:0,nan:false,bbox:null};
+  let cs;
+  try{ cs=glyphContours(id,f,null,20); }catch(e){ out.err=String(e.message||e); return out; }
+  if(!cs||!cs.length){ out.err="空輪廓"; return out; }
+  out.contours=cs.length;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  for(const c of cs) for(const k of c){
+    out.points++;
+    for(let i=1;i<k.length;i++){
+      const v=k[i];
+      if(!isFinite(v)){ out.nan=true; continue; }
+      if(i%2===1){ if(v<minX)minX=v; if(v>maxX)maxX=v; }
+      else { if(v<minY)minY=v; if(v>maxY)maxY=v; }
+    }
+  }
+  if(out.nan){ out.err="有 NaN／Infinity"; return out; }
+  if(minX>maxX){ out.err="bbox 無效"; return out; }
+  out.bbox=[Math.round(minX),Math.round(minY),Math.round(maxX),Math.round(maxY)];
+  if(minX<-260||maxX>EM+260||minY<-260||maxY>EM+260) out.err="超出安全範圍";
+  const cv=document.createElement("canvas"); cv.width=cv.height=N;
+  const cx=cv.getContext("2d",{willReadFrequently:true});
+  cx.fillStyle="#fff"; cx.fillRect(0,0,N,N);
+  cx.setTransform(N/EM,0,0,N/EM,0,0);
+  cx.fillStyle="#000";
+  const path=new Path2D();
+  for(const c of cs) path.addPath(new Path2D(svgD(c)));
+  cx.fill(path,"nonzero");
+  cx.setTransform(1,0,0,1,0,0);
+  const d=cx.getImageData(0,0,N,N).data;
+  const g=new Uint8Array(N*N);
+  let ink=0;
+  for(let i=0;i<N*N;i++){ const on=d[i*4]<128?1:0; g[i]=on; ink+=on; }
+  out.ink=ink/(N*N);
+  const seen=new Uint8Array(N*N); let regions=0;
+  for(let i=0;i<N*N;i++){
+    if(g[i]||seen[i]) continue;
+    regions++; const st=[i]; seen[i]=1;
+    while(st.length){
+      const q=st.pop(),qx=q%N,qy=(q/N)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=qx+dx,ny=qy+dy; if(nx<0||ny<0||nx>=N||ny>=N) continue;
+        const k=ny*N+nx; if(!g[k]&&!seen[k]){ seen[k]=1; st.push(k); }
+      }
+    }
+  }
+  out.holes=Math.max(0,regions-1);
+  out.ok=!out.err;
+  return out;
+}
+function qaBaseline(){ try{ return JSON.parse(localStorage.getItem(QA_KEY)||"null"); }catch(e){ return null; } }
+
+async function qaRun(){
+  const out=$("qaOut"); out.textContent="";
+  $("qaRun").disabled=true; $("qaSave").disabled=true;
+  const base=qaBaseline();
+  const rows=[], lines=[];
+  const list=QA_CORPUS.filter(ch=>G[ch]);
+  const missing=QA_CORPUS.filter(ch=>!G[ch]);
+  let bad=0, drift=0, worst=0, worstCh="";
+  for(let i=0;i<list.length;i++){
+    const ch=list[i];
+    const a=glyphStats(ch,axesOf("fangcun"),40);
+    const r=glyphStats(ch,axesOf("reference"),40);
+    rows.push({ch,ink:+a.ink.toFixed(4),holes:a.holes,contours:a.contours,
+               points:a.points,refInk:+r.ink.toFixed(4),refHoles:r.holes});
+    let flag="";
+    if(!a.ok){ flag=" ✗ "+a.err; bad++; }
+    else if(!r.ok){ flag=" ✗ 原樣:"+r.err; bad++; }
+    if(base && base.rows){
+      const b=base.rows.find(x=>x.ch===ch);
+      if(b){
+        const di=Math.abs(a.ink-b.ink), dh=a.holes-b.holes;
+        if(di>0.012||dh!==0){ drift++; flag+="  ← 變了 (黑度 "+(a.ink-b.ink>=0?"+":"")+
+          (a.ink-b.ink).toFixed(4)+(dh?" · 內白 "+(dh>0?"+":"")+dh:"")+")"; }
+        if(di>worst){ worst=di; worstCh=ch; }
+      }
+    }
+    lines.push(ch+"  黑度 "+a.ink.toFixed(4)+"  內白 "+String(a.holes).padStart(2)+
+               "  外框 "+String(a.contours).padStart(3)+"  節點 "+String(a.points).padStart(4)+flag);
+    if(i%12===0){ out.textContent=lines.join("\n"); await yield_(); }
+  }
+  out.textContent=lines.join("\n")+(missing.length?"\n\n字庫沒有："+missing.join(" "):"");
+  qaLast={when:new Date().toISOString().slice(0,16).replace("T"," "),rows};
+  $("qaRun").disabled=false; $("qaSave").disabled=false;
+  $("qaStat").textContent=list.length+" 字檢查完成";
+  const v=$("qaVerdict");
+  if(bad) v.innerHTML="<b style='color:var(--w2)'>發現 "+bad+" 個字有結構問題</b> —— 這是真的壞了，不是風格差異";
+  else if(!base) v.innerHTML="結構全部正常。<b>按「存成基準」記下現在的數字</b>，之後才比得出變化。";
+  else if(!drift) v.innerHTML="<b style='color:var(--ok)'>結構全部正常，而且跟基準一模一樣</b>";
+  else v.innerHTML="結構正常，但有 <b>"+drift+"</b> 個字跟基準不同（最大變化："+worstCh+
+                   " 黑度差 "+worst.toFixed(4)+"）。上面標了「← 變了」的就是。";
+}
+$("btnQA").addEventListener("click",()=>{ $("qamodal").classList.add("on");
+  const b=qaBaseline();
+  $("qaStat").textContent=b?("基準存於 "+b.when+"，共 "+b.rows.length+" 字"):"還沒有基準";
+  $("qaVerdict").textContent="—"; });
+$("qaClose").addEventListener("click",()=>$("qamodal").classList.remove("on"));
+$("qamodal").addEventListener("click",e=>{ if(e.target===$("qamodal")) $("qamodal").classList.remove("on"); });
+$("qaRun").addEventListener("click",()=>qaRun().catch(e=>{$("qaRun").disabled=false;alert("檢查失敗："+e.message);}));
+$("qaSave").addEventListener("click",()=>{
+  if(!qaLast) return;
+  try{ localStorage.setItem(QA_KEY,JSON.stringify(qaLast));
+       $("qaStat").textContent="已存成基準（"+qaLast.when+"）";
+       $("qaVerdict").textContent="之後任何版本回來，跑一次就知道哪個字變了。"; }
+  catch(e){ alert("存不進去："+e.message); }
+});
+$("qaClear").addEventListener("click",()=>{
+  localStorage.removeItem(QA_KEY); $("qaStat").textContent="基準已清除";
 });
 
 /* ---- 分頁切換 ---- */
