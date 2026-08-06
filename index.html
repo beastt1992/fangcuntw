@@ -1364,18 +1364,20 @@ function strokeOutline(st,f,wScale,NS){
     ? hw*(0.035+0.28*f.round)*(st.fr||1)
     : hw*(0.10+0.62*f.round)*(st.fr||1);
   let SP=st.p;
-  if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"){
+  if(st.h==="conn"||st.e==="conn"||st.h==="kakato"||st.e==="kakato"||st.hj||st.ej){
     SP=st.p.map(q=>q.slice());
     /* 延伸量按該筆、該端和部件縮放計算；舊版固定用全域半筆寬，小偏旁會突出。 */
-    if(st.h==="conn"||st.h==="kakato"){
+    if(st.h==="conn"||st.h==="kakato"||st.hj){
       const tan=[SP[1][0]-SP[0][0],SP[1][1]-SP[0][1]];
-      const ext=widthAt(st,0,tan,f)*wScale*(st.h==="conn"?0.46:0.16);
+      const ext = st.hj ? st.hj
+                : widthAt(st,0,tan,f)*wScale*(st.h==="conn"?0.46:0.16);
       const d=unit([-tan[0],-tan[1]]);
       SP[0]=[SP[0][0]+d[0]*ext,SP[0][1]+d[1]*ext];
     }
-    if(st.e==="conn"||st.e==="kakato"){
+    if(st.e==="conn"||st.e==="kakato"||st.ej){
       const m=SP.length-1,tan=[SP[m][0]-SP[m-1][0],SP[m][1]-SP[m-1][1]];
-      const ext=widthAt(st,1,tan,f)*wScale*(st.e==="conn"?0.46:0.16);
+      const ext = st.ej ? st.ej
+                : widthAt(st,1,tan,f)*wScale*(st.e==="conn"?0.46:0.16);
       const d=unit(tan);
       SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
     }
@@ -1612,10 +1614,47 @@ function unwarpPoint(w,st,f,pi){
 }
 const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
 
+/* 標出哪些「接續」端其實是轉角（跟另一筆的端點重合），而不是 T 字接合。
+   轉角時兩筆都往外延伸會互相戳出去 —— 辶 裡的斜線刺、口的角就是這樣來的。
+   T 字接合（端點落在別筆中段）才需要延伸把接縫填實。 */
+const CORNER_TOL=30;
+/* 轉角要「斜接」：外緣延伸到兩筆的交點，長度 = 對方半寬 / |sin(夾角)|。
+   延伸太少會缺角、太多會戳出去，這個長度剛好補滿。 */
+function markCorners(strokes,f){
+  const E=[];
+  for(let i=0;i<strokes.length;i++){
+    const st=strokes[i]; if(!st.p||st.p.length<2) continue;
+    const n=st.p.length-1;
+    E.push({i,end:0,p:st.p[0],  t:[st.p[0][0]-st.p[1][0],   st.p[0][1]-st.p[1][1]]});
+    E.push({i,end:1,p:st.p[n],  t:[st.p[n][0]-st.p[n-1][0], st.p[n][1]-st.p[n-1][1]]});
+  }
+  const halfW=st=>{
+    const n=st.p.length-1;
+    const tan=[st.p[n][0]-st.p[0][0], st.p[n][1]-st.p[0][1]];
+    return Math.max(6, widthAt(st,0.5,tan,f)*(st.ws||1)/2);
+  };
+  for(const e of E){
+    const st=strokes[e.i];
+    let best=null;
+    for(const o of E){
+      if(o.i===e.i) continue;
+      if(Math.abs(o.p[0]-e.p[0])>=CORNER_TOL||Math.abs(o.p[1]-e.p[1])>=CORNER_TOL) continue;
+      best=o; break;
+    }
+    const key=e.end?"ej":"hj";
+    if(!best){ st[key]=0; continue; }
+    const a=unit(e.t), b=unit(best.t);
+    const sin=Math.abs(a[0]*b[1]-a[1]*b[0]);      /* 兩切線夾角的 sin */
+    const hw2=halfW(strokes[best.i]);
+    /* sin 太小＝幾乎同向，斜接會拉到無限遠，夾住 */
+    st[key]=Math.min(hw2*3.2, hw2/Math.max(0.28,sin));
+  }
+  return strokes;
+}
 function glyphContours(id,f,variant,NS){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   const out=[];
-  for(const st of warp(raw,f)) out.push(...strokeContours(st,f,st.ws,NS));
+  for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,NS));
   return out;
 }
 function glyphSkeleton(id,f,variant){
