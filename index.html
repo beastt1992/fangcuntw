@@ -1001,9 +1001,10 @@
     gap:7px;height:auto !important;padding:8px 14px !important}
   .scfoot>textarea{width:100%;flex:none !important;order:1}
   .scfoot>.scaxes{order:2;flex:none !important;width:100%}
-  .scfoot>#scTypeMore,.scfoot>.tag{order:3}
-  .scfoot>#scTypeMore{align-self:flex-start}
-  .scfoot>.tag{align-self:flex-end;margin-top:-24px}
+  .scfoot>.tag{order:3}
+  /* 「更多字型軸」按鈕移除後，這一列已經沒有東西可以疊，
+     負邊界會讓統計字串壓到上面的字型軸列。 */
+  .scfoot>.tag{align-self:flex-end;margin-top:0}
   @media(max-width:700px){
     .scfoot>.tag{align-self:flex-start;margin-top:0}
   }
@@ -1012,7 +1013,6 @@
   .sctypebox{border-top:1px solid var(--ink);background:var(--paper);
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
     max-height:42vh;overflow-y:auto}
-  .sctypebox.is-off{display:none}
   /* 手機：這一盒在正常流程裡，開起來會直接把頁面拉長、畫布被推出畫面。
      壓到 34vh 並自己捲；再配合 JS 讓它跟控制面板一次只開一個。 */
   @media(max-width:1099px){
@@ -1042,7 +1042,6 @@
   .sctypegroup:first-child{margin-top:0}
   .sctypegroup em{font-style:normal;font-family:var(--mono);font-size:8.5px;
     letter-spacing:.18em;color:var(--muted);margin-left:6px}
-  #scTypeMore.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 
   /* ==========================================================================
      手機：底部字形軸列改成兩欄格線
@@ -1303,14 +1302,24 @@
         <div class="g"><label>中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
         <div class="g"><label>出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
       </div>
-      <button class="btn ghost sm" id="scTypeMore" type="button">更多字型軸</button>
+      <!-- 「更多字型軸」按鈕拿掉了：這一盒改成常駐，不再收合。 -->
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <!-- 字型軸整組：從左側搬下來收在底部，按「更多字型軸」展開。
          這是調字的工具，字型是主要操作，該在手邊而不是側欄裡。 -->
-    <div class="sctypebox is-off" id="scTypeBox"><div class="sctypepanel">
-        <!-- 字重／圓角的複本列拿掉了：底部常駐列已經有這兩根，
-             同畫面兩組數字只會讓人搞不清楚哪個是真的。 -->
+    <div class="sctypebox" id="scTypeBox"><div class="sctypepanel">
+        <!-- ★ 文字的三根滑桿從左側「文字」分節搬過來 ——
+             這一盒現在是「所有拉桿都在這」，不用開側欄也不用展開。
+             方向／對齊是按鈕不是拉桿，留在側欄。 -->
+        <div class="sclay">
+          <div class="sctypegroup">文字 <em>TEXT</em></div>
+          <div class="sclay-g"><label>大小</label>
+            <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
+          <div class="sclay-g"><label>字距</label>
+            <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
+          <div class="sclay-g"><label>行距</label>
+            <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
+        </div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
             <div class="seg" id="scPreset"></div>
@@ -1340,12 +1349,7 @@
           <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
             <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
             ><button data-k="right">靠右</button></div></div>
-          <div class="sclay-g"><label>大小</label>
-            <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
-          <div class="sclay-g"><label>字距</label>
-            <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
-          <div class="sclay-g"><label>行距</label>
-            <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
+          <!-- 大小／字距／行距三根滑桿已搬到底部常駐盒，不在這裡重複。 -->
         </div>
       </div>
 
@@ -5465,14 +5469,6 @@ function setShowMore(open){
   if(!box||!btn) return;
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
-  /* 手機：反向互斥（另一半在 scTypeMore 的監聽裡）。兩個一起開會把畫布推出畫面。 */
-  if(open && matchMedia("(max-width:1099px)").matches){
-    const tb=$("scTypeBox");
-    if(tb && !tb.classList.contains("is-off")){
-      tb.classList.add("is-off");
-      if($("scTypeMore")) $("scTypeMore").classList.remove("on");
-    }
-  }
   if(open) syncShowAxes();
   try{ localStorage.setItem(SCMORE_KEY,open?"1":"0"); }catch(e){}
 }
@@ -6780,17 +6776,7 @@ function scBuildPosterThumbs(){
     '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
 }
 scBuildPosterThumbs();
-/* 底部整組字型軸的展開／收起。用 class 不用 hidden 屬性 ——
-   這一區有 display 設定，hidden 會被作者樣式蓋掉（這個坑踩過兩次了）。 */
-if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
-  const box=$("scTypeBox"); if(!box) return;
-  const off=box.classList.toggle("is-off");
-  $("scTypeMore").classList.toggle("on",!off);
-  /* 手機：兩個面板都在正常流程裡，同時開會把頁面拉長到畫布看不見。
-     桌機的控制面板是常駐左欄（不佔高度），所以只在窄螢幕互斥。 */
-  if(!off && matchMedia("(max-width:1099px)").matches
-     && $("scMoreBox") && !$("scMoreBox").hidden) setShowMore(false);
-});
+/* 字型軸盒改成常駐，不再收合 —— 原本的「更多字型軸」按鈕與切換監聽都移除了。 */
 /* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
 (function(){
