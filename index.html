@@ -466,7 +466,10 @@
     .foot input[type=text]{height:32px;box-sizing:border-box;font-size:14px}
 
     #showcase{position:static;grid-row:2 / 4;display:none;min-height:0;height:auto;background:var(--sbg,#f1ece1)}
-    #showcase.on{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+    /* ★ 六個子元素要有六列，否則自動排位會把 minmax(0,1fr) 派給第二個子元素
+       （加了顏色列之後就是顏色列吃到 1fr、畫布只剩 auto）。
+       順序＝DOM 順序：模板列／顏色列／畫布／文字列／字型軸盒／控制面板。 */
+    #showcase.on{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto auto}
     .scbar{height:auto;min-height:48px;box-sizing:border-box;flex-wrap:wrap;padding:8px;gap:8px;
       overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
     .scbar>.g,.scbar>.btn{flex:none}
@@ -784,6 +787,21 @@
      左半邊會溢出到捲動範圍外、永遠捲不到（截圖裡紙張靠左就是這個）。
      改用子元素 margin:auto —— 溢出時兩側都捲得到，沒溢出時照樣置中。 */
   .scstage{justify-content:flex-start !important;align-items:flex-start !important}
+  /* 顏色列（畫布上方）。跟 .scbar 共用底色與邊框，所以只需要補差異。 */
+  .scbar-color{gap:16px}
+  .scbar-color .pals{flex-wrap:nowrap}
+  .scbar-color .seg{display:flex;flex-wrap:nowrap}
+  .scbar-color input[type=color]{width:30px;height:24px;padding:0;border:1px solid var(--line-2);background:none}
+  /* 手機：維持「一列、橫向捲」。這一列全是按鈕與色塊（不是滑桿），
+     橫向捲不會跟拖曳打架；讓它 flex-wrap 反而會疊成三行、把畫布擠掉。 */
+  @media(max-width:700px){
+    #scColorBar{flex-wrap:nowrap;height:auto;min-height:0;padding:7px 10px;gap:13px}
+    #scColorBar>.g{flex:none}
+  }
+  /* 畫布外層：自己不捲動，只當「100%」與提示的定位基準。
+     真正在捲的是裡面的 .scstage。 */
+  .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
+  .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
     border:1px solid var(--line-2,#cfc8b8);background:var(--paper,#faf7f0);
     border-radius:3px;overflow:hidden;z-index:5;box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -839,15 +857,15 @@
   @media(min-width:1100px){
     #showcase{
       grid-template-columns:288px minmax(0,1fr);
-      /* 第 4 列給 #scTypeBox（更多字型軸）。
+      /* 列：① 範例海報／匯出 ② 顏色 ③ 畫布 ④ 文字＋字型軸 ⑤ 更多字型軸。
          ★ 每個子元素都要有明確格位 —— 漏掉的會被 grid 自動排進左欄底下，
            整組軸就擠在左下角 288px 寬的格子裡。踩過一次。 */
-      grid-template-rows:auto minmax(0,1fr) auto auto;
+      grid-template-rows:auto auto minmax(0,1fr) auto auto;
       column-gap:0;
     }
-    /* 左欄：控制面板常駐，自己捲（跨滿含字型軸列的 4 列） */
+    /* 左欄：控制面板常駐，自己捲（跨滿全部五列） */
     #showcase>#scMoreBox{
-      grid-column:1; grid-row:1 / 5;
+      grid-column:1; grid-row:1 / 6;
       display:block !important;      /* 蓋掉 hidden */
       border-right:1px solid var(--ink,#16130d); border-top:0;
       overflow-y:auto; overflow-x:hidden;
@@ -856,9 +874,11 @@
     }
     /* 右欄：模板列、畫布、文字列依序疊 */
     #showcase>#scPosterBar{grid-column:2; grid-row:1}
-    #showcase>.scstage{grid-column:2; grid-row:2}
-    #showcase>.scfoot{grid-column:2; grid-row:3}
-    #showcase>#scTypeBox{grid-column:2; grid-row:4}
+    #showcase>#scColorBar{grid-column:2; grid-row:2}
+    /* ★ 畫布外包了一層 .scstagewrap，格線子元素是它、不是 .scstage */
+    #showcase>.scstagewrap{grid-column:2; grid-row:3}
+    #showcase>.scfoot{grid-column:2; grid-row:4}
+    #showcase>#scTypeBox{grid-column:2; grid-row:5}
     /* 左欄常駐就不需要「收起」按鈕與開關 */
     #scMoreClose,#scMoreBtn{display:none}
     /* 欄內是窄的，格線改單欄 */
@@ -1209,12 +1229,33 @@
         <button class="btn sm" id="scPNG" type="button">PNG</button>
       </div>
     </div>
+    <!-- ★ 顏色搬到畫布上方自成一列。跟範例海報那排併成一行會太擠（光上色就五顆），
+         所以放在它下面 —— 一樣在「工具列」這一區，手到眼到，不用開側欄。 -->
+    <div class="scbar scbar-color" id="scColorBar">
+      <div class="g"><label>上色</label><div class="seg wrapseg" id="scColor">
+        <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
+        ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
+        ><button data-k="rand">隨機</button></div></div>
+      <div class="g"><label>疊色</label><div class="seg" id="scBlend">
+        <button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div></div>
+      <div class="g"><label>單色</label><input type="color" id="scInk" value="#2a2118"></div>
+      <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
+      <div class="g"><label>自訂色</label>
+        <input type="color" id="scPick" value="#c2453a">
+        <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
+      <div class="g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
+    </div>
+    <!-- ★ 畫布外再包一層：.scstage 是 overflow:auto 的捲動容器，
+         絕對定位的子元素會「跟著內容捲」——「100%」和選字提示才會浮到畫面中間。
+         把它們移到這層不捲動的 wrapper 底下，就永遠釘在畫布區的角落。 -->
+    <div class="scstagewrap">
     <div class="scstage" id="scStage">
       <!-- 縮放只作用在顯示層：包一層做 CSS transform，
            不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
       <div class="sczoomwrap is-fit" id="scZoomWrap">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
+    </div>
       <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
       <div class="sczoom" id="scZoom">
         <button type="button" data-z="out" title="縮小">−</button>
@@ -1310,23 +1351,7 @@
 
       
 
-      <div class="scstudio-panel on" data-panel="text">
-        <div class="scstudio-sub">顏色</div>
-        <div class="sclay">
-          <div class="sclay-g" style="grid-column:1/-1"><label>上色</label><div class="seg wrapseg" id="scColor">
-            <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
-            ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
-            ><button data-k="rand">隨機</button></div></div>
-          <div class="sclay-g"><label>疊色</label><div class="seg" id="scBlend">
-            <button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div></div>
-          <div class="sclay-g"><label>單色</label><input type="color" id="scInk" value="#2a2118"></div>
-          <div class="sclay-g" style="grid-column:1/-1"><label>調色盤</label><div class="pals" id="scPals"></div></div>
-          <div class="sclay-g"><label>自訂色</label>
-            <input type="color" id="scPick" value="#c2453a">
-            <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
-          <div class="sclay-g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
-        </div>
-      </div>
+      <!-- 顏色整區已搬到畫布上方的 #scColorBar，這裡不再重複。 -->
     </div>
   </section>
 
