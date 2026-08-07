@@ -2003,7 +2003,12 @@ function strokeContours(st,f,wScale,NS){
        原本寫成 1-hollow，方向剛好相反：軸拉滿反而變回實心。 */
     const ring=Math.min(0.92,Math.max(0.12,f.hollow));
     const inner=strokeOutline({...st,w:(st.w||1)*ring},f,wScale,NS);
-    return [outer, reverseContour(inner)];
+    /* ★ 外圈與內圈必須在「同一條輪廓」裡回傳，不能拆成兩條。
+       反向繞向要跟外圈同屬一條路徑，nonzero 才會把中間挖掉；
+       各自一個 <path> 的話，內圈只是在上面畫一塊實心小形狀 —— 完全看不出中空。
+       串成一條之後：svgD 會產生「M 外圈… M 內圈…」的多子路徑，SVG 正確挖洞；
+       toOtPath 遇到中間的 moveTo 也會開新的子輪廓，字型檔一樣正確。 */
+    return [outer.concat(reverseContour(inner))];
   }
   if(f.chop>0.01 && st.p && st.p.length>1){
     /* 斷裂：把一筆切成 2–3 段，段與段之間留白。
