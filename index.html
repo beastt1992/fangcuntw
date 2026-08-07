@@ -763,7 +763,15 @@
     #scMoreBox{max-height:none;overflow:visible}
   }
   /* 畫布縮放 */
-  .sczoomwrap{transform-origin:center center;transition:transform .12s ease-out}
+  /* ★ 縮放用 zoom 不用 transform：
+     transform:scale 不影響版面尺寸 —— 容器不知道內容變大了，
+     捲動範圍還是照原尺寸算，所以放大後往上、往左永遠捲不到。
+     zoom 會實際改變佔位，捲軸才會對。 */
+  .sczoomwrap{transition:none;margin:auto}
+  /* ★ flex 的 justify-content:center 在「內容比容器寬」時，
+     左半邊會溢出到捲動範圍外、永遠捲不到（截圖裡紙張靠左就是這個）。
+     改用子元素 margin:auto —— 溢出時兩側都捲得到，沒溢出時照樣置中。 */
+  .scstage{justify-content:flex-start !important;align-items:flex-start !important}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
     border:1px solid var(--line-2,#cfc8b8);background:var(--paper,#faf7f0);
     border-radius:3px;overflow:hidden;z-index:5;box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -840,6 +848,11 @@
     /* 欄內是窄的，格線改單欄 */
     #scMoreBox .sclay{grid-template-columns:1fr;gap:0}
     #scMoreBox .sclay-g{padding:3px 0}
+    /* 側欄只有 288px，按鈕組（上色、調色盤那些）不換行就會衝出邊界 */
+    #scMoreBox .seg{flex-wrap:wrap;max-width:100%}
+    #scMoreBox .sclay-g>*{min-width:0;max-width:100%}
+    #scMoreBox .sclay-g{flex-wrap:wrap}
+    #scMoreBox .pals,#scMoreBox #scPals{flex-wrap:wrap;max-width:100%;overflow:visible}
     #scMoreBox .scstudio-tabs{width:100%}
     #scMoreBox .scstudio-tabs button{flex:1}
   }
@@ -6238,12 +6251,10 @@ let scZoomLv=1;
 const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4];
 function scApplyZoom(){
   const w=$("scZoomWrap"); if(!w) return;
-  w.style.transform = scZoomLv===1 ? "" : "scale("+scZoomLv+")";
+  w.style.zoom = scZoomLv===1 ? "" : scZoomLv;
   const b=document.querySelector('#scZoom button[data-z="fit"]');
   if(b) b.textContent=Math.round(scZoomLv*100)+"%";
-  /* 放大之後要能捲到看不見的部分 */
-  const st=$("scStage");
-  if(st) st.style.alignItems = scZoomLv>1 ? "flex-start" : "center";
+  /* zoom 會佔實際空間，flex 的置中與捲動都會自己算對，不用另外改對齊。 */
 }
 function scZoomStep(dir){
   const i=SC_ZOOMS.indexOf(scZoomLv);
