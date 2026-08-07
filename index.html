@@ -4524,7 +4524,13 @@ onmessage=function(e){
        超過約 8,180 字就撐爆 format 4 的 uint16 length → 整個檔案作廢。
        這裡整張換掉：合併範圍的 format 4 ＋ 保險的 format 12 */
     var pairs=[[32,1]];
-    for(var q=0;q<d.glyphs.length;q++) pairs.push([d.glyphs[q].u,q+2]);
+    /* ★ u<=0 是直排字形（無編碼），不可以進 cmap。
+       漏掉這個判斷的話，負數碼位排序後跑到最前面、破壞連續範圍的合併，
+       13,152 個字會變成 13,155 個 segment → format 4 的 uint16 length 溢位
+       → Windows 判定「不是有效的字型檔」。（fontTools 也讀不出 cmap。） */
+    for(var q=0;q<d.glyphs.length;q++){
+      if(d.glyphs[q].u>0) pairs.push([d.glyphs[q].u,q+2]);
+    }
     pairs.sort(function(a,b){return a[0]-b[0];});
     buf=replaceTable(buf,"cmap",buildCmap(pairs).buf);
     postMessage({ok:true,buf:buf},[buf]);
