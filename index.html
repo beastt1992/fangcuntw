@@ -887,8 +887,14 @@
     /* ★ 只藏「模板縮圖」那一格，不要藏整條 #scPosterBar ——
        控制面板／復原／匯出那排按鈕（.scactions）也在這條裡面，
        整條藏掉的話手機就完全點不到控制面板了。 */
-    #scPosterBar .scposter-wrap,#scPosterToggle{display:none !important}
-    #scPosterBar{justify-content:flex-end}
+    /* 手機保留「範例海報」按鈕（藏起來的話等於沒這個功能），
+       只是縮圖改小、可捲，不佔太多空間。 */
+    #scPosterBar{justify-content:flex-end;flex-wrap:wrap}
+    #scPosterBar .scposter-wrap{flex:1 1 100%;order:2;overflow-x:auto}
+    #scPosterBar .scposter-wrap>label{display:none}
+    #scPosterBar .posterthumbs{flex-wrap:nowrap;padding-bottom:4px}
+    #scPosterBar .posterthumbs button{width:52px;flex:none}
+    #scPosterBar .posterthumbs .th{height:36px}
   }
 
   /* 控制面板內的按鈕組一律可換行 —— 之前只寫在桌機的 media query 裡，
@@ -900,8 +906,11 @@
   #scMoreBox{overflow-x:hidden}
   /* 這條列一直在（裡面有匯出等按鈕）；只有縮圖那一格會收起。
      .scposter-wrap 是 flex，必須自己寫這條，否則 hidden 屬性不會生效。 */
+  /* ★ 用 class 不用 hidden 屬性：.scbar 與 .scposter-wrap 都設了 display:flex，
+     作者樣式會蓋掉瀏覽器對 hidden 的預設處理，那個屬性等於沒作用。
+     踩過兩次了，改用 class 一勞永逸。 */
   #scPosterBar{display:flex !important}
-  #scPosterBar .scposter-wrap[hidden]{display:none !important}
+  #scPosterBar .scposter-wrap.is-off{display:none !important}
 </style>
 </head>
 <body>
@@ -1053,7 +1062,7 @@
 
   <section id="showcase">
     <div class="scbar scbar-studio" id="scPosterBar">
-      <div class="g scposter-wrap" hidden><label>範例模板</label>
+      <div class="g scposter-wrap is-off"><label>範例模板</label>
         <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
         <div class="posterthumbs" id="scPoster"></div>
@@ -6554,16 +6563,20 @@ scBuildPosterThumbs();
    所以要自己寫一條 [hidden]{display:none}，不能只靠設 .hidden。 */
 if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
   const wrap=document.querySelector("#scPosterBar .scposter-wrap"); if(!wrap) return;
-  wrap.hidden=!wrap.hidden;
-  $("scPosterToggle").classList.toggle("on",!wrap.hidden);
+  const off=wrap.classList.toggle("is-off");
+  $("scPosterToggle").classList.toggle("on",!off);
 });
 $("scPoster").addEventListener("click",e=>{
   const b=e.target.closest("button[data-poster]"); if(!b) return;
-  const wantText = !!($("scPosterText") && $("scPosterText").checked);
+  const p=SC_POSTERS[b.dataset.poster];
+  /* 有逐字大小／位移的模板一定要連文字帶入 ——
+     那些設定是綁在「第幾列第幾欄的哪個字」上的，文字不同就完全對不上。 */
+  const needsText = !!(p && (p.tr || p.off));
+  const wantText = needsText || !!($("scPosterText") && $("scPosterText").checked);
   scApplyPoster(b.dataset.poster, wantText);
   /* 套用完就收起來，把畫面還給作品 */
   const wrap=document.querySelector("#scPosterBar .scposter-wrap");
-  if(wrap){ wrap.hidden=true; if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
+  if(wrap){ wrap.classList.add("is-off"); if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
 });
 
 let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
