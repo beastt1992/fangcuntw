@@ -940,6 +940,21 @@
     .scfoot textarea{padding-left:32px !important}
   }
   @media(min-width:1100px){ .scfoot::before{left:23px} }
+  /* 底部常駐的字型軸列 */
+  .scaxes{display:flex;align-items:center;gap:14px;flex:1 1 100%;min-width:0;
+    overflow-x:auto;overflow-y:hidden;padding-bottom:2px;scrollbar-width:thin}
+  .scaxes::-webkit-scrollbar{height:4px}
+  .scaxes::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px}
+  .scaxes>.g{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+  .scaxes>.g>label{font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .scaxes>.g>input[type=range]{width:88px;flex:none}
+  .scaxes>.g>b{font-family:var(--mono);font-size:9.5px;font-weight:400;
+    color:var(--ink);width:30px;text-align:right}
+  @media(max-width:700px){
+    .scaxes{gap:12px}
+    .scaxes>.g>input[type=range]{width:76px;height:36px}
+    .scaxes>.g>label{font-size:11px}
+  }
 </style>
 </head>
 <body>
@@ -1121,8 +1136,16 @@
     <div class="scfoot">
       <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">把繁體中文字型設計
 變得更直覺</textarea>
-      <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
-      <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
+      <!-- 這是調字的工具，字型軸就是主要操作 —— 常駐在底部列，不要藏進面板。
+           放六根最能改變字型個性的；其餘二十一根仍在控制面板的「字型」分頁。 -->
+      <div class="scaxes" id="scAxes">
+        <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"><b id="scWtB">88</b></div>
+        <div class="g"><label>對比</label><input type="range" id="scCt" min="0.62" max="1.90" step="0.02" value="1.02"><b id="scCtB">1.02</b></div>
+        <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"><b id="scRdB">0.20</b></div>
+        <div class="g"><label>字面率</label><input type="range" id="scFa" min="0.84" max="1.10" step="0.01" value="1.05"><b id="scFaB">1.05</b></div>
+        <div class="g"><label>中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
+        <div class="g"><label>出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
+      </div>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <div class="scmore" id="scMoreBox" hidden>
@@ -5263,6 +5286,9 @@ function buildShowAxes(){
   }
 }
 function syncShowAxes(){
+  /* 底部常駐軸列也要跟著跳，不然套完模板滑桿還停在舊位置 */
+  if(window.scSyncAxisBar) try{ window.scSyncAxisBar(); }catch(e){}
+
   scBuildPresets();
   if($("scWt")) $("scWt").value=F.weight;
   if($("scRd")) $("scRd").value=F.round;
@@ -6362,6 +6388,37 @@ $("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
 $("scWt").addEventListener("change",()=>{scheduleSlow();saveLocal();});
 $("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
 $("scRd").addEventListener("change",()=>{scheduleSlow();saveLocal();});
+
+/* 底部常駐字型軸：其餘四根接上引擎，並把數字同步顯示。
+   格式跟上面兩根一致 —— input 即時重畫、change 才存檔與跑慢速工作。 */
+(function(){
+  const rows=[["scWt","weight","scWtB",v=>String(Math.round(v))],
+              ["scCt","contrast","scCtB",v=>(+v).toFixed(2)],
+              ["scRd","round","scRdB",v=>(+v).toFixed(2)],
+              ["scFa","face","scFaB",v=>(+v).toFixed(2)],
+              ["scCo","counter","scCoB",v=>(+v).toFixed(2)],
+              ["scTa","taper","scTaB",v=>(+v).toFixed(2)]];
+  for(const [id,key,badge,fmt] of rows){
+    const el2=$(id); if(!el2) continue;
+    const b=$(badge);
+    const show=()=>{ if(b) b.textContent=fmt(el2.value); };
+    /* 字重與圓角的引擎連動上面已經接過，這裡只補數字；其餘四根要自己接。 */
+    if(id!=="scWt" && id!=="scRd"){
+      el2.addEventListener("input",e=>{ F[key]=+e.target.value; show(); scDraw(); });
+      el2.addEventListener("change",()=>{ scheduleSlow(); saveLocal(); });
+    }else{
+      el2.addEventListener("input",show);
+    }
+    show();
+  }
+  /* 換預設風格或載入存檔之後，滑桿要跟著跳到新值 */
+  const sync=()=>{ for(const [id,key,badge,fmt] of rows){
+    const el3=$(id); if(!el3) continue;
+    el3.value=F[key];
+    const b=$(badge); if(b) b.textContent=fmt(F[key]);
+  }};
+  window.scSyncAxisBar=sync;
+})();
 
 function scSVG(){
   const svg=$("scArt").cloneNode(true);
