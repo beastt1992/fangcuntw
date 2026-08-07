@@ -1141,6 +1141,11 @@
        用 CSS 控可見性就好，不搬 DOM。 */
     body:not(.type-open) .scfoot>.scfoot-type{display:none}
   }
+  /* 範例海報／復原／重做搬到頂列、海報 PNG／SVG 併進匯出選單。
+     這幾個只有展示模式用得到，工作台模式就藏起來 ——
+     body.in-show 是 setMode 既有的 class，不用另外加狀態。 */
+  .showacts{display:flex;align-items:center;gap:6px;flex:none}
+  body:not(.in-show) .show-only{display:none !important}
 </style>
 </head>
 <body>
@@ -1162,6 +1167,11 @@
       ><button data-p="title">標題黑</button
       ><button data-p="kai" title="依全字庫正楷體實測校準">楷書</button
       ><button data-p="kage" title="貼近 GlyphWiki 原始資料的樣子">原樣</button>
+    </div>
+    <div class="showacts show-only">
+      <button class="btn ghost sm" id="scPosterToggle" type="button">範例海報</button>
+      <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
+      <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
     </div>
     <span class="spacer"></span>
     <input type="file" id="packIn" accept=".json,application/json" hidden>
@@ -1195,6 +1205,8 @@
         <button class="btn ghost sm" id="btnExport" type="button">字型檔 OTF · 全部或指定字數</button>
         <button class="btn ghost sm" id="btnSubset" type="button">挑字 · 招牌用的小字型</button>
         <button class="btn ghost sm" id="btnSVG2" type="button">向量 SVG · 給 Illustrator</button>
+        <button class="btn ghost sm show-only" id="scPNG" type="button">海報 PNG · 目前這張</button>
+        <button class="btn ghost sm show-only" id="scSVG" type="button">海報 SVG · 向量</button>
       </div>
     </div>
   </div>
@@ -1303,15 +1315,7 @@
             ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
           </div></div>
       <div class="g"><label>版式</label><div class="seg" id="scLayout">
-            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>
-      <div class="scactions">
-        <button class="btn ghost sm" id="scPosterToggle" type="button">範例海報</button>
-        <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
-        <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
-        <button class="btn ghost sm" id="scSVG" type="button">SVG</button>
-        <button class="btn sm" id="scPNG" type="button">PNG</button>
-      </div>
-    </div>
+            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>    </div>
     <!-- ★ 顏色搬到畫布上方自成一列。跟範例海報那排併成一行會太擠（光上色就五顆），
          所以放在它下面 —— 一樣在「工具列」這一區，手到眼到，不用開側欄。 -->
     <div class="scbar scbar-color" id="scColorBar">
