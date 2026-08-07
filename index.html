@@ -981,7 +981,29 @@
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
     max-height:42vh;overflow-y:auto}
   .sctypebox.is-off{display:none}
+  /* 手機：這一盒在正常流程裡，開起來會直接把頁面拉長、畫布被推出畫面。
+     壓到 34vh 並自己捲；再配合 JS 讓它跟控制面板一次只開一個。 */
+  @media(max-width:1099px){
+    .sctypebox{max-height:34vh;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+  }
   .sctypepanel .sclay{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 16px}
+
+  /* ★ 底部展開盒缺的防溢出規則 —— #scMoreBox 有八條，#scTypeBox 一條都沒有。
+     那些規則全寫成「#scMoreBox 開頭」，所以把預設列與單字按鈕搬進 #scTypeBox 之後，
+     完全吃不到，手機上十三顆預設就把整條列撐破。
+     這是「只寫在某個容器底下的規則，另一個容器不會有」的變形，跟只寫在 media query 裡同一個坑。 */
+  #scTypeBox{overflow-x:hidden}
+  #scTypeBox .sclay-g{flex-wrap:wrap;min-width:0}
+  #scTypeBox .sclay-g>*{min-width:0;max-width:100%}
+  #scTypeBox .seg{display:flex;flex-wrap:wrap;max-width:100%}
+  #scTypeBox .seg button{flex:0 1 auto}
+  #scTypeBox .scmore-in,#scTypeBox .scmore-ax{min-width:0}
+  #scTypeBox .scmore-ax input[type=range]{min-width:0}
+  /* 手機收成單欄。要兩個 class 才蓋得過 .sctypepanel .sclay，
+     單寫 .sclay{grid-template-columns:1fr} 權重不夠，會被上面那條吃掉。 */
+  @media(max-width:1099px){
+    .sctypepanel .sclay{grid-template-columns:1fr;gap:0}
+  }
   /* 展開盒的軸分組小標：橫貫整列的細線＋中文加英文小字，跟其他區塊的 h4 同一套語彙 */
   .sctypegroup{grid-column:1/-1;font-size:11px;letter-spacing:.06em;color:var(--ink);
     border-bottom:1px solid var(--line-2);padding:9px 0 4px;margin-top:3px}
@@ -5355,6 +5377,14 @@ function setShowMore(open){
   if(!box||!btn) return;
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
+  /* 手機：反向互斥（另一半在 scTypeMore 的監聽裡）。兩個一起開會把畫布推出畫面。 */
+  if(open && matchMedia("(max-width:1099px)").matches){
+    const tb=$("scTypeBox");
+    if(tb && !tb.classList.contains("is-off")){
+      tb.classList.add("is-off");
+      if($("scTypeMore")) $("scTypeMore").classList.remove("on");
+    }
+  }
   if(open) syncShowAxes();
   try{ localStorage.setItem(SCMORE_KEY,open?"1":"0"); }catch(e){}
 }
@@ -6543,11 +6573,14 @@ if($("scStudioTabs")) $("scStudioTabs").addEventListener("click",e=>{
 });
 
 const SC_POSTERS={
-  /* 每個模板是一整頁的範例，不只一句話 ——
-     多行、長短交錯，看得出真的排起來是什麼樣子。
-     （per-字的大小變化要另外做：scOvr 目前只存顏色，
-       要做分區大小得先加 per-字尺寸覆寫。） */
-  minimal:{txt:"把繁體中文字型設計\n變得更直覺\n\n骨架與參數\n二十七根設計軸\n一萬三千字同時變",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.16,scale:.86,gx:.04,gy:.10,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:72,round:.06},
+  /* 前四個是「短字」模板：二到四個字，一眼看得出字形本身，
+     不用先讀完一整頁文案。點下去就是在看字，不是在看排版。
+     最後兩個（招牌、雜誌）保留整頁範例與逐字變形，示範真的排起來的樣子 ——
+     它們的 tr／off 是用「列|欄|字」當鍵，改文字就對不上，所以一個字都不動。 */
+  minimal:{txt:"方寸",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.16,scale:.86,gx:.04,gy:.10,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:72,round:.06},
+  matrix:{txt:"春夏秋冬",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
+  night:{txt:"台灣夜市",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.10,scale:.92,gx:-.06,gy:.08,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:108,round:.24},
+  vertical:{txt:"方寸",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.14,scale:.88,gx:.06,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10},
   sign:{txt:"方寸字型\n繁體字設計\n\n招牌 標準字\n展場 指標\n包裝 標題",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.10,scale:1.02,gx:-.10,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:118,round:.08,
     /* 招牌：頭兩個字放大當標題、後三行縮小當說明，標題再略微上移 */
     tr:{"0|0|方":{s:1.34,r:0},"0|1|寸":{s:1.34,r:0},"0|2|字":{s:.92,r:0},"0|3|型":{s:.92,r:0},
@@ -6563,10 +6596,7 @@ const SC_POSTERS={
         "1|8|作":{s:.78,r:0},"1|9|室":{s:.78,r:0},
         "5|0|免":{s:.56,r:0},"5|1|費":{s:.56,r:0},"5|3|開":{s:.56,r:0},"5|4|源":{s:.56,r:0},
         "6|0|匯":{s:.56,r:0},"6|1|出":{s:.56,r:0}},
-    off:{"0|0|方":[-.04,-.10],"0|1|寸":[.06,.05]}},
-  matrix:{txt:"永方寸設計字型樣張\n春夏秋冬東南西北\n山水日月風雨雷電\n天地人和文武聖賢",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
-  night:{txt:"台灣夜市\n招牌字研究\n\n蚵仔煎 大腸麵線\n鹽酥雞 珍珠奶茶\n臭豆腐 肉圓 米糕",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.10,scale:.92,gx:-.06,gy:.08,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:108,round:.24},
-  vertical:{txt:"方寸\n繁體中文字型工作室\n骨架驅動 參數控制\n整套生成 匯出安裝",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.14,scale:.88,gx:.06,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
+    off:{"0|0|方":[-.04,-.10],"0|1|寸":[.06,.05]}}
 };
 function scSetPaletteKey(k){
   const p=SCPAL.find(x=>x.k===k); if(!p)return;
@@ -6665,6 +6695,10 @@ if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
   const box=$("scTypeBox"); if(!box) return;
   const off=box.classList.toggle("is-off");
   $("scTypeMore").classList.toggle("on",!off);
+  /* 手機：兩個面板都在正常流程裡，同時開會把頁面拉長到畫布看不見。
+     桌機的控制面板是常駐左欄（不佔高度），所以只在窄螢幕互斥。 */
+  if(!off && matchMedia("(max-width:1099px)").matches
+     && $("scMoreBox") && !$("scMoreBox").hidden) setShowMore(false);
 });
 /* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
