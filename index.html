@@ -1097,9 +1097,12 @@
   .scaxes>.g>b{flex:none}
   /* 字型（預設列）從收合盒搬到常駐區 —— 收合之後仍然選得到字體。
      它在 .scfoot 這個縱向 flex 裡自成一列，排在滑桿之後、收合鈕之前。 */
-  .scfoot>.scfoot-type{order:3;width:100%;margin:0;padding:2px 0 0;border-bottom:0}
-  .scfoot>.scfoot-type .sclay-g{padding:1px 0}
-  .scfoot>.scfoot-type .sctypegroup{padding:2px 0 1px;margin:0}
+  /* ★ 方向／對齊／預設／單字／隨機字形併成同一行。
+     原本是 .sclay 的格線（每格 240px），四組就被拆成三、四列；
+     改成 flex 換行 —— 放得下就一行，放不下才折，不會硬切成固定格。 */
+  .scfoot>.scfoot-type{order:3;width:100%;margin:0;padding:2px 0 0;border-bottom:0;
+    display:flex;flex-wrap:wrap;align-items:center;gap:3px 18px}
+  .scfoot>.scfoot-type .sclay-g{padding:0;flex:0 0 auto;width:auto}
   .scfoot>.scfoot-type .seg{display:flex;flex-wrap:wrap;max-width:100%}
   .scfoot>.scfoot-type .seg button{flex:0 1 auto;padding:4px 8px;font-size:11px}
   .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:4px 9px;font-size:11px;min-height:0}
@@ -1373,7 +1376,7 @@
         <div class="g"><label>留白</label><input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
       </div>
         <div class="sclay scfoot-type">
-        <div class="sctypegroup">字型 <em>TYPE</em></div>
+        <!-- 小標拿掉：這一列現在是方向／對齊／預設／單字混排，叫「字型」不準，各控制項本來就有自己的標籤 -->
           <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
             <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
           <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
