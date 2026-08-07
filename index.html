@@ -462,10 +462,12 @@
 
     #showcase{position:static;grid-row:2 / 4;display:none;min-height:0;height:auto;background:var(--sbg,#f1ece1)}
     #showcase.on{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
-    .scbar{height:48px;min-height:48px;box-sizing:border-box;flex-wrap:nowrap;padding:6px 8px;gap:9px;
+    .scbar{height:auto;min-height:48px;box-sizing:border-box;flex-wrap:wrap;padding:8px;gap:8px;
       overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
     .scbar>.g,.scbar>.btn{flex:none}
     .scbar>.spacer{display:none}
+    .scbar-studio .scposter-wrap{flex:1 1 100%}
+    .scactions{width:100%;justify-content:flex-end}
     .scbar .seg button{min-height:34px;padding:4px 9px;font-size:11px}
     .pal{min-height:34px}.pal em{font-size:10px}.pal i{height:18px}
     .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
@@ -511,10 +513,14 @@
   /* ---------- 展示頁「更多」設計軸 ----------
      刻意只新增 .scmore / .scmore-in 兩個新 class，
      不覆寫任何既有選擇器、不動頭列、不在執行期包 DOM —— 上一次就是那樣把版面弄壞的。 */
-  .scmore{border-top:1px solid var(--line);background:var(--paper);
-    max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-    padding:8px 14px calc(10px + env(safe-area-inset-bottom))}
+  .scmore{border-top:1px solid var(--ink);background:var(--paper);
+    box-shadow:0 -10px 30px rgba(22,19,13,.08);max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:0 14px calc(12px + env(safe-area-inset-bottom))}
   .scmore[hidden]{display:none}
+  .scmore-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+    padding:12px 0 10px;border-bottom:1px solid var(--line)}
+  .scmore-head b{display:block;font-size:13px;letter-spacing:.02em;color:var(--ink)}
+  .scmore-head span{display:block;font-size:11px;line-height:1.65;color:var(--muted);margin-top:2px}
   .scmore-in{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 18px}
   .scmore-ax{display:flex;align-items:center;gap:9px;padding:4px 0}
   .scmore-ax label{font-size:11.5px;color:var(--muted);white-space:nowrap;width:54px;flex:none}
@@ -522,7 +528,8 @@
   .scmore-ax b{font-family:var(--mono);font-size:10px;color:var(--ink);
     width:44px;text-align:right;flex:none;font-weight:400}
   @media (pointer:coarse){
-    .scmore{max-height:38vh;padding:6px 12px calc(12px + env(safe-area-inset-bottom))}
+    .scmore{max-height:44vh;padding:0 12px calc(12px + env(safe-area-inset-bottom))}
+    .scmore-head{padding:10px 0 8px;position:sticky;top:0;background:var(--paper);z-index:2}
     .scmore-in{grid-template-columns:1fr;gap:0}
     .scmore-ax{padding:6px 0}
     .scmore-ax label{width:60px;font-size:12.5px}
@@ -547,15 +554,23 @@
   }
 
   /* ---------- v71 展示工作室：做字之後直接排海報 ---------- */
-  .scbar-studio .scposter-wrap{min-width:0}
-  .posterseg button{font-weight:600}
+  .scbar-studio{gap:10px;padding:8px 14px;min-height:58px;height:auto;flex-wrap:wrap;align-items:center}
+  .scbar-studio .g{gap:8px}
+  .scbar-studio label{font-size:9px;letter-spacing:.18em}
+  .scbar-studio .scposter-wrap{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 520px}
+  .posterseg{display:flex;flex-wrap:wrap;gap:6px}
+  .posterseg button{font-weight:600;padding:7px 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--paper);color:var(--ink)}
+  .posterseg button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .scactions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+  #scMore[aria-expanded="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   .scstudio-tabs{display:flex;gap:0;border:1px solid var(--line-2);width:max-content;max-width:100%;margin:0 0 9px}
   .scstudio-tabs button{border:0;border-right:1px solid var(--line-2);background:transparent;color:var(--muted);
     padding:7px 16px;font:inherit;font-size:11.5px;cursor:pointer}
   .scstudio-tabs button:last-child{border-right:0}
   .scstudio-tabs button.on{background:var(--ink);color:var(--paper)}
-  .scstudio-panel{display:none}
+  .scstudio-panel{display:none;padding:12px 0 0}
   .scstudio-panel.on{display:block}
+  .scstudio-panel .sclay{padding:10px 12px 4px;border:1px solid var(--line);background:var(--paper-2,var(--paper));}
   .wrapseg{flex-wrap:wrap}
   .sccheck{display:flex!important;align-items:center;gap:5px;width:auto!important;color:var(--ink)!important;cursor:pointer}
   .sccheck input{accent-color:var(--ink)}
@@ -853,30 +868,33 @@
 
   <section id="showcase">
     <div class="scbar scbar-studio">
-      <div class="g scposter-wrap"><label>海報</label>
+      <div class="g scposter-wrap"><label>範例模板</label>
         <div class="seg posterseg" id="scPoster">
-          <button data-poster="minimal">極簡</button><button data-poster="sign">招牌</button
-          ><button data-poster="magazine">雜誌</button><button data-poster="matrix">字陣</button
-          ><button data-poster="night">夜市</button><button data-poster="vertical">直排</button>
+          <button data-poster="minimal">極簡海報</button><button data-poster="sign">招牌標題</button
+          ><button data-poster="magazine">雜誌版式</button><button data-poster="matrix">字陣樣張</button
+          ><button data-poster="night">夜市海報</button><button data-poster="vertical">直排文青</button>
         </div></div>
-      <span class="spacer"></span>
-      <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
-      <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
-      <button class="btn ghost sm" id="scMore" type="button" aria-expanded="false">控制</button>
-      <button class="btn ghost sm" id="scSVG" type="button">SVG</button>
-      <button class="btn sm" id="scPNG" type="button">PNG</button>
+      <div class="scactions">
+        <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
+        <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
+        <button class="btn ghost sm" id="scMore" type="button" aria-expanded="false">控制面板</button>
+        <button class="btn ghost sm" id="scSVG" type="button">SVG</button>
+        <button class="btn sm" id="scPNG" type="button">PNG</button>
+      </div>
     </div>
     <div class="scstage" id="scStage">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
     </div>
     <div class="scfoot">
-      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">森林</textarea>
+      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">把繁體中文字型設計
+變得更直覺</textarea>
       <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
       <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <div class="scmore" id="scMoreBox" hidden>
+      <div class="scmore-head"><div><b>展示控制</b><span>這裡調整文字、版面、字型與顏色。上方模板會直接帶入範例文字與排版，之後仍可自由修改。</span></div><button class="btn ghost sm" id="scMoreClose" type="button">收起</button></div>
       <div class="scstudio-tabs" id="scStudioTabs">
         <button data-tab="text" class="on">文字</button><button data-tab="layout">版面</button
         ><button data-tab="type">字型</button><button data-tab="color">顏色</button>
@@ -5021,12 +5039,13 @@ function setShowMore(open){
   if(!box||!btn) return;
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
-  btn.textContent=open?"收起":"控制";
   if(open) syncShowAxes();
   try{ localStorage.setItem(SCMORE_KEY,open?"1":"0"); }catch(e){}
 }
 $("scMore").addEventListener("click",()=>setShowMore($("scMoreBox").hidden));
+$("scMoreClose").addEventListener("click",()=>setShowMore(false));
 try{ if(localStorage.getItem(SCMORE_KEY)==="1") setShowMore(true); }catch(e){}
+document.querySelectorAll("#scPoster button").forEach(x=>x.classList.toggle("on",x.dataset.poster==="minimal"));
 $("presets").addEventListener("click",e=>{
   const b=e.target.closest("button[data-p]");if(!b)return;
   Object.assign(F,PRESETS[b.dataset.p]); presetKey=b.dataset.p;   /* simp 不在預設裡，保持不變 */
@@ -6111,12 +6130,18 @@ $("scStudioTabs").addEventListener("click",e=>{
 });
 
 const SC_POSTERS={
-  minimal:{canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
-  sign:{canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
-  magazine:{canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
-  matrix:{canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
-  night:{canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
-  vertical:{canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
+  minimal:{txt:"把繁體中文字型設計
+變得更直覺",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
+  sign:{txt:"方寸字型
+繁體字設計",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
+  magazine:{txt:"方寸
+參數化中文字型工作室",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
+  matrix:{txt:"永方寸設計
+字型樣張",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
+  night:{txt:"台灣夜市
+招牌字研究",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
+  vertical:{txt:"方寸
+繁體中文字型工作室",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
 };
 function scSetPaletteKey(k){
   const p=SCPAL.find(x=>x.k===k); if(!p)return;
@@ -6125,6 +6150,7 @@ function scSetPaletteKey(k){
 }
 function scApplyPoster(k){
   const p=SC_POSTERS[k]; if(!p)return;
+  if(typeof p.txt==="string") $("scTxt").value=p.txt;
   scCanvas=p.canvas; scLay=p.lay; scDir=p.dir; scAlignMode=p.align; scMargin=p.margin;
   scScale=p.scale; scGxAdj=p.gx; scGyAdj=p.gy; scCol=p.col; scBlend=p.blend;
   scBgColor=p.bg; scMonoColor=p.ink; scTransparentBg=false; scSetPaletteKey(p.pal);
@@ -6136,6 +6162,7 @@ function scApplyPoster(k){
   document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
   document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
   document.querySelectorAll("#scBlend button").forEach(x=>x.classList.toggle("on",x.dataset.k===scBlend));
+  document.querySelectorAll("#scPoster button").forEach(x=>x.classList.toggle("on",x.dataset.poster===k));
   $("scMargin").value=scMargin; $("scMarginV").textContent=Math.round(scMargin*100)+"%";
   $("scSize").value=scScale; $("scSizeV").textContent=scScale.toFixed(2);
   $("scGx").value=scGxAdj; $("scGxV").textContent=scGxAdj===0?"預設":(scGxAdj>0?"+":"")+scGxAdj.toFixed(2);
@@ -6171,6 +6198,7 @@ function scApplyState(s){
     document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
     document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
     document.querySelectorAll("#scBlend button").forEach(x=>x.classList.toggle("on",x.dataset.k===scBlend));
+    document.querySelectorAll("#scPoster button").forEach(x=>x.classList.remove("on"));
     $("scMargin").value=scMargin;$("scMarginV").textContent=Math.round(scMargin*100)+"%";
     $("scSize").value=scScale;$("scSizeV").textContent=scScale.toFixed(2);$("scGx").value=scGxAdj;$("scGy").value=scGyAdj;
     $("scGxV").textContent=scGxAdj===0?"預設":(scGxAdj>0?"+":"")+scGxAdj.toFixed(2);$("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2);
@@ -7098,7 +7126,10 @@ async function boot(){
   }
   const saved=loadLocal();
   if(saved) restore(saved);
-  else document.querySelector('#presets button[data-p="hei"]').classList.add("on");
+  else {
+    document.querySelector('#presets button[data-p="hei"]').classList.add("on");
+    scApplyPoster("minimal");
+  }
   /* 舊版 localStorage 可能把已修正的 KAGE 部件覆蓋回去；啟動最後再跑一次引擎遷移。 */
   clearStrokeEstimates();
   buildCells(); mark(); drawAll(); drawSpec(); markEdited(); runQA(); refreshLiveFont();
