@@ -75,7 +75,9 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="方寸">
-<title>方寸 — 參數化中文字型工作室</title>
+<!-- ★ 這裡要短。PWA 視窗會「同時」顯示 manifest 的 name 和這個 title，
+     兩個都寫完整名稱就會看到同一句話印兩次。完整名稱交給 manifest。 -->
+<title>方寸 FANGCUN</title>
 <!-- polygon-clipping 0.15.7 — MIT License — Copyright (c) 2018 Alex Milevski
      用來把重疊的筆畫做布林聯集（去重疊）。完整條款見 LICENSES/。
      https://github.com/mfogel/polygon-clipping -->
@@ -1142,6 +1144,14 @@
    ========================================================================== */
 
 const EM=1000, ASC=880, DESC=-120;
+
+/* ★ 這兩個旗標放在最前面，不要放進任何功能區塊裡。
+   v1.49 換掉可變字型寫表器那一整段時，把夾在中間的宣告一起刪掉了，
+   結果匯出直接報「Can't find variable: DEDUP_ON」。
+   匯出時是否去除重疊（見「去除重疊」勾選框）。 */
+let DEDUP_ON=true;
+/* 匯出時是否加直排支援（GSUB vert/vrt2 ＋ vmtx ＋ VORG）。 */
+let VERT_ON=true;
 /* 出廠值對照 Noto Sans CJK TC 實測校準：
    在黑度都對齊 Noto 0.298 的條件下掃過視覺補償，拐點在 0.4–0.55：
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
