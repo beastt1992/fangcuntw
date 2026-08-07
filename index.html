@@ -1161,12 +1161,15 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
+         /* 內白保護。0 = 關，出廠關著所以輸出跟以前一模一樣。
+            建議只在字重 >120 的標準字才開，36 是實測的甜蜜點。 */
+         cmin:0,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
                'width','slant','taper','hook','dun','press','rise',
                'seed','scatter','wobble','spike','hollow',
-               'arch','inflate','wave','chop','cap'];
+               'arch','inflate','wave','chop','cap','cmin'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -3104,6 +3107,163 @@ function vertXform(cmds, mode){
 }
 
 
+
+/* ==========================================================================
+   內白保護
+   想法出自 David：「設定假的中間線再 offset，所以會有邊界。」
+   字照畫，最後把「該留白卻被擠掉」的地方挖掉 —— 白縫是被保證的，
+   不是靠筆畫剛好沒碰到。是後製，所以局部、可關、而且沿用既有的布林運算。
+
+   1. 找近似平行（12°內）、重疊 ≥60、間距不足的兩筆
+   2. 兩筆中線造帶狀（寬 counterMin、長 = 重疊區間各縮 10）
+   3. ★帶子先扣掉所有「與這對筆不平行（25°外）」的筆畫 ——
+      不做這步「事」中間那一豎會被切斷
+   4. 字形聯集後減掉剩下的帶子
+   5. ★保險：減完若連通塊變多就整個放棄不減
+
+   保險的標準試錯過兩次，記著別再走回頭路：
+     ✗ 外輪廓數 —— 兩塊分開的墨可能共用輪廓計數，保險完全不生效
+     ✗ 量最細的墨 —— 更糟。帶子邊緣本來就會留下一小片薄墨，
+       下限放到 0.10 都只有 6/152 個字通過（連通塊版是 28）
+     ✓ 連通塊數（PCL.union 回傳的 poly 數）
+
+   實測（引擎內建 152 字，字重 150 / face 1.16 / counter 0.90）
+     26 → 改到 24 字、切散 1 (0.7%)、內白 172→175、6ms/字
+     36 → 改到 28 字、切散 1 (0.7%)、內白 172→176、4ms/字   ← 建議值
+     46 → 改到 28 字、切散 0 (0.0%)、內白 172→178、3ms/字
+   七字精測（事書豐圖稿目田）內白 24→53；目、田 這種本來就夠寬的字完全不受影響
+   ========================================================================== */
+function csAxis(st){
+  const p=st.p, n=p.length-1;
+  return {a:p[0], b:p[n], dx:p[n][0]-p[0][0], dy:p[n][1]-p[0][1]};
+}
+function csParallel(A,B,tolDeg){
+  const la=Math.hypot(A.dx,A.dy), lb=Math.hypot(B.dx,B.dy);
+  if(la<40||lb<40) return false;
+  const cos=Math.abs((A.dx*B.dx+A.dy*B.dy)/(la*lb));
+  return cos>Math.cos(tolDeg*Math.PI/180);
+}
+function csGap(A,B){
+  const la=Math.hypot(A.dx,A.dy);
+  const ux=A.dx/la, uy=A.dy/la, nx=-uy, ny=ux;
+  const d=(B.a[0]-A.a[0])*nx+(B.a[1]-A.a[1])*ny;
+  const t=p=>((p[0]-A.a[0])*ux+(p[1]-A.a[1])*uy);
+  const tb=[t(B.a),t(B.b)].sort((x,y)=>x-y);
+  const lo=Math.max(0,tb[0]), hi=Math.min(la,tb[1]);
+  if(hi-lo<60) return null;
+  return {dist:d, lo, hi, ux,uy,nx,ny, o:A.a};
+}
+function csFlat_unused(cmds,SUB){
+  const pts=[]; let cur=null;
+  for(const c of cmds){
+    if(c[0]==="M"||c[0]==="L"){ cur=[c[1],c[2]]; pts.push(cur); }
+    else{ const a=cur,cx=c[1],cy=c[2],b=[c[3],c[4]];
+      for(let i=1;i<=SUB;i++){ const t=i/SUB,u=1-t;
+        pts.push([u*u*a[0]+2*u*t*cx+t*t*b[0], u*u*a[1]+2*u*t*cy+t*t*b[1]]); }
+      cur=b; } }
+  const f=pts[0]; if(!f) return pts;
+  const L=pts[pts.length-1];
+  if(Math.abs(L[0]-f[0])>1e-9||Math.abs(L[1]-f[1])>1e-9) pts.push([f[0],f[1]]);
+  return pts;
+}
+function csToCmds(res){
+  const out=[];
+  for(const poly of res) for(const ring of poly){
+    let p=ring.slice();
+    if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
+                  && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
+    if(p.length<3) continue;
+    const q=rdp(p.concat([p[0]]),1.0);
+    if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
+                  && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
+    if(q.length<3) continue;
+    const c=[["M",q[0][0],q[0][1]]];
+    for(let i=1;i<q.length;i++) c.push(["L",q[i][0],q[i][1]]);
+    out.push(c);
+  }
+  return out;
+}
+/* cs 由呼叫端傳進來（glyphContours 已經算好了），不要在這裡重算 —— 會無限遞迴。 */
+function protectCounters(ch, f, minGap, cs){
+  const PCL=pcLib(); if(!PCL || !cs || !minGap) return cs;
+  let marked;
+  try{
+    const raw=[]; collect(ch,[0,0,1000,1000],1,raw,7,null,0,f.optic);
+    marked=markCorners(warp(raw,f),f);
+  }catch(e){ return cs; }
+  if(!marked || marked.length<2) return cs;
+
+  const ax=marked.map(csAxis);
+  const {hw,sw}=widths(f);
+  const bands=[];
+  for(let i=0;i<ax.length;i++) for(let j=i+1;j<ax.length;j++){
+    if(!csParallel(ax[i],ax[j],12)) continue;
+    const g=csGap(ax[i],ax[j]); if(!g) continue;
+    const w1=Math.max(hw,sw)*(marked[i].w||1), w2=Math.max(hw,sw)*(marked[j].w||1);
+    const clear=Math.abs(g.dist)-(w1+w2)/2;
+    if(clear>=minGap || clear<-minGap*1.5) continue;
+    const mid=g.dist/2;
+    const cx=g.o[0]+g.nx*mid, cy=g.o[1]+g.ny*mid;
+    const L0=g.lo+10, L1=g.hi-10;
+    if(L1-L0<40) continue;
+    const h=minGap/2;
+    const P0=[cx+g.ux*L0, cy+g.uy*L0], P1=[cx+g.ux*L1, cy+g.uy*L1];
+    bands.push({poly:[[
+      [P0[0]+g.nx*h,P0[1]+g.ny*h],[P1[0]+g.nx*h,P1[1]+g.ny*h],
+      [P1[0]-g.nx*h,P1[1]-g.ny*h],[P0[0]-g.nx*h,P0[1]-g.ny*h],
+      [P0[0]+g.nx*h,P0[1]+g.ny*h]]], i, j, ax:ax[i]});
+  }
+  if(!bands.length) return cs;
+
+  /* 每一筆自己的輪廓，用來保護橫過帶子的筆畫 */
+  const per=marked.map(st=>{
+    try{ return strokeContours(st,f,st.ws,30)
+      .map(x=>pcFlatten(x,4)).filter(r=>r.length>=4).map(r=>[r]); }
+    catch(e){ return []; }
+  });
+
+  const rings=cs.map(c=>[pcFlatten(c,4)]).filter(r=>r[0].length>=4);
+  if(!rings.length) return cs;
+  let u; try{ u=PCL.union(rings[0], ...rings.slice(1)); }catch(e){ return cs; }
+
+  const cuts=[];
+  for(const b of bands){
+    let region=b.poly;
+    for(let k=0;k<marked.length && region.length;k++){
+      if(k===b.i||k===b.j) continue;
+      if(csParallel(ax[k], b.ax, 25)) continue;       /* 平行的不是橫過 */
+      for(const sp of per[k]){
+        try{ region=PCL.difference(region, sp); }catch(e){}
+        if(!region.length) break;
+      }
+    }
+    for(const poly of region) cuts.push(poly);
+  }
+  if(!cuts.length) return cs;
+  let res; try{ res=PCL.difference(u, ...cuts); }catch(e){ return cs; }
+  const out=csToCmds(res);
+  if(!out.length) return cs;
+
+  /* ★ 保險：減完之後如果字被切散成更多塊，整個放棄不減。
+     寧可那個字沒有內白保護，也不要把筆畫切斷。
+
+     ★ 要數「連通塊」（pc.union 回傳的 poly 數），不是外輪廓數 ——
+     兩塊分開的墨可能共用輪廓計數，用輪廓數判斷保險完全不會生效。
+
+     ★ 試過改用「量最細的墨」當標準，結果更糟：
+     帶子邊緣本來就一定會留下一小片薄墨，所以連下限放到 0.10 都只有
+     6/152 個字通過（連通塊版是 28）。那個指標測到的不是「筆畫被切斷」。 */
+  const blocks=(list)=>{
+    const polys=list.map(c=>pcFlatten(c,3)).filter(p=>p.length>=4).map(p=>[p]);
+    if(polys.length<2) return polys.length;
+    let u2; try{ u2=PCL.union(polys[0], ...polys.slice(1)); }catch(e){ return polys.length; }
+    return u2.length;
+  };
+  if(blocks(out) > blocks(cs)) return cs;
+  return out;
+}
+
+
 function toOtPath(list){
   /* ★ 這裡也要去重疊。實裝測試、挑字匯出、部件預覽都是直接呼叫 toOtPath，
      不經過 cmdsOf —— 只在匯出那條路徑去重疊的話，app 裡看到的還是有白縫的版本。
@@ -3375,6 +3535,9 @@ function glyphContours(id,f,variant,NS){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   const out=[];
   for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,NS));
+  /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
+     出廠 cmin=0 直接跳過，所以不開就完全不影響（也不會呼叫布林運算）。 */
+  if(f.cmin>0 && !VF_STABLE) return protectCounters(id,f,f.cmin,out);
   return out;
 }
 function glyphSkeleton(id,f,variant){
@@ -3555,37 +3718,41 @@ const AXES=[
   {k:"inflate", n:"膨脹",  en:"INFLATE", min:0,   max:1.0, step:0.02,lo:"原樣",hi:"膨潤",f:v=>(+v).toFixed(2)},
   {k:"wave",    n:"波浪",  en:"WAVE",    min:0,   max:1.0, step:0.02,lo:"直",  hi:"扭動",f:v=>(+v).toFixed(2)},
   {k:"chop",    n:"斷裂",  en:"CHOP",    min:0,   max:1.0, step:0.02,lo:"完整",hi:"破碎",f:v=>(+v).toFixed(2)},
-  {k:"cap",     n:"端點",  en:"CAP",     min:0,   max:1.0, step:0.02,lo:"方",  hi:"圓",f:v=>(+v).toFixed(2)}
+  {k:"cap",     n:"端點",  en:"CAP",     min:0,   max:1.0, step:0.02,lo:"方",  hi:"圓",f:v=>(+v).toFixed(2)},
+  /* 內白保護：字很粗時，筆畫之間該留的白會被擠掉糊成一團。
+     這根軸會在該留白的地方挖出保證寬度的縫。出廠 0（關），
+     只有做極粗的標準字才需要開，36 是實測的甜蜜點。 */
+  {k:"cmin",    n:"內白保護",en:"COUNTER MIN",min:0,max:60,step:2,lo:"關", hi:"強",f:v=>(+v)?(+v).toFixed(0):"關"}
 ];
 const PRESETS={
   /* ---- 標準字用的六組。跟上面七種「字體」不同：
          這些是刻意大幅變形的造型，做招牌、logo、海報標題用。 ---- */
   lgSharp:{weight:96,optic:0.70,contrast:1.10,round:0.04,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:0.96,slant:0.06,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.02,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.85,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.85,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18,cmin:0},
   lgPlump:{weight:118,optic:0.70,contrast:1.00,round:0.85,counter:0.94,gravity:1.00,face:1.10,
     hand:0,finish:0,width:1.06,slant:0,taper:0.30,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.62,wave:0.00,chop:0.00,cap:0.85},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.62,wave:0.00,chop:0.00,cap:0.85,cmin:0},
   lgWire:{weight:70,optic:0.70,contrast:1.00,round:0.30,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.62,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.62,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30,cmin:0},
   lgBroken:{weight:88,optic:0.70,contrast:1.02,round:0.10,counter:1.00,gravity:1.00,face:1.05,
     hand:0.18,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:23,scatter:0.14,wobble:0.30,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.52,cap:0.10},
+    seed:23,scatter:0.14,wobble:0.30,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.52,cap:0.10,cmin:0},
   lgWave:{weight:92,optic:0.70,contrast:1.00,round:0.55,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:1.00,slant:0,taper:0.60,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:41,scatter:0.00,wobble:0.22,spike:0.00,hollow:0.00,arch:0.00,inflate:0.10,wave:0.30,chop:0.00,cap:0.55},
+    seed:41,scatter:0.00,wobble:0.22,spike:0.00,hollow:0.00,arch:0.00,inflate:0.10,wave:0.30,chop:0.00,cap:0.55,cmin:0},
   lgScatter:{weight:84,optic:0.70,contrast:1.05,round:0.22,counter:1.00,gravity:1.00,face:1.05,
     hand:0.42,finish:0,width:1.00,slant:0,taper:1.10,hook:1.00,dun:0.00,press:0.00,rise:0.03,
-    seed:88,scatter:0.34,wobble:0.46,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.22},
-  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:1.00},
-  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.04},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.78},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.10},
+    seed:88,scatter:0.34,wobble:0.46,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.22,cmin:0},
+  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18,cmin:0},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:1.00,cmin:0},
+  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.04,cmin:0},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.78,cmin:0},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.10,cmin:0},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30},
-  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0,cap:0.02}
+  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30,cmin:0},
+  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0,cap:0.02,cmin:0}
 };
 const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={lgSharp:"Sharp",lgPlump:"Plump",lgWire:"Wire",lgBroken:"Broken",lgWave:"Wave",lgScatter:"Scatter",hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};

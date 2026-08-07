@@ -1,12 +1,6 @@
-/* 方寸 FANGCUN — service worker
-   Copyright (c) 2026 DBeast and Fangcun contributors.
-
-   This Source Code Form is subject to the terms of the Mozilla Public
-   License, v. 2.0. If a copy of the MPL was not distributed with this
-   file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
-/* 整個 app（含 3MB 字庫）第一次載入就快取起來，之後完全離線可用。 */
-const CACHE = "fangcun-v56-cap";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
+/* 方寸 — service worker
+   整個 app（含 3MB 字庫）第一次載入就快取起來，之後完全離線可用。 */
+const CACHE = "fangcun-v57-counter";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
 const CORE_ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
 const OPTIONAL_ASSETS = [
   "./icon.svg", "./icon-192.png", "./icon-512.png",
