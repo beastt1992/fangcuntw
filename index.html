@@ -1758,6 +1758,9 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          arch:0.00,inflate:0.00,wave:0.00,chop:0.00,
          /* 斜筆粗細與中宮橫縱：出廠值＝舊行為，不動就零變化 */
          diag:1.00,cnaniso:0.00,
+         /* 個性：0 ＝ 完全不作用（出廠）。這一根不是幾何參數，
+            它在 axesOf() 裡把其他軸整組往「更有個性」的方向推。 */
+         pers:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -4863,6 +4866,7 @@ const AXES=[
   /* 內白保護：字很粗時，筆畫之間該留的白會被擠掉糊成一團。
      這根軸會在該留白的地方挖出保證寬度的縫。出廠 0（關），
      只有做極粗的標準字才需要開，36 是實測的甜蜜點。 */
+  {k:"pers",    n:"個性",    en:"PERS", min:0,   max:100, step:1,   lo:"正常",hi:"誇張",f:v=>String(v|0)},
   {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
   {k:"cnaniso", n:"中宮橫縱",en:"CNAN", min:-1,  max:1,   step:0.02,lo:"縱鬆",hi:"橫鬆",f:v=>(+v).toFixed(2)},
   {k:"cmin",    n:"內白保護",en:"COUNTER MIN",min:0,max:60,step:2,lo:"關", hi:"強",f:v=>(+v)?(+v).toFixed(0):"關"}
@@ -5523,6 +5527,7 @@ function drawSpec(){
 const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]);
 /* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
 const SCAX_GROUPS=[
+  {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
   {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
@@ -6639,6 +6644,7 @@ function scRandomFace(){
     rise:   +rrRnd(0,0.14).toFixed(3),
     scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0,
     cmin:0,
+    pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
     seed:1+Math.floor(Math.random()*999)
   });
   /* 造型效果：六成機率來一種，其中三成再疊第二種。
@@ -7179,8 +7185,77 @@ const ENGINE_REF={weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,
 let ENGINE="fangcun";                     /* fangcun | reference | compare */
 const isRef=()=>ENGINE==="reference";
 /* 給某個引擎用的設計軸（simp 等非軸參數沿用目前的 F） */
+/* ==========================================================================
+   個性 PERSONALITY —— 巨集軸
+   一根滑桿同時推動十幾根軸，用非線性曲線。它不是幾何演算法，
+   所以引擎完全不用改，風險只在「值會不會推到軸範圍外」（下面有夾限）。
+
+   做法分兩部分：
+     ① 放大「偏離出廠值的量」—— 你已經調出來的個性會被放得更大
+     ② 加上一個「特徵化」推力 —— 這樣即使停在出廠值（偏離量為 0）
+        也還是會往有個性的方向跑，不然拉了沒反應
+   非破壞性：F 裡的值一根都不會被改寫，只在取渲染參數時套用。
+   個性歸 0 就完全回到你原本調的那組。
+   ========================================================================== */
+/* ★ 延遲建表：axesOf 在本行之前（第 3338 行）就會被呼叫。
+   目前 pers=0 會提早 return 所以碰不到，但只要存檔裡 pers>0，
+   const 的暫時性死區就會讓它直接爆。這個檔案踩過同樣的坑。 */
+let _persRange=null;
+function persClamp(k,v){
+  if(!_persRange){ _persRange={}; for(const a of AXES) _persRange[a.k]=[a.min,a.max]; }
+  const r=_persRange[k]; if(!r) return v;
+  return Math.max(r[0],Math.min(r[1],v));
+}
+/* 會被個性推動的軸。cmin 不列入（封閉內白判斷仍是壞的）；
+   seed 不列入（那是亂數種子不是造型）；weight 不列入（粗細該由你自己決定）。 */
+const PERS_AXES=["contrast","round","cap","counter","face","gravity","width","slant",
+                 "taper","hook","dun","press","finish","hand","rise","diag","cnaniso",
+                 "spike","hollow","arch","inflate","wave","chop","scatter","wobble"];
+function persApply(f){
+  const p=(f&&f.pers)||0;
+  if(p<=0) return f;                      /* 出廠情況：原物件直接回傳，零成本零變化 */
+  const t=Math.min(1,p/100), e=Math.pow(t,1.12);   /* 非線性：前段稍慢、後段猛 */
+  const g=1+2.2*e;                        /* 偏離量最多放大到 3.2 倍 */
+  const D=F_DEFAULT, o={...f};
+  for(const k of PERS_AXES){
+    const n=D[k], v=f[k];
+    if(typeof n!=="number"||typeof v!=="number") continue;
+    o[k]=n+(v-n)*g;                       /* ① 放大既有個性 */
+  }
+  /* ② 特徵化推力：即使停在出廠值也會動（出廠時偏離量為 0，只靠 ① 會完全沒反應）。
+        方向取「目前偏哪邊」，剛好在中性點就給一個預設方向。 */
+  const dir=x=>x>=0?1:-1;
+  const away=(v,n,amt)=>v+amt*dir(v-n);     /* 從中性點往目前那一側再推 */
+  o.contrast = o.contrast*(1+1.10*e*dir(f.contrast-1));
+  o.counter  = o.counter - 0.30*e;          /* 中宮收緊 → 標準字那種張力 */
+  o.face     = o.face + 0.10*e;
+  o.width    = away(o.width, 1, 0.22*e);
+  o.gravity  = away(o.gravity, 1, 0.12*e);
+  o.taper    = o.taper*(1+1.00*e);
+  o.hook     = o.hook*(1+0.90*e);
+  o.diag     = o.diag*(1+0.80*e*dir(f.diag-1));
+  o.cap      = o.cap + 0.30*e*dir(f.cap-f.round);
+  o.press    = o.press + 0.70*e;
+  o.dun      = o.dun + 0.50*e;
+  o.slant    = o.slant*(1+1.0*e);
+  o.rise     = o.rise + 0.05*e;
+  o.cnaniso  = away(o.cnaniso, 0, 0.60*e);
+  /* 造型軸在出廠都是 0，純放大永遠是 0 —— 個性拉高時主動帶進「一種」效果。
+     用 f.seed 決定是哪一種：同一組參數永遠得到同一個結果，
+     不能用亂數，否則每次重畫都變一個樣。 */
+  const DK=["spike","inflate","wave","chop","arch","hollow"];
+  const pick=DK[Math.abs(f.seed|0)%DK.length];
+  const cap=persClamp(pick,1e9);            /* 借夾限拿到該軸上限 */
+  o[pick]=Math.max(o[pick]||0, cap*0.72*Math.pow(e,1.25));   /* 指數太高會讓前半段完全沒反應 */
+  /* 高對比仍然要配收筆與頓，否則橫畫細得像斷掉 —— 跟重骰同一條護欄 */
+  if(o.contrast>1.4){ o.finish=Math.max(o.finish,0.55*e); o.dun=Math.max(o.dun,0.50*e); }
+  for(const k of PERS_AXES) if(typeof o[k]==="number") o[k]=persClamp(k,o[k]);
+  o.cmin=f.cmin;                          /* 個性不碰內白保護 */
+  return o;
+}
 function axesOf(which){
-  return which==="reference" ? {...F,...ENGINE_REF} : F;
+  const base = which==="reference" ? {...F,...ENGINE_REF} : F;
+  return persApply(base);
 }
 const FA=()=>axesOf(isRef()?"reference":"fangcun");
 
