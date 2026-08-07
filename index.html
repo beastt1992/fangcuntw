@@ -475,7 +475,6 @@
     .scbar>.g,.scbar>.btn{flex:none}
     .scbar>.spacer{display:none}
     .scbar-studio .scposter-wrap{flex:1 1 100%}
-    .scactions{width:100%;justify-content:flex-end}
     .scbar .seg button{min-height:34px;padding:4px 9px;font-size:11px}
     .pal{min-height:34px}.pal em{font-size:10px}.pal i{height:18px}
     .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
@@ -521,14 +520,6 @@
   /* ---------- 展示頁「更多」設計軸 ----------
      刻意只新增 .scmore / .scmore-in 兩個新 class，
      不覆寫任何既有選擇器、不動頭列、不在執行期包 DOM —— 上一次就是那樣把版面弄壞的。 */
-  .scmore{border-top:1px solid var(--ink);background:var(--paper);
-    box-shadow:0 -10px 30px rgba(22,19,13,.08);max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-    padding:0 14px calc(12px + env(safe-area-inset-bottom))}
-  .scmore[hidden]{display:none}
-  .scmore-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
-    padding:12px 0 10px;border-bottom:1px solid var(--line)}
-  .scmore-head b{display:block;font-size:13px;letter-spacing:.02em;color:var(--ink)}
-  .scmore-head span{display:block;font-size:11px;line-height:1.65;color:var(--muted);margin-top:2px}
   .scmore-in{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 18px}
   .scmore-ax{display:flex;align-items:center;gap:9px;padding:4px 0}
   .scmore-ax label{font-size:11.5px;color:var(--muted);white-space:nowrap;width:54px;flex:none}
@@ -536,8 +527,6 @@
   .scmore-ax b{font-family:var(--mono);font-size:10px;color:var(--ink);
     width:44px;text-align:right;flex:none;font-weight:400}
   @media (pointer:coarse){
-    .scmore{max-height:44vh;padding:0 12px calc(12px + env(safe-area-inset-bottom))}
-    .scmore-head{padding:10px 0 8px;position:sticky;top:0;background:var(--paper);z-index:2}
     .scmore-in{grid-template-columns:1fr;gap:0}
     .scmore-ax{padding:6px 0}
     .scmore-ax label{width:60px;font-size:12.5px}
@@ -569,16 +558,6 @@
   .posterseg{display:flex;flex-wrap:wrap;gap:6px}
   .posterseg button{font-weight:600;padding:7px 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--paper);color:var(--ink)}
   .posterseg button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  .scactions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
-  #scMore[aria-expanded="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  .scstudio-tabs{display:flex;gap:0;border:1px solid var(--line-2);width:max-content;max-width:100%;margin:0 0 9px}
-  .scstudio-tabs button{border:0;border-right:1px solid var(--line-2);background:transparent;color:var(--muted);
-    padding:7px 16px;font:inherit;font-size:11.5px;cursor:pointer}
-  .scstudio-tabs button:last-child{border-right:0}
-  .scstudio-tabs button.on{background:var(--ink);color:var(--paper)}
-  .scstudio-panel{display:none;padding:12px 0 0}
-  .scstudio-panel.on{display:block}
-  .scstudio-panel .sclay{padding:10px 12px 4px;border:1px solid var(--line);background:var(--paper-2,var(--paper));}
   .wrapseg{flex-wrap:wrap}
   .sccheck{display:flex!important;align-items:center;gap:5px;width:auto!important;color:var(--ink)!important;cursor:pointer}
   .sccheck input{accent-color:var(--ink)}
@@ -590,8 +569,6 @@
       linear-gradient(45deg,transparent 75%,#e6e2d8 75%),linear-gradient(-45deg,transparent 75%,#e6e2d8 75%);
     background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}
   @media (pointer:coarse){
-    .scstudio-tabs{width:100%}
-    .scstudio-tabs button{flex:1;padding:9px 6px;font-size:12px}
     .posterseg button{min-height:34px}
   }
 
@@ -726,10 +703,6 @@
   }
 
   /* 三個分頁併成一頁之後的段落小標 */
-  .scstudio-sub{font:600 11px/1 ui-monospace,monospace;letter-spacing:.14em;
-    color:var(--mut,#8a8378);text-transform:uppercase;margin:2px 0 8px;
-    padding-bottom:6px;border-bottom:1px solid var(--line,#dcd6c8)}
-  .scstudio-panel+.scstudio-panel .scstudio-sub{margin-top:16px}
   /* 模板縮圖 */
   .posterthumbs{display:flex;gap:8px;flex-wrap:wrap}
   .posterthumbs button{position:relative;width:64px;padding:0;border:1px solid var(--line,#dcd6c8);
@@ -745,30 +718,21 @@
 
   /* ==========================================================================
      展示控制的桌機版修正
-     原本有一組給手機的規則（.scstudio-tabs{width:100%} ＋ button{flex:1}）
      沒有被 media query 包住，洩漏到桌機 —— 兩個分頁按鈕就撐滿一整列。
      這裡用 min-width 把桌機該有的樣子補回來，手機不受影響。
      ========================================================================== */
   @media(min-width:760px){
     /* ① 分頁按鈕照內容寬，不要撐滿 */
-    .scstudio-tabs{width:max-content}
-    .scstudio-tabs button{flex:0 0 auto;padding:6px 18px;font-size:11.5px}
 
     /* ② 壓縮留白：格子放窄、行距收緊，讓工具擠上來不用捲 */
-    .scstudio-panel{padding:8px 0 0}
-    .scstudio-panel .sclay{padding:8px 10px 2px}
     .sclay{grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
            gap:0 14px;padding-bottom:5px;margin-bottom:5px}
     .sclay-g{padding:2px 0;gap:6px}
     .sclay-g>label{width:46px;font-size:11px}
     .sclay-g>b{width:38px;font-size:9.5px}
-    .scstudio-sub{margin:1px 0 5px;padding-bottom:4px;font-size:10px}
-    .scstudio-panel+.scstudio-panel .scstudio-sub{margin-top:10px}
-    .scstudio-head{margin-bottom:6px}
     .scbar-studio{min-height:0;padding:6px 14px;gap:8px}
 
     /* ③ 整個控制區不要自己長出捲軸 */
-    #scMoreBox{max-height:none;overflow:visible}
   }
   /* 畫布縮放 */
   /* ★ 縮放用 zoom 不用 transform：
@@ -883,21 +847,12 @@
      現在有 43 個。所以手機改成可收合的分節，一次只看一段。
      ========================================================================== */
   @media(max-width:1099px){
-    .scstudio-sub{cursor:pointer;display:flex;align-items:center;justify-content:space-between;
-      margin:0;padding:11px 2px;border-bottom:1px solid var(--line,#ddd6c4);
-      font-size:12px;letter-spacing:.08em;-webkit-tap-highlight-color:transparent}
-    .scstudio-sub::after{content:"＋";font:400 13px/1 var(--mono,ui-monospace,monospace);
-      color:var(--muted,#8a8378)}
-    .scstudio-sub.open::after{content:"−"}
     /* ★ 只收合「有小標」的分節。
        字型分頁沒有小標，永遠不會被標成 sec-open ——
        原本這條會把它整個藏起來，手機上點開控制面板是一片空白。 */
     /* 用 JS 標上的 .has-sub，不靠 :has() —— 舊瀏覽器不支援 :has()，
        整條規則會被丟掉，那反而安全（全部顯示），但收合就失效了。
        改用 class 就兩邊都可靠。 */
-    .scstudio-panel.has-sub .sclay{display:none}
-    .scstudio-panel.has-sub.sec-open .sclay{display:grid}
-    .scstudio-panel{padding:0}
   }
 
   /* 手機不放範例模板：縮圖在小螢幕上看不清楚，
@@ -918,11 +873,6 @@
 
   /* 控制面板內的按鈕組一律可換行 —— 之前只寫在桌機的 media query 裡，
      手機沒吃到，上色／調色盤那幾排就撐破容器。這條不分螢幕大小都要有。 */
-  #scMoreBox .sclay-g{flex-wrap:wrap;min-width:0}
-  #scMoreBox .sclay-g>*{min-width:0;max-width:100%}
-  #scMoreBox .seg,#scMoreBox #scPals,#scMoreBox .pals{flex-wrap:wrap;max-width:100%}
-  #scMoreBox .seg button{flex:0 1 auto}
-  #scMoreBox{overflow-x:hidden}
   /* 這條列一直在（裡面有匯出等按鈕）；只有縮圖那一格會收起。
      .scposter-wrap 是 flex，必須自己寫這條，否則 hidden 屬性不會生效。 */
   /* ★ 用 class 不用 hidden 屬性：.scbar 與 .scposter-wrap 都設了 display:flex，
@@ -6841,12 +6791,7 @@ $("scSelRot").addEventListener("change",saveLocal);
 $("scSelReset").addEventListener("click",()=>{if(!scSelKey)return;delete scTr[scSelKey];delete scOff[scSelKey];scUpdateInspector();scDraw();saveLocal();});
 
 /* 分頁列已經移除（字型搬到底部、左側只剩版面），元素可能不存在。 */
-if($("scStudioTabs")) $("scStudioTabs").addEventListener("click",e=>{
-  const b=e.target.closest("button[data-tab]"); if(!b)return;
-  document.querySelectorAll("#scStudioTabs button").forEach(x=>x.classList.toggle("on",x===b));
-  document.querySelectorAll("#scMoreBox .scstudio-panel").forEach(x=>x.classList.toggle("on",x.dataset.panel===b.dataset.tab));
-  if(b.dataset.tab==="type") syncShowAxes();
-});
+/* 工作台分頁列的監聽已移除：#scStudioTabs 這個容器早就不存在了。 */
 
 const SC_POSTERS={
   /* 前四個是「短字」模板：二到四個字，一眼看得出字形本身，
@@ -6985,34 +6930,8 @@ try{
     !!($("scTypeBox") && !$("scTypeBox").classList.contains("is-off")));
 }catch(e){}
 /* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
-/* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
-(function(){
-  const isNarrow=()=>matchMedia("(max-width:1099px)").matches;
-  const nl=document.querySelectorAll("#scMoreBox .scstudio-sub");
-  const subs=nl&&nl.length?Array.prototype.slice.call(nl):[];
-  /* 有小標的分節才參與收合；字型分頁沒有小標，不加這個 class 就照常顯示 */
-  subs.forEach(sub=>{ const pa=sub.closest(".scstudio-panel"); if(pa) pa.classList.add("has-sub"); });
-  if(!subs.length) return;
-  function setOpen(sub,on){
-    sub.classList.toggle("open",on);
-    const panel=sub.closest(".scstudio-panel");
-    if(panel) panel.classList.toggle("sec-open",on);
-  }
-  subs.forEach((sub,i)=>{
-    sub.addEventListener("click",()=>{
-      if(!isNarrow()) return;
-      const now=sub.classList.contains("open");
-      subs.forEach(x=>setOpen(x,false));      /* 一次只開一段，才不用捲 */
-      setOpen(sub,!now);
-    });
-  });
-  function sync(){
-    if(isNarrow()) subs.forEach((x,i)=>setOpen(x,i===0));
-    else subs.forEach(x=>setOpen(x,true));    /* 桌機全開 */
-  }
-  sync();
-  matchMedia("(max-width:1099px)").addEventListener("change",sync);
-})();
+/* 手機分節收合已移除：那是左側控制面板（#scMoreBox）的功能，
+   面板整個搬到底部之後容器已不存在，這段永遠在第一行就 return。 */
 /* 範例海報列預設收起 —— 它常駐在畫布上方會一直吃掉展示空間。
    需要時用按鈕叫出來，套用完自動收回去，畫面留給作品本身。 */
 /* ★ 切換的是「縮圖那一格」，不是整條列 ——
@@ -7079,7 +6998,11 @@ scHistButtons();
 /* slider / color / preset 在改值前記一個狀態；純 UI 與匯出按鈕排除 */
 $("showcase").addEventListener("pointerdown",e=>{
   const t=e.target.closest&&e.target.closest("button,input[type=range],input[type=color],input[type=checkbox],.pal"); if(!t)return;
-  if(t.closest("#scStudioTabs")||["scUndo","scRedo","scMore","scSVG","scPNG"].includes(t.id))return;
+  /* 純 UI、不改狀態的按鈕不記歷史。原本這行列的是 scUndo/scRedo/scMore/scSVG/scPNG，
+     但那幾顆早就搬到頂列與匯出選單、已經不在 #showcase 裡，等於列了也沒用；
+     真正還留在裡面的純 UI 是縮放與收合鈕。
+     （scCommit 本來就會去重，所以這行只是省掉沒必要的 scState()。） */
+  if(t.closest("#scZoom")||t.id==="scTypeMore")return;
   scCommit();
 },true);
 $("scTxt").addEventListener("beforeinput",()=>{const n=Date.now();if(n-scTextHistAt>700){scCommit();scTextHistAt=n;}},true);
