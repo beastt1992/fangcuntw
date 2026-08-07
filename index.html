@@ -64,6 +64,7 @@
 ================================================================================
 -->
 <!-- FANGCUN-MOBILE-FIX: v37.2 safe-area + menu portal -->
+<!-- FANGCUN-COUNTER-CELLS: v66 reference-topology-safety -->
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -2925,18 +2926,24 @@ function dedupContours(contours, SUB, TOL){
     if(holes.length) res=pc.difference(res,...holes);
   }catch(e){ return contours; }
   const out=[];
-  for(const poly of res) for(const ring of poly){
-    let p=ring.slice();
-    if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
-                  && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
-    if(p.length<3) continue;
-    const q=TOL>0 ? rdp(p.concat([p[0]]),TOL) : p.concat([p[0]]);
-    if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
-                  && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
-    if(q.length<3) continue;
-    const cmds=[["M",q[0][0],q[0][1]]];
-    for(let i=1;i<q.length;i++) cmds.push(["L",q[i][0],q[i][1]]);
-    out.push(cmds);
+  for(const poly of res){
+    for(let ri=0;ri<poly.length;ri++){
+      const ring=poly[ri];
+      let p=ring.slice();
+      if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
+                    && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
+      if(p.length<3) continue;
+      let q=TOL>0 ? rdp(p.concat([p[0]]),TOL) : p.concat([p[0]]);
+      if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
+                    && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
+      if(q.length<3) continue;
+      /* polygon-clipping 規定 poly[0] 是 exterior，後面是 holes。
+         v67 不再只靠「最大 ring 的符號」推測，直接保留這個拓樸。 */
+      q=csOrientRing(q,ri===0);
+      const cmds=[["M",q[0][0],q[0][1]]];
+      for(let i=1;i<q.length;i++) cmds.push(["L",q[i][0],q[i][1]]);
+      out.push(cmds);
+    }
   }
   return out.length?out:contours;
 }
@@ -3188,26 +3195,66 @@ function csFlat_unused(cmds,SUB){
   if(Math.abs(L[0]-f[0])>1e-9||Math.abs(L[1]-f[1])>1e-9) pts.push([f[0],f[1]]);
   return pts;
 }
+/* v67：polygon-clipping 的 MultiPolygon 已經知道「外框 / 洞」的拓樸。
+   不要把 ring 拆成鬆散 contours 後再猜 winding；RDP 後明確把 exterior / hole
+   強制成相反方向，讓 SVG nonzero 與 OTF 都能穩定保留「豐」這種密集小格。 */
+function csOrientRing(q,wantPositive){
+  if(!q||q.length<3) return q;
+  const pos=csSignedAreaSimple(q)>0;
+  if(pos!==wantPositive) q=q.slice().reverse();
+  return q;
+}
 function csToCmds(res){
   const out=[];
-  for(const poly of res) for(const ring of poly){
-    let p=ring.slice();
-    if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
-                  && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
-    if(p.length<3) continue;
-    const q=rdp(p.concat([p[0]]),1.0);
-    if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
-                  && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
-    if(q.length<3) continue;
-    const c=[["M",q[0][0],q[0][1]]];
-    for(let i=1;i<q.length;i++) c.push(["L",q[i][0],q[i][1]]);
-    out.push(c);
+  for(const poly of res){
+    for(let ri=0;ri<poly.length;ri++){
+      const ring=poly[ri];
+      let p=ring.slice();
+      if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
+                    && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
+      if(p.length<3) continue;
+      let q=rdp(p.concat([p[0]]),1.0);
+      if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
+                    && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
+      if(q.length<3) continue;
+      q=csOrientRing(q,ri===0);
+      const c=[["M",q[0][0],q[0][1]]];
+      for(let i=1;i<q.length;i++) c.push(["L",q[i][0],q[i][1]]);
+      out.push(c);
+    }
   }
   return out;
 }
 /* cs 由呼叫端傳進來（glyphContours 已經算好了），不要在這裡重算 —— 會無限遞迴。 */
 
-/* v62：Enclosed counter + compound-path 修正；v61 medial ribbon 保留。
+/* v70：Reference-Only Enclosed Shape。
+   enclosed counter 形狀只由 reference mother shape 重建，不再 union 已被粗字重扭曲的 current hole。
+
+/* v69：Reference White-Space Topology。
+   cmin 開啟時填掉 current 偶發 enclosed holes，只重建 reference 真正存在的洞；
+   解決「豐」粗字重裡的針縫/假洞，讓密集結構由原始白空間拓樸主導。
+
+/* v68：Dense Counter Stability。
+   cmin 啟用時統一至少 20 段母輪廓，解決「豐」在畫面/匯出因 NS 不同而保護失效。
+
+/* v67：Counter Cut Union + Explicit Compound Winding。
+   「豐」這種密集格狀字會同時產生很多 cutter；先 union cutter 並固定 ring winding。
+
+/* v66：Reference Topology Safety。
+   v65 已讓 medial ribbon 不自交；v66 修掉最關鍵的 rollback 邏輯：
+   不能拿「已被粗字重黏成一團的 current topology」當安全標準。
+   內白保護本來就是要把錯誤黏接重新分開，所以應該和 reference topology 比。
+   v64 把 blocker/open 判斷改回 reference topology；v65 再修正 medial 配對回頭／自交。
+   「豐」短橫很多，最近點若在相鄰 sample 間來回跳，ribbon 會自交，Boolean 就會挖出巨大錯誤區域。
+   v63 已修 enclosed cells；v64 再把 open/blocked 判斷與第三筆保護全部改看 reference geometry。
+   極粗字重時，current 墨不能拿來判斷「原本是不是開口／是不是被第三筆堵住」，
+   否則越粗越會把所有 bay 誤判成封閉，正好失去內白保護。
+   - enclosed counter 不再依賴 open medial ribbon 是否存在。
+   - compact hole 的寬度改量 polygon 最小支撐寬度，避免 2A/P 把方格低估一半。
+   - 保護形狀從 reference hole 內縮到 target，不再把已變形 current hole 向外膨脹。
+*/
+
+/* v62 基礎：Enclosed counter + compound-path 修正；v61 medial ribbon 保留。 */
 
 /* v61：Local Medial Ribbon --------------------------------------------------
    舊的內白保護用「整筆首尾方向 + 一條矩形 band」。遇到兩筆斜率不同、弧線、
@@ -3243,7 +3290,7 @@ function csCounterTarget(referenceGap,maxGap,tau){
   const sat=maxGap*(1-Math.exp(-referenceGap/Math.max(8,tau)));
   return Math.max(0,Math.min(referenceGap,sat,maxGap));
 }
-function csApproxInkStroke(st,S,f,px,py,pad){
+function csApproxInkStroke(st,S,f,px,py,pad,useReference){
   if(!S||!S.length) return false;
   let bi=0,bd=Infinity;
   for(let q=0;q<S.length;q++){
@@ -3251,21 +3298,23 @@ function csApproxInkStroke(st,S,f,px,py,pad){
     if(d<bd){bd=d;bi=q;}
   }
   const q=S[bi];
-  let w=(q.cw||0)/2;
+  /* v64：topology 判斷一定看 reference width。
+     current width 在極粗字重會把整個 bay 都判成「被墨堵住」，內白反而永遠進不來。 */
+  let w=((useReference?q.rw:q.cw)||0)/2;
   if(!(w>0)){
     try{ w=widthAt(st,q.u,q.t,f)*(st.ws||1)/2; }catch(e){ w=Math.max(widths(f).hw,widths(f).sw)/2; }
   }
   const r=w+(pad||0);
   return bd<=r*r;
 }
-function csConnectorBlocked(marked,samples,f,i,j,A,B){
-  /* 非相鄰的兩條平行筆中間如果還夾著第三筆，不應該跨過它造一條大白帶。
-     同樣地，T 字／交叉筆在中間時也直接把 medial run 斷開。 */
+function csConnectorBlocked(marked,samples,rf,i,j,A,B){
+  /* v64：blocker 是「原始拓樸」概念，只看 reference stroke core。
+     current 極粗墨只是暫時侵入白區，不代表那裡原本有 blocker。 */
   for(const u of [0.34,0.50,0.66]){
     const px=A[0]+(B[0]-A[0])*u, py=A[1]+(B[1]-A[1])*u;
     for(let k=0;k<marked.length;k++){
       if(k===i||k===j) continue;
-      if(csApproxInkStroke(marked[k],samples[k],f,px,py,3)) return true;
+      if(csApproxInkStroke(marked[k],samples[k],rf,px,py,2,true)) return true;
     }
   }
   return false;
@@ -3320,7 +3369,7 @@ function csPairMedialRuns(marked,samples,i,j,f,rf,minGap,tau){
     let best=null;
     for(let q=0;q<Math.min(4,cand.length);q++){
       const c=cand[q];
-      if(!csConnectorBlocked(marked,samples,f,i,j,c.a,c.b)){ best=c; break; }
+      if(!csConnectorBlocked(marked,samples,rf,i,j,c.a,c.b)){ best=c; break; }
     }
     if(best){ delete best.a; delete best.b; matches.push(best); }
   }
@@ -3346,7 +3395,25 @@ function csPairMedialRuns(marked,samples,i,j,f,rf,minGap,tau){
       const p=cur[cur.length-1];
       const jump=dist(p.mid,m.mid);
       const tangentDot=Math.abs(p.t[0]*m.t[0]+p.t[1]*m.t[1]);
-      if(m.i-p.i>2 || m.jm<p.jm-2 || m.jm-p.jm>6 || jump>125 || tangentDot<0.60) flush();
+
+      /* v65：最近點配對必須沿兩條 stroke 都單調前進。
+         以前容許 B index 往回 2 格，對長直線通常沒事，但「豐」的短橫會出現
+         232→218→226→331→317 這種 midpoint 回頭，ribbon 立刻自交。 */
+      if(m.jm < p.jm) continue;
+
+      /* midpoint 也不能逆著 A 的局部走向回頭。用 A sample 的實際前進方向判斷，
+         不依賴 tangent 正負號，因此反向畫的 stroke 也安全。 */
+      const ia=Math.min(A.length-1,Math.max(0,p.i));
+      let qa=A[Math.max(0,ia-1)].p, qb=A[Math.min(A.length-1,ia+1)].p;
+      let guide=unit(sub(qb,qa));
+      if(len(guide)<0.5) guide=unit(sub(A[A.length-1].p,A[0].p));
+      const dv=sub(m.mid,p.mid), forward=dv[0]*guide[0]+dv[1]*guide[1];
+      if(forward < -1.5) continue;
+
+      /* 幾乎同位置的重複配對只留 score 較好的那個，避免零長小迴圈。 */
+      if(jump<2.5){ if(m.score<p.score) cur[cur.length-1]=m; continue; }
+
+      if(m.i-p.i>2 || m.jm-p.jm>6 || jump>125 || tangentDot<0.60) flush();
     }
     cur.push(m);
   }
@@ -3374,19 +3441,21 @@ function csRoundOpen(pts,steps){
   out.push(pts[pts.length-1]);
   return out;
 }
-function csAnyInk(marked,samples,f,p){
-  for(let k=0;k<marked.length;k++) if(csApproxInkStroke(marked[k],samples[k],f,p[0],p[1],4)) return true;
+function csAnyInk(marked,samples,f,p,useReference){
+  for(let k=0;k<marked.length;k++)
+    if(csApproxInkStroke(marked[k],samples[k],f,p[0],p[1],3,!!useReference)) return true;
   return false;
 }
-function csEndOpen(marked,samples,f,p,t,sign){
-  /* 連續幾個探針都沒有撞到墨，才當成真的通到字外；避免 closed counter 誤判。 */
+function csEndOpen(marked,samples,rf,p,t,sign){
+  /* v64：開口／封閉也是 reference topology。
+     不能因 current weight 已把出口擠住，就把原本 open bay 誤判成 closed counter。 */
   for(const d of [22,46,78]){
     const q=[p[0]+t[0]*d*sign,p[1]+t[1]*d*sign];
-    if(csAnyInk(marked,samples,f,q)) return false;
+    if(csAnyInk(marked,samples,rf,q,true)) return false;
   }
   return true;
 }
-function csMedialRibbon(run,marked,samples,f,i,j){
+function csMedialRibbon(run,marked,samples,f,rf,i,j){
   let first=run.findIndex(m=>m.need),last=-1;
   for(let k=run.length-1;k>=0;k--) if(run[k].need){last=k;break;}
   if(first<0||last<0) return null;
@@ -3422,8 +3491,8 @@ function csMedialRibbon(run,marked,samples,f,i,j){
     geom.push({p:pt,t:tt,n:nn,h:hs[k]});
   }
 
-  const open0=csEndOpen(marked,samples,f,geom[0].p,geom[0].t,-1);
-  const open1=csEndOpen(marked,samples,f,geom[geom.length-1].p,geom[geom.length-1].t,+1);
+  const open0=csEndOpen(marked,samples,rf,geom[0].p,geom[0].t,-1);
+  const open1=csEndOpen(marked,samples,rf,geom[geom.length-1].p,geom[geom.length-1].t,+1);
   const EXT=1450;
   if(open0){
     const g=geom[0];
@@ -3470,7 +3539,7 @@ function csMedialRibbon(run,marked,samples,f,i,j){
   return {poly:[[ring]],i,j,ax:{a:[0,0],b:avg,dx:avg[0],dy:avg[1]},
           target:Math.max(...seq.map(m=>m.target)),open0,open1};
 }
-/* v62：Enclosed Counter Offset ----------------------------------------------
+/* v63：Enclosed Counter / Counter Cell Preservation -------------------------
    medial ribbon 處理的是「兩筆之間的開放／狹長白縫」；但像「多」兩個夕裡面的
    enclosed space 是一個真正的封閉白區，不應該靠 pair ribbon 猜。
 
@@ -3502,8 +3571,29 @@ function csRingCentroid(r){
   return [cx/(3*A),cy/(3*A)];
 }
 function csHoleWidth(r){
-  const A=Math.abs(csRingArea(r)),P=csRingPerim(r);
-  return P>1 ? 2*A/P : 0;       /* 長縫時接近真實窄邊；比 bbox 對斜洞穩定 */
+  /* v63：真正量 counter 的幾何窄邊。
+     舊的 2A/P 其實接近「內切半徑」：方形 s×s 只會得到 s/2，
+     所以「豐」這種接近方形的小格子，保護距離被系統性低估。
+
+     沿每條有效 edge 的法線投影整個 ring，取兩條平行 support lines
+     的最小距離。旋轉矩形、梯形、圓角格都能得到更接近視覺內白的窄邊。 */
+  let q=(r||[]).slice();
+  if(q.length>2 && dist(q[0],q[q.length-1])<1e-6) q=q.slice(0,-1);
+  if(q.length<3) return 0;
+  const P=csRingPerim(q), edgeMin=Math.max(2.5,P*0.006);
+  let best=Infinity;
+  for(let i=0;i<q.length;i++){
+    const a=q[i],b=q[(i+1)%q.length],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);
+    if(L<edgeMin) continue;
+    const nx=-dy/L,ny=dx/L;
+    let lo=Infinity,hi=-Infinity;
+    for(const pt of q){ const v=pt[0]*nx+pt[1]*ny; if(v<lo)lo=v; if(v>hi)hi=v; }
+    const w=hi-lo; if(w>0.2&&w<best) best=w;
+  }
+  if(Number.isFinite(best)) return best;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const pt of q){minX=Math.min(minX,pt[0]);maxX=Math.max(maxX,pt[0]);minY=Math.min(minY,pt[1]);maxY=Math.max(maxY,pt[1]);}
+  return Math.max(0,Math.min(maxX-minX,maxY-minY));
 }
 function csLineX(P,u,Q,v){
   const d=u[0]*v[1]-u[1]*v[0]; if(Math.abs(d)<1e-7) return null;
@@ -3534,6 +3624,16 @@ function csOffsetRing(ring,delta){
   if(out.length<3) return [];
   out.push(out[0].slice()); return out;
 }
+/* v69：cmin 開啟時 enclosed white 的 topology 以 reference 為準。
+   current union 在極粗字重可能自己產生細長假洞（「豐」中央那條針縫），
+   也可能把真正的洞吃掉。先只保留每個 polygon 的 exterior，填掉所有 current holes；
+   後面再只把「reference 本來存在」的 enclosed counters 挖回來。 */
+function csSolidInk(PCL,u){
+  const shells=[];
+  for(const poly of (u||[])) if(poly&&poly[0]&&poly[0].length>=4) shells.push([poly[0]]);
+  if(!shells.length) return u||[];
+  try{return PCL.union(shells[0],...shells.slice(1));}catch(e){return shells;}
+}
 function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
   let refContours=[];
   try{ for(const st of marked) refContours.push(...strokeContours(st,rf,st.ws,30)); }
@@ -3553,23 +3653,29 @@ function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
   const cuts=[];
   for(const R of refs){
     const target=csCounterTarget(R.w,minGap,tau); if(target<1) continue;
-    let best=null,bd=Infinity;
-    for(const C of curs){if(C.used)continue;const d=dist(R.c,C.c);if(d<bd){bd=d;best=C;}}
-    /* reference hole 的中心通常只會移幾十；太遠就當作已閉合，不亂配別的洞。 */
-    if(best && bd<Math.max(90,R.w*1.8)){
-      best.used=true;
-      if(best.w>=target-0.8) continue;   /* 自己就夠寬，不必動 */
-      const delta=Math.min(40,(target-best.w)/2);
-      let q=csOffsetRing(best.ring,delta); if(q.length<4) continue;
-      try{ const clean=PCL.union([q]); for(const poly of clean) cuts.push(poly); }
-      catch(e){cuts.push([q]);}
-    }else{
-      /* hole 已經被粗筆完全吃掉：由 reference hole inward offset 到 target width 再挖回。 */
-      const shrink=Math.max(0,(R.w-target)/2);
-      let q=csOffsetRing(R.ring,-shrink); if(q.length<4||Math.abs(csRingArea(q))<30) continue;
-      try{ const clean=PCL.union([q]); for(const poly of clean) cuts.push(poly); }
-      catch(e){cuts.push([q]);}
+    let best=null,bd=Infinity,bscore=Infinity;
+    for(const C of curs){
+      if(C.used) continue;
+      const d=dist(R.c,C.c), ar=Math.max(1e-6,C.A/R.A);
+      /* 豐有很多大小相近、上下排列的小格；中心距離之外也比較 area/width，避免錯配。 */
+      const score=d + Math.abs(Math.log(ar))*22 + Math.abs(C.w-R.w)*0.10;
+      if(score<bscore){bscore=score;bd=d;best=C;}
     }
+    const matched=best && bd<Math.max(76,R.w*1.55);
+    if(matched) best.used=true;
+
+    /* v69：不再「current hole 夠大就 skip」。protectCounters 會先把 current holes
+       全部填實，避免粗字重自己冒出的假洞污染 topology，所以每個 reference hole
+       都必須明確重建。target 仍由 reference 原始寬度走非線性飽和曲線。 */
+    const shrink=Math.max(0,(R.w-target)/2);
+    let q=csOffsetRing(R.ring,-shrink);
+    if(q.length<4||Math.abs(csRingArea(q))<24) continue;
+    /* v70：enclosed shape 完全由 reference mother shape 決定。
+       current hole 在極粗時常已變成月牙/尖角，與 reference target 做 union 反而會留下
+       小三角凸洞（「豐」下半部很明顯）。既然 cmin 的目的就是保原始 white topology，
+       current 只拿來做 matching/診斷，不再拿它決定最終 hole 形狀。 */
+    try{ const clean=PCL.union([q]); for(const poly of clean) cuts.push(poly); }
+    catch(e){ cuts.push([q]); }
   }
   return cuts;
 }
@@ -3604,26 +3710,35 @@ function protectCounters(ch, f, minGap, cs){
     if(samples[i].length<2||samples[j].length<2) continue;
     const runs=csPairMedialRuns(marked,samples,i,j,f,rf,minGap,tau);
     for(const run of runs){
-      const b=csMedialRibbon(run,marked,samples,f,i,j);
+      const b=csMedialRibbon(run,marked,samples,f,rf,i,j);
       if(b) bands.push(b);
     }
   }
-  if(!bands.length) return cs;
-
-  /* 每一筆自己的實際輪廓，用來保護穿越 ribbon 的第三筆。 */
-  const per=marked.map(st=>{
-    try{ return strokeContours(st,f,st.ws,30)
-      .map(x=>pcFlatten(x,4)).filter(r=>r.length>=4).map(r=>[r]); }
-    catch(e){ return []; }
-  });
+  /* v63：enclosed counter 必須獨立運作。
+     「豐」這種字即使沒有任何 open medial band，也仍然有大量應保留的小 counter cells。 */
 
   const rings=cs.map(c=>[pcFlatten(c,4)]).filter(r=>r[0].length>=4);
   if(!rings.length) return cs;
-  let u; try{ u=PCL.union(rings[0],...rings.slice(1)); }catch(e){ return cs; }
+  let uRaw; try{ uRaw=PCL.union(rings[0],...rings.slice(1)); }catch(e){ return cs; }
+  /* v69：Boolean 母體先填掉 current 自己的所有 enclosed holes。
+     合法 enclosed counters 由 reference topology 在下一行重建；這會消除「豐」極粗時
+     由輪廓碰撞偶然形成的針縫/假洞，同時不會漏掉已經被粗筆吃光的真 counter。 */
+  const u=csSolidInk(PCL,uRaw);
 
   /* enclosed counter 不是 medial ribbon：直接把 reference 內圈當白區 topology，
-     必要時對白區做 offset，確保「多／目／田」這種封閉內白不被粗筆吃掉。 */
-  const cuts=csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,u);
+     必要時由 reference 白區重建 target，確保「多／目／田／豐」這種封閉內白不被粗筆吃掉。 */
+  const cuts=csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,uRaw);
+
+  /* open ribbon 才需要逐筆輪廓；只有 enclosed cells 時不多做昂貴運算。 */
+  const per=bands.length ? marked.map(st=>{
+    /* v64：第三筆只保護 reference core，而不是 current 粗外框。
+       cutter 可以削掉「變粗後多侵入白區」的部分，但永遠不會吃掉原本那支筆的核心。
+       這是「豐」格狀 counter 能在極粗字重重新打開的關鍵。 */
+    try{ return strokeContours(st,rf,st.ws,30)
+      .map(x=>pcFlatten(x,4)).filter(r=>r.length>=4).map(r=>[r]); }
+    catch(e){ return []; }
+  }) : [];
+
   for(const b of bands){
     let region=b.poly;
     /* 這層是保險。主要的交叉筆已在 local pairing 階段斷開；
@@ -3640,19 +3755,37 @@ function protectCounters(ch, f, minGap, cs){
   }
   if(!cuts.length) return cs;
 
+  /* v67：先把所有 cutter 做 union，再一次 difference。
+     「豐」會同時產生很多 enclosed cell + open medial ribbon；若讓重疊 cutter
+     各自進 difference，極粗字重會留下互相重疊/巢狀的洞，nonzero winding
+     很容易被抵銷成黑塊。先合成一個無重疊 cutter，Boolean 拓樸會乾淨很多。 */
+  let cutUnion;
+  try{ cutUnion=PCL.union(cuts[0],...cuts.slice(1)); }catch(e){ cutUnion=cuts; }
+  if(!cutUnion||!cutUnion.length) return cs;
   let res;
-  try{ res=PCL.difference(u,...cuts); }catch(e){ return cs; }
+  try{ res=PCL.difference(u,cutUnion); }catch(e){ return cs; }
   const out=csToCmds(res); if(!out.length) return cs;
 
-  /* Safety 仍保留：如果布林後把整個字切成更多不相干的墨塊，寧可放棄這個字。
-     這是最後一道保險，不參與 targetGap 的幾何判斷。 */
+  /* v66 Safety：跟 reference topology 比，不跟 current blob 比。
+
+     舊版 if(blocks(out) > blocks(cs)) rollback，對「豐／手」正好是反的：
+     current 粗字重已把原本分離的區域黏成 1 塊，內白保護成功後恢復成 2 塊，
+     舊 safety 會把這個正確結果當成「切散」然後整字還原。
+
+     reference 使用同一組 face/counter/slant/round 等風格，只把 weight 壓回基準，
+     因此它才是這個 style 下應保存的黑色連通拓樸。
+     只禁止 output 比 reference 還多塊；少於 reference 代表保護不足，但不因此製造破字。 */
   const blocks=(list)=>{
     const polys=list.map(c=>pcFlatten(c,3)).filter(p=>p.length>=4).map(p=>[p]);
     if(polys.length<2) return polys.length;
     let u2; try{u2=PCL.union(polys[0],...polys.slice(1));}catch(e){return polys.length;}
     return u2.length;
   };
-  if(blocks(out)>blocks(cs)) return cs;
+  let refCs=[];
+  try{ for(const st of marked) refCs.push(...strokeContours(st,rf,st.ws,24)); }catch(e){ refCs=[]; }
+  const refBlocks=refCs.length ? blocks(refCs) : blocks(cs);
+  const outBlocks=blocks(out);
+  if(outBlocks>refBlocks) return cs;
   return out;
 }
 
@@ -3927,10 +4060,16 @@ function markCorners(strokes,f){
 function glyphContours(id,f,variant,NS){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   const out=[];
-  for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,NS));
+  /* v68：內白保護不能依賴「這次畫面剛好用了多少輪廓取樣」。
+     工作台的大字原本 NS=undefined，而匯出/QA 常用 14~20；「豐」這種密集格狀字
+     因此會出現同一組參數：QA 有內白、畫面卻整片黏住。
+     cmin 開啟時統一至少使用 20 段建立 Boolean 母輪廓，讓畫面、預覽、OTF 共用同一拓樸。 */
+  const counterOn=f.cmin>0 && !VF_STABLE;
+  const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
+  for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
      出廠 cmin=0 直接跳過，所以不開就完全不影響（也不會呼叫布林運算）。 */
-  if(f.cmin>0 && !VF_STABLE) return protectCounters(id,f,f.cmin,out);
+  if(counterOn) return protectCounters(id,f,f.cmin,out);
   return out;
 }
 function glyphSkeleton(id,f,variant){
