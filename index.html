@@ -797,6 +797,43 @@
     background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
   }
   @media(max-width:700px){ #scArt{box-shadow:0 1px 6px rgba(0,0,0,.25),0 0 0 1px rgba(0,0,0,.18)} }
+  .postertxt{display:inline-flex;align-items:center;gap:5px;margin-left:10px;
+    font:400 11px/1 system-ui,sans-serif;color:var(--muted,#8a8378);white-space:nowrap;cursor:pointer}
+  .postertxt input{margin:0;cursor:pointer}
+
+  /* ==========================================================================
+     桌機：左側工具列
+     控制面板原本是「畫布下方展開的橫向面板」，一開就吃掉畫布高度。
+     改成常駐左欄，用的是橫向空間 —— 畫布高度完全不受影響，
+     也不用每次調個顏色就開開關關。手機維持原本的收合面板。
+     ========================================================================== */
+  @media(min-width:1100px){
+    #showcase{
+      grid-template-columns:288px minmax(0,1fr);
+      grid-template-rows:auto minmax(0,1fr) auto;
+      column-gap:0;
+    }
+    /* 左欄：控制面板常駐，自己捲 */
+    #showcase>#scMoreBox{
+      grid-column:1; grid-row:1 / 4;
+      display:block !important;      /* 蓋掉 hidden */
+      border-right:1px solid var(--ink,#16130d); border-top:0;
+      overflow-y:auto; overflow-x:hidden;
+      padding:12px 14px; margin:0;
+      background:var(--paper,#faf7f0);
+    }
+    /* 右欄：模板列、畫布、文字列依序疊 */
+    #showcase>#scPosterBar{grid-column:2; grid-row:1}
+    #showcase>.scstage{grid-column:2; grid-row:2}
+    #showcase>.scfoot{grid-column:2; grid-row:3}
+    /* 左欄常駐就不需要「收起」按鈕與開關 */
+    #scMoreClose,#scMoreBtn{display:none}
+    /* 欄內是窄的，格線改單欄 */
+    #scMoreBox .sclay{grid-template-columns:1fr;gap:0}
+    #scMoreBox .sclay-g{padding:3px 0}
+    #scMoreBox .scstudio-tabs{width:100%}
+    #scMoreBox .scstudio-tabs button{flex:1}
+  }
 </style>
 </head>
 <body>
@@ -951,7 +988,8 @@
       <div class="g scposter-wrap"><label>範例模板</label>
         <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
-        <div class="posterthumbs" id="scPoster"></div></div>
+        <div class="posterthumbs" id="scPoster"></div>
+        <label class="postertxt"><input type="checkbox" id="scPosterText"><span>含範例文字</span></label></div>
       <div class="scactions">
         <button class="btn ghost sm" id="scPosterToggle" type="button">範例海報</button>
         <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
@@ -6274,9 +6312,13 @@ function scSetPaletteKey(k){
   scPal=p;
   document.querySelectorAll("#scPals .pal").forEach((x,i)=>x.classList.toggle("on",SCPAL[i]===p));
 }
-function scApplyPoster(k){
+function scApplyPoster(k, withText){
   const p=SC_POSTERS[k]; if(!p)return;
-  if(typeof p.txt==="string") $("scTxt").value=p.txt;
+  /* ★ 模板拆成「風格」與「文字」兩份：
+     預設只套風格，保留使用者自己打的字 ——
+     不然每次想換個版面配色，自己寫的內容就被範例句蓋掉了。
+     要連範例文字一起帶入，勾「含範例文字」。 */
+  if(withText && typeof p.txt==="string") $("scTxt").value=p.txt;
   scCanvas=p.canvas; scLay=p.lay; scDir=p.dir; scAlignMode=p.align; scMargin=p.margin;
   scScale=p.scale; scGxAdj=p.gx; scGyAdj=p.gy; scCol=p.col; scBlend=p.blend;
   scBgColor=p.bg; scMonoColor=p.ink; scTransparentBg=false; scSetPaletteKey(p.pal);
@@ -6357,7 +6399,8 @@ if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
 });
 $("scPoster").addEventListener("click",e=>{
   const b=e.target.closest("button[data-poster]"); if(!b) return;
-  scApplyPoster(b.dataset.poster);
+  const wantText = !!($("scPosterText") && $("scPosterText").checked);
+  scApplyPoster(b.dataset.poster, wantText);
   /* 套用完就收起來，把畫面還給作品 */
   const bar=$("scPosterBar");
   if(bar){ bar.hidden=true; if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
