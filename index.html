@@ -1108,33 +1108,37 @@
     .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:6px 10px}
   }
   /* ==========================================================================
-     手機：展開調整時仍然看得到字
-     原本面板是「佔版面高度」的一列 —— 一展開就把畫布那列（minmax(0,1fr)）
-     擠到接近 0，等於在看不見要調的字的情況下調字。
-     改成：面板跟畫布共用同一個格子、貼齊下緣 ——
-     它是浮在畫布上的，不佔任何版面高度，所以畫布與輸入框都還在。
-     再給畫布一段下留白，作品就會浮到面板上方那塊還看得見的區域。
-     ★ 這裡把五個子元素全部明確指定格位：只指定其中一個的話，
-       其餘靠自動排位的會被推到別的列去。
+     手機策略：畫布釘在最上面，其餘全部往下捲
+     上一版是「面板浮在畫布上」—— 算過就知道不可能成立：
+     底部常駐區已經長到約 240px，畫布那一列只剩 414px，
+     而面板 min(46vh,100%) = 388px ＝ 蓋掉畫布的 94%，
+     再加上 padding-bottom:46vh 比畫布本身還高，作品被整個推出可視區。
+     高度預算就是不夠，再怎麼調數字都是拆東牆補西牆。
+
+     改成單欄捲動 ＋ 畫布 sticky：
+       · 畫布固定在頂端，捲到第幾根軸它都在
+       · 控制項再多也只是變成捲軸長度，不會擠壓畫布
+       · 不需要浮層、不需要讓可視區、不需要互斥
      ========================================================================== */
   @media(max-width:1099px){
-    #showcase.on{grid-template-rows:auto auto minmax(0,1fr) auto}
-    #showcase>#scPosterBar{grid-column:1;grid-row:1}
-    #showcase>#scColorBar{grid-column:1;grid-row:2}
-    #showcase>.scstagewrap{grid-column:1;grid-row:3}
-    #showcase>.scfoot{grid-column:1;grid-row:4}
-    #showcase>#scTypeBox{
-      grid-column:1;grid-row:3;align-self:end;z-index:6;
-      max-height:min(46vh,100%);overflow-y:auto;
-      border-top:1px solid var(--ink);
-      box-shadow:0 -12px 28px rgba(22,19,13,.18);
+    #showcase.on{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    #showcase>.scstagewrap{
+      position:sticky;top:0;z-index:5;
+      height:40vh;min-height:170px;
+      background:var(--paper);border-bottom:1px solid var(--ink);
     }
-    /* 面板展開時，畫布把可視區讓出來（class 由收合鈕切換） */
-    body.type-open .scstage{padding-bottom:46vh}
-    /* ★ 手機：字型預設列（13 顆＋重設）跟著一起收 ——
-       常駐的話光它就佔掉兩三行，收合狀態下畫布反而被壓縮。
-       桌機橫向空間夠，維持常駐（那是上一輪特地搬出來的，不要動到）。
-       用 CSS 控可見性就好，不搬 DOM —— 搬了容易留下重複 id 或斷掉的監聽。 */
+    /* 釘住之後畫布高度是定值，作品可以真的「符合視窗」——
+       之前只有寬度受限，直式海報還是會超出去。
+       ★ 這裡不能用 max-height:100%：.sczoomwrap 的高度是 auto，
+         百分比高度在「父層高度不確定」時會被直接忽略。改用跟畫布同源的定值
+         （40vh 扣掉 .scstage 上下各 12px 的內距）。 */
+    #showcase>.scstagewrap .scstage{height:100%}
+    #showcase>.scstagewrap .sczoomwrap.is-fit>#scArt{max-height:calc(40vh - 24px)}
+    /* 面板回到正常流程：它現在只是捲軸裡的一段，不再需要高度上限與陰影 */
+    #scTypeBox{max-height:none;overflow:visible;box-shadow:none}
+    /* ★ 手機：字型預設列（13 顆＋重設）跟著收合一起收 ——
+       常駐的話光它就佔掉兩三行。桌機橫向空間夠，維持常駐。
+       用 CSS 控可見性就好，不搬 DOM。 */
     body:not(.type-open) .scfoot>.scfoot-type{display:none}
   }
 </style>
@@ -1293,6 +1297,13 @@
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
         <div class="posterthumbs" id="scPoster"></div>
         <label class="postertxt"><input type="checkbox" id="scPosterText"><span>含範例文字</span></label></div>
+      <div class="g"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
+            <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
+            ><button data-k="45">4:5</button><button data-k="34">3:4</button
+            ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
+          </div></div>
+      <div class="g"><label>版式</label><div class="seg" id="scLayout">
+            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>
       <div class="scactions">
         <button class="btn ghost sm" id="scPosterToggle" type="button">範例海報</button>
         <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
@@ -1311,6 +1322,8 @@
       <div class="g"><label>疊色</label><div class="seg" id="scBlend">
         <button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div></div>
       <div class="g"><label>單色</label><input type="color" id="scInk" value="#2a2118"></div>
+      <div class="g"><label>背景</label>
+            <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
       <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
       <div class="g"><label>自訂色</label>
         <input type="color" id="scPick" value="#c2453a">
@@ -1357,6 +1370,11 @@
       </div>
         <div class="sclay scfoot-type">
         <div class="sctypegroup">字型 <em>TYPE</em></div>
+          <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
+            <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
+          <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
+            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
+            ><button data-k="right">靠右</button></div></div>
         <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
           <div class="seg" id="scPreset"></div>
           <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
@@ -1380,28 +1398,6 @@
         <!-- ★ 文字的三根滑桿從左側「文字」分節搬過來 ——
              這一盒現在是「所有拉桿都在這」，不用開側欄也不用展開。
              方向／對齊是按鈕不是拉桿，留在側欄。 -->
-        <div class="sclay">
-          <div class="sctypegroup">文字 <em>TEXT</em></div>
-          <!-- 大小／字距／行距已提到上方常駐列，不在這裡重複。 -->
-          <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
-            <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
-          <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
-            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
-            ><button data-k="right">靠右</button></div></div>
-        </div>
-        <div class="sclay">
-          <div class="sctypegroup">版面 <em>LAYOUT</em></div>
-          <!-- 留白已提到上方常駐列，不在這裡重複。 -->
-          <div class="sclay-g" style="grid-column:1/-1"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
-            <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
-            ><button data-k="45">4:5</button><button data-k="34">3:4</button
-            ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
-          </div></div>
-          <div class="sclay-g"><label>背景</label>
-            <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
-          <div class="sclay-g"><label>版式</label><div class="seg" id="scLayout">
-            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>
-        </div>
         <!-- ★ 單字層收攏成一組：以前「只調這個字／清除」在這盒、
              「搬字／選取／單字大小／旋轉／重設」在側欄，同一個「選中的字」的操作分居兩處。 -->
         <div class="sclay">
