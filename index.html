@@ -63,7 +63,7 @@
   本檔案不含任何 GPL 授權的程式碼。
 ================================================================================
 -->
-<!-- FANGCUN-MOBILE-FIX: v37.2 safe-area + menu portal -->
+<!-- FANGCUN v71 · SHOWCASE STUDIO + POSTER PRESETS -->
 <!-- FANGCUN-COUNTER-CELLS: v66 reference-topology-safety -->
 <html lang="zh-Hant">
 <head>
@@ -471,7 +471,7 @@
     .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
     #scArt{max-width:100%;max-height:100%;width:auto;height:auto}
     .schint{left:8px;bottom:6px;font-size:9px}
-    .scfoot{height:auto;min-height:112px;display:grid;grid-template-columns:1fr 1fr auto;gap:7px;padding:8px;
+    .scfoot{height:auto;min-height:104px;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px;
       align-items:center;box-sizing:border-box}
     .scfoot textarea{grid-column:1 / -1;width:100%;min-width:0;height:42px;min-height:42px;max-height:112px;
       resize:none;font-size:15px;padding:8px}
@@ -493,7 +493,7 @@
     .sheet input[type=text]{font-size:16px!important;min-height:40px}
   }
   @media (display-mode:standalone) and (max-width:700px){
-    :root{--safe-top:max(54px,env(safe-area-inset-top))}
+    :root{--safe-top:env(safe-area-inset-top)}
   }
   @media (max-width:370px){
     .cells{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:150px}
@@ -544,6 +544,32 @@
     .sclay-g{padding:6px 0}
     .sclay-g>label{width:60px;font-size:12.5px}
     .sclay-g input[type=color]{width:44px;height:34px}
+  }
+
+  /* ---------- v71 展示工作室：做字之後直接排海報 ---------- */
+  .scbar-studio .scposter-wrap{min-width:0}
+  .posterseg button{font-weight:600}
+  .scstudio-tabs{display:flex;gap:0;border:1px solid var(--line-2);width:max-content;max-width:100%;margin:0 0 9px}
+  .scstudio-tabs button{border:0;border-right:1px solid var(--line-2);background:transparent;color:var(--muted);
+    padding:7px 16px;font:inherit;font-size:11.5px;cursor:pointer}
+  .scstudio-tabs button:last-child{border-right:0}
+  .scstudio-tabs button.on{background:var(--ink);color:var(--paper)}
+  .scstudio-panel{display:none}
+  .scstudio-panel.on{display:block}
+  .wrapseg{flex-wrap:wrap}
+  .sccheck{display:flex!important;align-items:center;gap:5px;width:auto!important;color:var(--ink)!important;cursor:pointer}
+  .sccheck input{accent-color:var(--ink)}
+  .scselect{min-height:34px}
+  #scUndo,#scRedo{font-size:17px;line-height:1;min-width:34px;padding-left:8px;padding-right:8px}
+  #scArt .sc-selection{fill:none;stroke:var(--grid);stroke-width:9;stroke-dasharray:24 16;vector-effect:non-scaling-stroke;pointer-events:none}
+  .scstage.transparent-bg{background-color:#fff;
+    background-image:linear-gradient(45deg,#e6e2d8 25%,transparent 25%),linear-gradient(-45deg,#e6e2d8 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#e6e2d8 75%),linear-gradient(-45deg,transparent 75%,#e6e2d8 75%);
+    background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}
+  @media (pointer:coarse){
+    .scstudio-tabs{width:100%}
+    .scstudio-tabs button{flex:1;padding:9px 6px;font-size:12px}
+    .posterseg button{min-height:34px}
   }
 
   /* ---------- 部件「用在這些字」預覽 ----------
@@ -826,68 +852,110 @@
 
 
   <section id="showcase">
-    <div class="scbar">
-      <div class="g"><label>版式</label>
-        <div class="seg" id="scLayout">
-          <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button>
+    <div class="scbar scbar-studio">
+      <div class="g scposter-wrap"><label>海報</label>
+        <div class="seg posterseg" id="scPoster">
+          <button data-poster="minimal">極簡</button><button data-poster="sign">招牌</button
+          ><button data-poster="magazine">雜誌</button><button data-poster="matrix">字陣</button
+          ><button data-poster="night">夜市</button><button data-poster="vertical">直排</button>
         </div></div>
-      <div class="g"><label>上色</label>
-        <div class="seg" id="scColor">
-          <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
-          ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
-          ><button data-k="rand">隨機</button>
-        </div></div>
-      <div class="g"><label>疊色</label>
-        <div class="seg" id="scBlend"><button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div>
-      </div>
-      <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
       <span class="spacer"></span>
-      <button class="btn ghost sm" id="scClear" type="button">清除個別配色</button>
-      <button class="btn ghost sm" id="scSVG" type="button">存 SVG</button>
-      <button class="btn sm" id="scPNG" type="button">存 PNG</button>
+      <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
+      <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
+      <button class="btn ghost sm" id="scMore" type="button" aria-expanded="false">控制</button>
+      <button class="btn ghost sm" id="scSVG" type="button">SVG</button>
+      <button class="btn sm" id="scPNG" type="button">PNG</button>
     </div>
     <div class="scstage" id="scStage">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div class="schint" id="scHint">點任何一個字可以單獨換色</div>
+      <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
     </div>
     <div class="scfoot">
       <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">森林</textarea>
       <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
       <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
-      <button class="btn ghost sm" id="scMore" type="button" aria-expanded="false">更多</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <div class="scmore" id="scMoreBox" hidden>
-      <div class="sclay">
-        <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
-          <div class="seg" id="scPreset"></div>
-          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
-        <div class="sclay-g"><label>對齊</label>
-          <div class="seg" id="scAlign">
-            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
-            ><button data-k="right">靠右</button>
-          </div></div>
-        <div class="sclay-g"><label>大小</label>
-          <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
-        <div class="sclay-g"><label>字距</label>
-          <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
-        <div class="sclay-g"><label>行距</label>
-          <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
-        <div class="sclay-g"><label>自訂色</label>
-          <input type="color" id="scPick" value="#c2453a">
-          <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
-        <div class="sclay-g"><label>隨機</label>
-          <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
-          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
-        <div class="sclay-g"><label>單字</label>
-          <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
-          <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
-          <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
-        <div class="sclay-g"><label>搬字</label>
-          <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
-          <button class="btn ghost sm" id="scMoveClr" type="button">歸位</button></div>
+      <div class="scstudio-tabs" id="scStudioTabs">
+        <button data-tab="text" class="on">文字</button><button data-tab="layout">版面</button
+        ><button data-tab="type">字型</button><button data-tab="color">顏色</button>
       </div>
-      <div class="scmore-in" id="scGrid"></div>
+
+      <div class="scstudio-panel on" data-panel="text">
+        <div class="sclay">
+          <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
+            <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
+          <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
+            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
+            ><button data-k="right">靠右</button></div></div>
+          <div class="sclay-g"><label>大小</label>
+            <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
+          <div class="sclay-g"><label>字距</label>
+            <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
+          <div class="sclay-g"><label>行距</label>
+            <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
+        </div>
+      </div>
+
+      <div class="scstudio-panel" data-panel="layout">
+        <div class="sclay">
+          <div class="sclay-g" style="grid-column:1/-1"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
+            <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
+            ><button data-k="45">4:5</button><button data-k="34">3:4</button
+            ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
+          </div></div>
+          <div class="sclay-g"><label>留白</label>
+            <input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
+          <div class="sclay-g"><label>背景</label>
+            <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
+          <div class="sclay-g"><label>版式</label><div class="seg" id="scLayout">
+            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>
+          <div class="sclay-g"><label>搬字</label>
+            <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
+            <button class="btn ghost sm" id="scMoveClr" type="button">全部歸位</button></div>
+          <div class="sclay-g scselect"><label>選取</label><span class="tip" id="scSelected">尚未選字</span></div>
+          <div class="sclay-g"><label>單字大小</label>
+            <input type="range" id="scSelScale" min="0.45" max="2.2" step="0.01" value="1" disabled><b id="scSelScaleV">1.00</b></div>
+          <div class="sclay-g"><label>旋轉</label>
+            <input type="range" id="scSelRot" min="-45" max="45" step="1" value="0" disabled><b id="scSelRotV">0°</b></div>
+          <div class="sclay-g"><label>單字位置</label>
+            <button class="btn ghost sm" id="scSelReset" type="button" disabled>重設選取字</button></div>
+        </div>
+      </div>
+
+      <div class="scstudio-panel" data-panel="type">
+        <div class="sclay">
+          <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
+            <div class="seg" id="scPreset"></div>
+            <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
+          <div class="sclay-g"><label>單字</label>
+            <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
+            <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
+            <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
+        </div>
+        <div class="scmore-in" id="scGrid"></div>
+      </div>
+
+      <div class="scstudio-panel" data-panel="color">
+        <div class="sclay">
+          <div class="sclay-g" style="grid-column:1/-1"><label>上色</label><div class="seg wrapseg" id="scColor">
+            <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
+            ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
+            ><button data-k="rand">隨機</button></div></div>
+          <div class="sclay-g"><label>疊色</label><div class="seg" id="scBlend">
+            <button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div></div>
+          <div class="sclay-g"><label>單色</label><input type="color" id="scInk" value="#2a2118"></div>
+          <div class="sclay-g" style="grid-column:1/-1"><label>調色盤</label><div class="pals" id="scPals"></div></div>
+          <div class="sclay-g"><label>自訂色</label>
+            <input type="color" id="scPick" value="#c2453a">
+            <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
+          <div class="sclay-g"><label>隨機</label>
+            <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
+            <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
+          <div class="sclay-g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -4782,10 +4850,11 @@ function snapshot(){
     txt:($("scTxt")&&$("scTxt").value)||"", lay:scLay, pal:scPal&&scPal.k,
     col:scCol, blend:scBlend,
     align:scAlignMode, scale:scScale, gx:scGxAdj, gy:scGyAdj,
-    ovr:{...scOvr}, custom:{...scCustom}, off:{...scOff}, axovr:{...scAxOvr}
+    canvas:scCanvas, margin:scMargin, bg:scBgColor, transparent:scTransparentBg, mono:scMonoColor, dir:scDir,
+    ovr:{...scOvr}, custom:{...scCustom}, off:{...scOff}, tr:{...scTr}, axovr:{...scAxOvr}
   };
   const spec=($("specIn")&&$("specIn").value)||"";
-  return {v:21,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,
+  return {v:22,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,
           masters:{...MASTERS},edits,show,spec};
 }
 function restore(data){
@@ -4846,10 +4915,17 @@ function restore(data){
     if(typeof sh.gy==="number"){ scGyAdj=sh.gy;
       if($("scGy")){ $("scGy").value=scGyAdj;
         $("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2); } }
+    if(sh.canvas){scCanvas=sh.canvas;document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));}
+    if(typeof sh.margin==="number"){scMargin=sh.margin;if($("scMargin")){ $("scMargin").value=scMargin;$("scMarginV").textContent=Math.round(scMargin*100)+"%"; }}
+    if(sh.bg)scBgColor=sh.bg; if(sh.mono)scMonoColor=sh.mono; scTransparentBg=!!sh.transparent;
+    if(sh.dir){scDir=sh.dir;document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x.dataset.k===scDir));}
     scOvr=sh.ovr?{...sh.ovr}:{};
     scCustom=sh.custom?{...sh.custom}:{};
     scOff=sh.off?{...sh.off}:{};
+    scTr=sh.tr?{...sh.tr}:{}; scSelKey=null;
     scAxOvr=sh.axovr?{...sh.axovr}:{};
+    if(typeof scSyncColors==="function") scSyncColors();
+    if(typeof scUpdateInspector==="function") scUpdateInspector();
     if(typeof scAxLabel==="function") scAxLabel();
   }
   if(data.spec!==undefined && $("specIn")) $("specIn").value=data.spec;
@@ -4945,7 +5021,7 @@ function setShowMore(open){
   if(!box||!btn) return;
   box.hidden=!open;
   btn.setAttribute("aria-expanded",open?"true":"false");
-  btn.textContent=open?"收起":"更多";
+  btn.textContent=open?"收起":"控制";
   if(open) syncShowAxes();
   try{ localStorage.setItem(SCMORE_KEY,open?"1":"0"); }catch(e){}
 }
@@ -5669,23 +5745,36 @@ const SCPAL=[
   {k:"luo", n:"落山風", bg:"#170d12", ink:"#ffeadb", c:["#ff7a4d","#ffb03d","#e8456b","#ab3a7c","#5c2f6b"]},
   {k:"cha", n:"茶",     bg:"#ece4d4", ink:"#3a2a17", c:["#6b4423","#8f6b3a","#3f5140","#a8582f","#2f3a2e"]}
 ];
-let scPal=SCPAL[0], scLay="huge",   /* 只剩 huge / grid */ scCol="stroke", scBlend="normal", scOvr={}, scSeq=0;
+const SC_CANVAS={
+  free:{r:null,w:null,h:null,n:"自由"}, square:{r:1,w:1600,h:1600,n:"1:1"},
+  "45":{r:4/5,w:1600,h:2000,n:"4:5"}, "34":{r:3/4,w:1500,h:2000,n:"3:4"},
+  "916":{r:9/16,w:1080,h:1920,n:"9:16"}, "169":{r:16/9,w:1920,h:1080,n:"16:9"},
+  a4:{r:210/297,w:2480,h:3508,n:"A4"}
+};
+let scPal=SCPAL[0], scLay="huge",   /* huge / grid */ scCol="stroke", scBlend="normal", scOvr={}, scSeq=0;
+let scCanvas="free", scMargin=0.08, scBgColor=scPal.bg, scTransparentBg=false, scMonoColor=scPal.ink, scDir="h";
+let scSelKey=null, scTr={};          /* key → {s,r}，單字縮放／旋轉 */
 
 SCPAL.forEach(p=>{
   const b=document.createElement("button");
   b.className="pal"+(p===scPal?" on":""); b.type="button"; b.title=p.n;
   b.innerHTML=p.c.map(c=>'<i style="background:'+c+'"></i>').join("")+"<em>"+p.n+"</em>";
   b.addEventListener("click",()=>{
-    scPal=p;
+    scPal=p; scBgColor=p.bg; scMonoColor=p.ink;
     document.querySelectorAll("#scPals .pal").forEach(x=>x.classList.toggle("on",x===b));
-    document.documentElement.style.setProperty("--sbg",p.bg);
-    document.documentElement.style.setProperty("--sink",p.ink);
-    scDraw();
+    scSyncColors(); scDraw(); saveLocal();
   });
   $("scPals").appendChild(b);
 });
-document.documentElement.style.setProperty("--sbg",scPal.bg);
-document.documentElement.style.setProperty("--sink",scPal.ink);
+function scSyncColors(){
+  document.documentElement.style.setProperty("--sbg",scBgColor);
+  document.documentElement.style.setProperty("--sink",scMonoColor);
+  if($("scBg")) $("scBg").value=scBgColor;
+  if($("scInk")) $("scInk").value=scMonoColor;
+  if($("scTransparent")) $("scTransparent").checked=scTransparentBg;
+  if($("scStage")) $("scStage").classList.toggle("transparent-bg",scTransparentBg);
+}
+scSyncColors();
 
 const scLerp=(a,b,t)=>a+(b-a)*t;
 const scHex=h=>{const n=parseInt(h.slice(1),16);return[n>>16&255,n>>8&255,n&255];};
@@ -5703,7 +5792,7 @@ let scPickMode=false, scMoveMode=false;
 let scCustom={};        /* key → 自訂色 */
 let scOff={};           /* key → [dx,dy] 個別位移，單位是「一個字面」 */
 function scDraw(){
-  const svg=$("scArt"); svg.textContent="";
+  const svg=$("scArt"); svg.textContent=""; scSyncColors();
   const raw=$("scTxt").value.replace(/\r\n?/g,"\n");
   const sourceLines=raw.split("\n");
   const manualBreak=sourceLines.length>1;
@@ -5719,29 +5808,41 @@ function scDraw(){
   });
   const list=lines.flat();
   const total=ALL.filter(i=>G[i]&&G[i].u).length;
+  const cv=SC_CANVAS[scCanvas]||SC_CANVAS.free;
   $("scStat").textContent=list.length
-    ? (list.length+" 字"+(manualBreak?" · "+lines.length+" 行":"")+" · "+scPal.n)
+    ? (list.length+" 字"+(manualBreak?" · "+lines.length+(scDir==="v"?" 欄":" 行"):"")+" · "+cv.n+" · "+scPal.n)
     : "字庫沒有這些字";
   $("scHint").textContent = miss.length
     ? "字庫沒有："+miss.slice(0,14).join(" ")+(miss.length>14?" …":"")+
       (total<400?"　→ 按上面「載入資料包」解鎖全部字":"")
-    : "Ctrl / Cmd + Enter 換行 · 點任何一個字可單獨換色";
+    : (scSelKey?"已選取「"+scSelKey.split("|")[2]+"」 · 可調單字大小、旋轉或拖曳":"點一個字選取 · 開啟搬字後可直接拖曳");
   if(!list.length){
     svg.setAttribute("viewBox","0 0 12 3"); svg.setAttribute("width","520");
     const t=el("text",{x:6,y:1.9,"text-anchor":"middle","font-size":"1",
-      fill:scPal.ink,opacity:"0.5"});
+      fill:scMonoColor,opacity:"0.5"});
     t.textContent = total<400 ? "目前只有 "+total+" 字 · 先載入資料包" : "換幾個字試試";
     svg.appendChild(t); return;
   }
 
   let gap,positions=[],cols,rows;
-  if(manualBreak){
+  if(scDir==="v"){
+    gap=scLay==="grid"?0.14:0.06;
+    if(manualBreak){
+      cols=Math.max(1,lines.length); rows=Math.max(1,...lines.map(x=>x.length));
+      lines.forEach((line,col0)=>line.forEach((ch,row)=>positions.push({ch,row,col:cols-1-col0})));
+    }else if(scLay==="grid"){
+      rows=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4))));
+      cols=Math.ceil(list.length/rows);
+      positions=list.map((ch,i)=>({ch,row:i%rows,col:cols-1-Math.floor(i/rows)}));
+    }else{
+      cols=1; rows=list.length; positions=list.map((ch,i)=>({ch,row:i,col:0}));
+    }
+  }else if(manualBreak){
     gap=scLay==="grid"?0.14:0.06;
     rows=Math.max(1,lines.length);
     cols=Math.max(1,...lines.map(x=>x.length));
     lines.forEach((line,row)=>line.forEach((ch,col)=>positions.push({ch,row,col})));
   }else{
-    /* 排句砍掉了 —— 它只是「巨字＋字距 0.10」，現在有字距滑桿可以直接調 */
     if(scLay==="huge"){ cols=list.length; gap=0.06; }
     else { cols=Math.max(1,Math.min(list.length,Math.ceil(Math.sqrt(list.length*1.4)))); gap=0.14; }
     rows=Math.ceil(list.length/cols);
@@ -5750,35 +5851,40 @@ function scDraw(){
 
   const gapX=Math.max(-0.28,gap+scGxAdj), gapY=Math.max(-0.28,gap+scGyAdj);
   const stepX=1+gapX, stepY=1+gapY;
-  const step=stepX;                       /* 舊變數名沿用，避免動到下面的程式 */
-  /* 個別位移可能把字推到框外，把 viewBox 撐開才不會被裁掉 */
-  let oMinX=0,oMaxX=0,oMinY=0,oMaxY=0;
-  for(const k in scOff){ const o=scOff[k];
-    if(o[0]<oMinX)oMinX=o[0]; if(o[0]>oMaxX)oMaxX=o[0];
-    if(o[1]<oMinY)oMinY=o[1]; if(o[1]>oMaxY)oMaxY=o[1]; }
-  const W=cols*stepX-gapX, H=rows*stepY-gapY, PAD=0.08;
-  svg.setAttribute("viewBox",(-PAD+oMinX)+" "+(-PAD+oMinY)+" "+
-    (W+PAD*2+oMaxX-oMinX)+" "+(H+PAD*2+oMaxY-oMinY));
-  const px=Math.max(200,Math.min(2600,
-    (W+PAD*2)*Math.min(460,1500/Math.max(1,cols))*scScale));
-  svg.setAttribute("width",Math.round(px));
-  svg.setAttribute("height",Math.round(px*(H+PAD*2)/(W+PAD*2)));
+  const W=cols*stepX-gapX, H=rows*stepY-gapY;
+  const PAD=0.04+scMargin;
+  let vx=-PAD,vy=-PAD,vw=W+PAD*2,vh=H+PAD*2;
+  if(!cv.r){
+    let oMinX=0,oMaxX=0,oMinY=0,oMaxY=0;
+    for(const k in scOff){ const o=scOff[k];
+      if(o[0]<oMinX)oMinX=o[0]; if(o[0]>oMaxX)oMaxX=o[0];
+      if(o[1]<oMinY)oMinY=o[1]; if(o[1]>oMaxY)oMaxY=o[1]; }
+    vx+=oMinX; vy+=oMinY; vw+=oMaxX-oMinX; vh+=oMaxY-oMinY;
+  }else{
+    const r=cv.r, cur=vw/vh;
+    if(cur<r){ const nw=vh*r; vx-=(nw-vw)/2; vw=nw; }
+    else if(cur>r){ const nh=vw/r; vy-=(nh-vh)/2; vh=nh; }
+  }
+  svg.setAttribute("viewBox",[vx,vy,vw,vh].join(" "));
+  let previewW;
+  if(cv.r) previewW=Math.max(260,Math.min(1000,680*scScale));
+  else previewW=Math.max(200,Math.min(2600,vw*Math.min(460,1500/Math.max(1,cols))*scScale));
+  svg.setAttribute("width",Math.round(previewW));
+  svg.setAttribute("height",Math.round(previewW*vh/vw));
   const defs=el("defs",{}); svg.appendChild(defs);
 
   const rowLens=[];
   for(const q of positions) rowLens[q.row]=(rowLens[q.row]||0)+1;
   positions.forEach((it,i)=>{
     const ch=it.ch;
-    /* 對齊：每一行依自己的字數在最寬那行裡靠左／置中／靠右。
-       行長度要從實際排出來的 positions 算 —— 自動換行時 lines 只有一列，拿它會算錯。 */
     const rowLen=rowLens[it.row]||cols;
     const slack=(cols-rowLen)*stepX;
-    const alignDx = scAlignMode==="center" ? slack/2 : (scAlignMode==="right" ? slack : 0);
+    const alignDx = scDir==="v" ? 0 : (scAlignMode==="center" ? slack/2 : (scAlignMode==="right" ? slack : 0));
     const key0=it.row+"|"+it.col+"|"+ch;
-    const off=scOff[key0]||[0,0];
+    const off=scOff[key0]||[0,0], tr=scTr[key0]||{s:1,r:0};
     const cx=it.col*stepX+alignDx+off[0], cy=it.row*stepY+off[1];
-    /* svgD() 已經是 y 向下的 0..1000，只要縮放，不要再翻一次 */
-    const g=el("g",{transform:"translate("+cx+","+cy+") scale("+(1/EM)+")"});
+    const tf="translate("+cx+","+cy+") translate(.5,.5) rotate("+(tr.r||0)+") scale("+(tr.s||1)+") translate(-.5,-.5) scale("+(1/EM)+")";
+    const g=el("g",{transform:tf,"data-key":key0});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
     let cs=[]; try{ cs=glyphContours(ch,scAxesFor(key0)); }catch(e){}
     const n=Math.max(1,cs.length), key=key0, ov=scOvr[key], cust=scCustom[key];
@@ -5797,30 +5903,34 @@ function scDraw(){
       if(cust) fill=cust;
       else if(ov!==undefined && !ref) fill = scCol==="stroke" ? scPal.c[(ov+si)%scPal.c.length] : scPal.c[ov%scPal.c.length];
       else if(ref) fill=ref;
-      else if(scCol==="mono") fill=scPal.ink;
+      else if(scCol==="mono") fill=scMonoColor;
       else if(scCol==="stroke") fill=scRamp(n<2?0:si/(n-1));
       else fill=scPal.c[Math.floor(scHash(ch+"#"+si+"#"+i)*scPal.c.length)%scPal.c.length];
       g.appendChild(el("path",{d:svgD(c),fill,"fill-rule":"nonzero"}));
     });
+    if(scSelKey===key0) g.appendChild(el("rect",{x:8,y:8,width:984,height:984,class:"sc-selection"}));
+    g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:scMoveMode?"grab":"pointer","data-key":key0}));
     svg.appendChild(g);
-    svg.appendChild(el("rect",{x:cx-gapX/2,y:cy-gapY/2,width:stepX,height:stepY,
-      fill:"transparent",cursor:scMoveMode?"grab":"pointer","data-key":key}));
   });
+  scUpdateInspector();
 }
 $("scArt").addEventListener("click",e=>{
-  if(scMoveMode||scDragging) return;                 /* 搬字模式不換色 */
-  const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  if(scMoveMode||scDragging) return;
+  const hit=e.target.closest&&e.target.closest("[data-key]");
+  const k=hit&&hit.getAttribute("data-key"); if(!k) return;
+  scSelKey=k;
   if(scAxMode){ scAxKey=k; scAxLabel(); syncShowAxes(); scDraw(); return; }
-  if(scPickMode){ scCustom[k]=$("scPick").value; scDraw(); return; }
-  delete scCustom[k];                                /* 換回調色盤就清掉自訂色 */
-  scOvr[k]=((scOvr[k]===undefined?-1:scOvr[k])+1)%scPal.c.length; scDraw();
+  if(scPickMode){ scCustom[k]=$("scPick").value; scDraw(); saveLocal(); return; }
+  scUpdateInspector(); scDraw();
 });
 
 /* ---------- 拖曳個別字 ---------- */
 let scDragging=null;
 $("scArt").addEventListener("pointerdown",e=>{
   if(!scMoveMode) return;
-  const k=e.target.getAttribute&&e.target.getAttribute("data-key"); if(!k) return;
+  const hit=e.target.closest&&e.target.closest("[data-key]");
+  const k=hit&&hit.getAttribute("data-key"); if(!k) return;
+  scCommit(); scSelKey=k; scUpdateInspector();
   const svg=$("scArt"), box=svg.getBoundingClientRect();
   const vb=svg.getAttribute("viewBox").split(/\s+/).map(Number);
   const unitX=vb[2]/box.width, unitY=vb[3]/box.height;   /* 螢幕 px → 字面單位 */
@@ -5834,7 +5944,7 @@ $("scArt").addEventListener("pointermove",e=>{
   scOff[d.k]=[d.base[0]+(e.clientX-d.x)*d.unitX, d.base[1]+(e.clientY-d.y)*d.unitY];
   scDraw();
 });
-$("scArt").addEventListener("pointerup",()=>{ scDragging=null; });
+$("scArt").addEventListener("pointerup",()=>{ if(scDragging) saveLocal(); scDragging=null; });
 $("scArt").addEventListener("pointercancel",()=>{ scDragging=null; });
 
 /* ---------- 排版控制 ---------- */
@@ -5842,6 +5952,11 @@ $("scAlign").addEventListener("click",e=>{
   const b=e.target.closest("button[data-k]"); if(!b) return;
   document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x===b));
   scAlignMode=b.dataset.k; scDraw();
+});
+$("scDirection").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-k]"); if(!b) return;
+  document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x===b));
+  scDir=b.dataset.k; scSelKey=null; scDraw(); saveLocal();
 });
 function scNum(id,vid,set,fmt){
   $(id).addEventListener("input",e=>{
@@ -5851,6 +5966,17 @@ function scNum(id,vid,set,fmt){
 scNum("scSize","scSizeV",v=>scScale=v,v=>v.toFixed(2));
 scNum("scGx","scGxV",v=>scGxAdj=v,v=>v===0?"預設":(v>0?"+":"")+v.toFixed(2));
 scNum("scGy","scGyV",v=>scGyAdj=v,v=>v===0?"預設":(v>0?"+":"")+v.toFixed(2));
+scNum("scMargin","scMarginV",v=>scMargin=v,v=>Math.round(v*100)+"%");
+$("scCanvas").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-k]"); if(!b) return;
+  document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x===b));
+  scCanvas=b.dataset.k; scDraw(); saveLocal();
+});
+$("scBg").addEventListener("input",e=>{scBgColor=e.target.value;scTransparentBg=false;scSyncColors();scDraw();});
+$("scBg").addEventListener("change",saveLocal);
+$("scTransparent").addEventListener("change",e=>{scTransparentBg=e.target.checked;scSyncColors();scDraw();saveLocal();});
+$("scInk").addEventListener("input",e=>{scMonoColor=e.target.value;scSyncColors();scDraw();});
+$("scInk").addEventListener("change",saveLocal);
 $("scPickOn").addEventListener("click",()=>{
   scPickMode=!scPickMode;
   $("scPickOn").setAttribute("aria-pressed",scPickMode?"true":"false");
@@ -5868,7 +5994,7 @@ function scSetMove(on){
   scDraw();
 }
 $("scMoveOn").addEventListener("click",()=>scSetMove(!scMoveMode));
-$("scMoveClr").addEventListener("click",()=>{ scOff={}; scDraw(); });
+$("scMoveClr").addEventListener("click",()=>{ scOff={}; scTr={}; scSelKey=null; scUpdateInspector(); scDraw(); saveLocal(); });
 /* 種子只有「錯位 / 粗細不均 / 書寫感」三根軸會吃。三根都是 0 的話，
    重骰在數學上完全沒有作用 —— 按了畫面不會有任何變化，看起來就像壞掉。
    所以三根都關著時，第一次按先給一點量，讓它真的會動。 */
@@ -5919,35 +6045,151 @@ $("scTxt").addEventListener("keydown",e=>{
   box.selectionStart=box.selectionEnd=a+1;
   box.dispatchEvent(new Event("input",{bubbles:true}));
 });
-$("scTxt").addEventListener("input",()=>{scOvr={};scFitInput();scDraw();});
-$("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();});
+$("scTxt").addEventListener("input",()=>{scOvr={};scSelKey=null;scFitInput();scDraw();saveLocal();});
+$("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
 $("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
+$("scWt").addEventListener("change",()=>{scheduleSlow();saveLocal();});
 $("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
+$("scRd").addEventListener("change",()=>{scheduleSlow();saveLocal();});
 
 function scSVG(){
   const svg=$("scArt").cloneNode(true);
   svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
-  const vb=svg.getAttribute("viewBox").split(" ").map(Number);
-  svg.insertBefore(el("rect",{x:vb[0],y:vb[1],width:vb[2],height:vb[3],fill:scPal.bg}),svg.firstChild);
+  svg.querySelectorAll(".sc-selection").forEach(x=>x.remove());
+  svg.querySelectorAll('rect[fill="transparent"][data-key]').forEach(x=>x.remove());
+  const vb=svg.getAttribute("viewBox").split(/\s+/).map(Number);
+  const cv=SC_CANVAS[scCanvas]||SC_CANVAS.free;
+  if(cv.w&&cv.h){svg.setAttribute("width",cv.w);svg.setAttribute("height",cv.h);}
+  if(!scTransparentBg) svg.insertBefore(el("rect",{x:vb[0],y:vb[1],width:vb[2],height:vb[3],fill:scBgColor}),svg.firstChild);
   return '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
 }
 $("scSVG").addEventListener("click",()=>
-  download(new Blob([scSVG()],{type:"image/svg+xml"}),"specimen-"+scPal.k+".svg"));
+  download(new Blob([scSVG()],{type:"image/svg+xml"}),"fangcun-poster-"+scCanvas+".svg"));
 $("scPNG").addEventListener("click",()=>{
   const img=new Image();
   img.onload=()=>{
-    const vb=$("scArt").getAttribute("viewBox").split(" ").map(Number);
-    const scale=Math.min(3600/vb[2],2600/vb[3],900);
-    const cv=document.createElement("canvas");
-    cv.width=Math.round(vb[2]*scale); cv.height=Math.round(vb[3]*scale);
+    const vb=$("scArt").getAttribute("viewBox").split(/\s+/).map(Number);
+    const preset=SC_CANVAS[scCanvas]||SC_CANVAS.free;
+    let w,h;
+    if(preset.w&&preset.h){w=preset.w;h=preset.h;}
+    else{const scale=Math.min(3600/vb[2],2600/vb[3],900);w=Math.round(vb[2]*scale);h=Math.round(vb[3]*scale);}
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
     const cx=cv.getContext("2d");
-    cx.fillStyle=scPal.bg; cx.fillRect(0,0,cv.width,cv.height);
-    cx.drawImage(img,0,0,cv.width,cv.height);
-    cv.toBlob(b=>download(b,"specimen-"+scPal.k+".png"),"image/png");
+    if(!scTransparentBg){cx.fillStyle=scBgColor;cx.fillRect(0,0,w,h);}
+    cx.drawImage(img,0,0,w,h);
+    cv.toBlob(b=>download(b,"fangcun-poster-"+scCanvas+".png"),"image/png");
   };
   img.onerror=()=>alert("PNG 轉檔失敗，可以先存 SVG。");
   img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(scSVG());
 });
+
+
+/* ========================================================================== 
+   v71 展示工作室：選取、海報 preset、Undo/Redo
+   ========================================================================== */
+function scUpdateInspector(){
+  const key=scSelKey, tr=key?(scTr[key]||{s:1,r:0}):{s:1,r:0};
+  const has=!!key;
+  if($("scSelected")) $("scSelected").textContent=has?("「"+key.split("|")[2]+"」"):"尚未選字";
+  if($("scSelScale")){ $("scSelScale").disabled=!has; $("scSelScale").value=tr.s||1; }
+  if($("scSelRot")){ $("scSelRot").disabled=!has; $("scSelRot").value=tr.r||0; }
+  if($("scSelReset")) $("scSelReset").disabled=!has;
+  if($("scSelScaleV")) $("scSelScaleV").textContent=(tr.s||1).toFixed(2);
+  if($("scSelRotV")) $("scSelRotV").textContent=Math.round(tr.r||0)+"°";
+}
+$("scSelScale").addEventListener("input",e=>{if(!scSelKey)return;(scTr[scSelKey]||(scTr[scSelKey]={s:1,r:0})).s=+e.target.value;scUpdateInspector();scDraw();});
+$("scSelScale").addEventListener("change",saveLocal);
+$("scSelRot").addEventListener("input",e=>{if(!scSelKey)return;(scTr[scSelKey]||(scTr[scSelKey]={s:1,r:0})).r=+e.target.value;scUpdateInspector();scDraw();});
+$("scSelRot").addEventListener("change",saveLocal);
+$("scSelReset").addEventListener("click",()=>{if(!scSelKey)return;delete scTr[scSelKey];delete scOff[scSelKey];scUpdateInspector();scDraw();saveLocal();});
+
+$("scStudioTabs").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-tab]"); if(!b)return;
+  document.querySelectorAll("#scStudioTabs button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll("#scMoreBox .scstudio-panel").forEach(x=>x.classList.toggle("on",x.dataset.panel===b.dataset.tab));
+  if(b.dataset.tab==="type") syncShowAxes();
+});
+
+const SC_POSTERS={
+  minimal:{canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
+  sign:{canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
+  magazine:{canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
+  matrix:{canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
+  night:{canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
+  vertical:{canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
+};
+function scSetPaletteKey(k){
+  const p=SCPAL.find(x=>x.k===k); if(!p)return;
+  scPal=p;
+  document.querySelectorAll("#scPals .pal").forEach((x,i)=>x.classList.toggle("on",SCPAL[i]===p));
+}
+function scApplyPoster(k){
+  const p=SC_POSTERS[k]; if(!p)return;
+  scCanvas=p.canvas; scLay=p.lay; scDir=p.dir; scAlignMode=p.align; scMargin=p.margin;
+  scScale=p.scale; scGxAdj=p.gx; scGyAdj=p.gy; scCol=p.col; scBlend=p.blend;
+  scBgColor=p.bg; scMonoColor=p.ink; scTransparentBg=false; scSetPaletteKey(p.pal);
+  F.weight=p.weight; F.round=p.round; presetKey=null;
+  scOff={}; scTr={}; scCustom={}; scOvr={}; scAxOvr={}; scSelKey=null;
+  document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));
+  document.querySelectorAll("#scLayout button").forEach(x=>x.classList.toggle("on",x.dataset.k===scLay));
+  document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x.dataset.k===scDir));
+  document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
+  document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
+  document.querySelectorAll("#scBlend button").forEach(x=>x.classList.toggle("on",x.dataset.k===scBlend));
+  $("scMargin").value=scMargin; $("scMarginV").textContent=Math.round(scMargin*100)+"%";
+  $("scSize").value=scScale; $("scSizeV").textContent=scScale.toFixed(2);
+  $("scGx").value=scGxAdj; $("scGxV").textContent=scGxAdj===0?"預設":(scGxAdj>0?"+":"")+scGxAdj.toFixed(2);
+  $("scGy").value=scGyAdj; $("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2);
+  $("scWt").value=F.weight; $("scRd").value=F.round; scSyncColors(); scUpdateInspector(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+}
+$("scPoster").addEventListener("click",e=>{const b=e.target.closest("button[data-poster]");if(!b)return;scApplyPoster(b.dataset.poster);});
+
+let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
+function scState(){
+  const axes={};for(const k of AXKEYS)axes[k]=F[k];
+  return {txt:$("scTxt").value,axes,canvas:scCanvas,margin:scMargin,bg:scBgColor,transparent:scTransparentBg,mono:scMonoColor,
+    dir:scDir,lay:scLay,pal:scPal.k,col:scCol,blend:scBlend,align:scAlignMode,scale:scScale,gx:scGxAdj,gy:scGyAdj,
+    ovr:{...scOvr},custom:{...scCustom},off:JSON.parse(JSON.stringify(scOff)),tr:JSON.parse(JSON.stringify(scTr)),axovr:JSON.parse(JSON.stringify(scAxOvr))};
+}
+function scCommit(){
+  if(scHistApplying)return;
+  const s=JSON.stringify(scState()); if(scHistory[scHistory.length-1]===s)return;
+  scHistory.push(s); if(scHistory.length>50)scHistory.shift(); scFuture=[]; scHistButtons();
+}
+function scApplyState(s){
+  scHistApplying=true;
+  try{
+    $("scTxt").value=s.txt||""; if(s.axes)for(const k of AXKEYS)if(s.axes[k]!==undefined)F[k]=s.axes[k];
+    scCanvas=s.canvas||"free"; scMargin=typeof s.margin==="number"?s.margin:.08; scBgColor=s.bg||scPal.bg;
+    scTransparentBg=!!s.transparent; scMonoColor=s.mono||scPal.ink; scDir=s.dir||"h"; scLay=s.lay||"huge";
+    scSetPaletteKey(s.pal||"yan"); scCol=s.col||"stroke"; scBlend=s.blend||"normal"; scAlignMode=s.align||"center";
+    scScale=typeof s.scale==="number"?s.scale:1; scGxAdj=typeof s.gx==="number"?s.gx:0; scGyAdj=typeof s.gy==="number"?s.gy:0;
+    scOvr=s.ovr||{};scCustom=s.custom||{};scOff=s.off||{};scTr=s.tr||{};scAxOvr=s.axovr||{};scSelKey=null;
+    document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));
+    document.querySelectorAll("#scLayout button").forEach(x=>x.classList.toggle("on",x.dataset.k===scLay));
+    document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x.dataset.k===scDir));
+    document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
+    document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
+    document.querySelectorAll("#scBlend button").forEach(x=>x.classList.toggle("on",x.dataset.k===scBlend));
+    $("scMargin").value=scMargin;$("scMarginV").textContent=Math.round(scMargin*100)+"%";
+    $("scSize").value=scScale;$("scSizeV").textContent=scScale.toFixed(2);$("scGx").value=scGxAdj;$("scGy").value=scGyAdj;
+    $("scGxV").textContent=scGxAdj===0?"預設":(scGxAdj>0?"+":"")+scGxAdj.toFixed(2);$("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2);
+    $("scWt").value=F.weight;$("scRd").value=F.round;scSyncColors();scUpdateInspector();syncShowAxes();scDraw();saveLocal();
+  }finally{scHistApplying=false;}
+}
+function scHistButtons(){if($("scUndo"))$("scUndo").disabled=!scHistory.length;if($("scRedo"))$("scRedo").disabled=!scFuture.length;}
+$("scUndo").addEventListener("click",()=>{if(!scHistory.length)return;const cur=JSON.stringify(scState());const prev=scHistory.pop();scFuture.push(cur);scApplyState(JSON.parse(prev));scHistButtons();});
+$("scRedo").addEventListener("click",()=>{if(!scFuture.length)return;const cur=JSON.stringify(scState());const next=scFuture.pop();scHistory.push(cur);scApplyState(JSON.parse(next));scHistButtons();});
+scHistButtons();
+
+/* slider / color / preset 在改值前記一個狀態；純 UI 與匯出按鈕排除 */
+$("showcase").addEventListener("pointerdown",e=>{
+  const t=e.target.closest&&e.target.closest("button,input[type=range],input[type=color],input[type=checkbox],.pal"); if(!t)return;
+  if(t.closest("#scStudioTabs")||["scUndo","scRedo","scMore","scSVG","scPNG"].includes(t.id))return;
+  scCommit();
+},true);
+$("scTxt").addEventListener("beforeinput",()=>{const n=Date.now();if(n-scTextHistAt>700){scCommit();scTextHistAt=n;}},true);
+$("showcase").addEventListener("change",()=>{if(!scHistApplying)saveLocal();});
 
 
 /* ==========================================================================
