@@ -914,6 +914,16 @@
             <input type="range" id="famNS" min="6" max="30" step="1" value="30" style="width:110px">
             <b id="famNSV" style="font-family:var(--mono);font-size:10px;font-weight:400">30</b></div>
         </div>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;
+                      padding-top:10px;border-top:1px solid var(--line);cursor:pointer">
+          <input type="checkbox" id="famVar" style="margin-top:3px">
+          <span style="font-size:12.5px;line-height:1.7">
+            <b style="font-weight:400">做成可變字型（一個檔案）</b><br>
+            <span class="tip" style="margin:0">
+              裝好之後在 Illustrator、Figma 裡直接拉字重滑桿，不用切換字型。<br>
+              上面勾的字重會變成軸的端點與中繼點。節點會多一點，換掉多個檔案划算。</span>
+          </span>
+        </label>
         <p class="tip" id="famStat">—</p>
       </div>
       <footer>
@@ -1603,7 +1613,10 @@ function sampleSkeleton(pts,bend,fillet,N,cv,kj){
                     : dist(s.a,s.b));
   const tot=L.reduce((a,b)=>a+b,0)||1, out=[];
   segs.forEach((s,i)=>{
-    const n=Math.max(2,Math.round(N*L[i]/tot));
+    /* VF 模式每段固定點數：依長度比例分配的話鉤長會隨字重變，
+       比例一變四捨五入就跳格，節點數差一個 */
+    const n=VF_STABLE ? Math.max(2,Math.round(N/segs.length))
+                      : Math.max(2,Math.round(N*L[i]/tot));
     for(let k=(i===0?0:1);k<=n;k++){
       const t=k/n;
       if(s.c3){const u=1-t;
@@ -1805,7 +1818,12 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
   if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
     out.push(["L",to[0],to[1]]);return;}
   const k=typeof kind==="number"?kind:0;
-  if(k<0.02){out.push(["L",to[0],to[1]]);return;}
+  if(k<0.02){
+    /* VF 模式一律輸出曲線（控制點放中點，幾何相同）；
+       否則 L 與 Q 的節點數不同，軸值一變就對不起來 */
+    if(VF_STABLE){ out.push(["Q",(tip[0]+to[0])/2,(tip[1]+to[1])/2,to[0],to[1]]); return; }
+    out.push(["L",to[0],to[1]]);return;
+  }
   out.push(["Q",tip[0]+T[0]*w*1.28*k*dir,tip[1]+T[1]*w*1.28*k*dir,to[0],to[1]]);
 }
 function contourArea(c){
@@ -1838,7 +1856,12 @@ function circleContour(cx,cy,r){
 /* Ramer–Douglas–Peucker：把偏移出來的密集折線化簡。
    直線會塌成兩點、曲線只留轉折，實測節點只剩 13%——
    這是「五千字以上編碼就爆記憶體」的治本解法，而且檔案更小、渲染更順。 */
+/* 可變字型模式：關掉所有會讓節點數隨軸值改變的步驟。
+   可變字型要求同一個字在所有軸值下節點結構完全一致，而
+   RDP 化簡會依幾何刪點、取樣數會依段長比例分配（鉤長隨字重變）。 */
+let VF_STABLE=false;
 function rdp(pts,tol){
+  if(VF_STABLE) return pts.slice();
   const n=pts.length; if(n<3||tol<=0) return pts;
   const keep=new Uint8Array(n); keep[0]=keep[n-1]=1;
   const stack=[[0,n-1]];
@@ -2061,6 +2084,355 @@ function svgD(cmds){
   }
   return d+" Z";
 }
+/* ==== 可變字型寫表器（opentype.js 不支援，glyf/loca/gvar/fvar 自己寫）==== */
+/* ==========================================================================
+   純 JS 的 TrueType 可變字型寫表器
+   opentype.js 不支援可變字型，所以 glyf / loca / gvar / fvar 要自己寫。
+   方寸的輪廓本來就是二次曲線（Q），正好是 TrueType 原生格式，不用轉換。
+   ========================================================================== */
+
+function vf_W(){ /* 可成長的二進位寫入器 */
+  let b=new Uint8Array(1<<16), n=0;
+  const need=k=>{ if(n+k<=b.length) return;
+    let m=b.length; while(m<n+k) m*=2;
+    const t=new Uint8Array(m); t.set(b.subarray(0,n)); b=t; };
+  return {
+    u8:v=>{need(1); b[n++]=v&255;},
+    u16:v=>{need(2); b[n++]=(v>>8)&255; b[n++]=v&255;},
+    i16:v=>{need(2); v=v<0?v+65536:v; b[n++]=(v>>8)&255; b[n++]=v&255;},
+    u32:v=>{need(4); b[n++]=(v>>>24)&255; b[n++]=(v>>>16)&255; b[n++]=(v>>>8)&255; b[n++]=v&255;},
+    tag:s=>{need(4); for(let i=0;i<4;i++) b[n++]=s.charCodeAt(i);},
+    f2dot14:v=>{ const q=Math.round(v*16384); const u=q<0?q+65536:q; need(2); b[n++]=(u>>8)&255; b[n++]=u&255; },
+    bytes:a=>{need(a.length); b.set(a,n); n+=a.length;},
+    pad4:()=>{ while(n&3){ need(1); b[n++]=0; } },
+    get len(){ return n; },
+    out:()=>b.slice(0,n)
+  };
+}
+
+/* 把 [["M",x,y],["L",x,y],["Q",cx,cy,x,y]…] 轉成 TrueType 的點序列
+   TrueType 用二次 B 曲線：控制點是 off-curve，端點是 on-curve。 */
+function vf_contourPoints(cmds){
+  const pts=[];
+  for(const c of cmds){
+    if(c[0]==="M"||c[0]==="L") pts.push({x:Math.round(c[1]),y:Math.round(c[2]),on:1});
+    else { pts.push({x:Math.round(c[1]),y:Math.round(c[2]),on:0});
+           pts.push({x:Math.round(c[3]),y:Math.round(c[4]),on:1}); }
+  }
+  return pts;
+}
+
+/* 一個字的點集（含輪廓結束索引），所有主體必須完全一致 */
+function vf_glyphPoints(contours){
+  const pts=[], ends=[];
+  for(const c of contours){
+    const p=vf_contourPoints(c);
+    if(p.length<2) continue;
+    for(const q of p) pts.push(q);
+    ends.push(pts.length-1);
+  }
+  return {pts,ends};
+}
+
+function vf_glyfEntry(gp, advance){
+  if(!gp.pts.length) return new Uint8Array(0);           /* 空字 */
+  const w=vf_W();
+  let xMin=1e9,yMin=1e9,xMax=-1e9,yMax=-1e9;
+  for(const p of gp.pts){ if(p.x<xMin)xMin=p.x; if(p.x>xMax)xMax=p.x;
+                          if(p.y<yMin)yMin=p.y; if(p.y>yMax)yMax=p.y; }
+  w.i16(gp.ends.length); w.i16(xMin); w.i16(yMin); w.i16(xMax); w.i16(yMax);
+  for(const e of gp.ends) w.u16(e);
+  w.u16(0);                                              /* 沒有 hinting 指令 */
+  /* flags：不做 repeat 壓縮，簡單且正確 */
+  let px=0,py=0; const xs=[],ys=[],flags=[];
+  for(const p of gp.pts){
+    const dx=p.x-px, dy=p.y-py; px=p.x; py=p.y;
+    let f=p.on?1:0;
+    if(dx===0) f|=0x10;                                  /* X_SAME（此處代表 dx=0） */
+    else if(dx>=-255&&dx<=255){ f|=0x02; if(dx>0) f|=0x10; xs.push({b:1,v:Math.abs(dx)}); }
+    else xs.push({b:2,v:dx});
+    if(dy===0) f|=0x20;
+    else if(dy>=-255&&dy<=255){ f|=0x04; if(dy>0) f|=0x20; ys.push({b:1,v:Math.abs(dy)}); }
+    else ys.push({b:2,v:dy});
+    flags.push(f);
+  }
+  for(const f of flags) w.u8(f);
+  for(const e of xs) e.b===1?w.u8(e.v):w.i16(e.v);
+  for(const e of ys) e.b===1?w.u8(e.v):w.i16(e.v);
+  w.pad4();
+  return w.out();
+}
+
+/* gvar 的 delta 打包：控制位元組 ＋ 一串值 */
+function vf_packDeltas(vals){
+  const w=vf_W(); let i=0;
+  while(i<vals.length){
+    /* 連續的 0 */
+    let z=0; while(i+z<vals.length && vals[i+z]===0 && z<64) z++;
+    if(z>=2){ w.u8(0x80|(z-1)); i+=z; continue; }
+    /* 是否需要 16 位元 */
+    let n=0, words=false;
+    while(i+n<vals.length && n<64){
+      const v=vals[i+n];
+      if(v===0 && i+n+1<vals.length && vals[i+n+1]===0) break;
+      if(v<-128||v>127) words=true;
+      n++;
+    }
+    if(!n) n=1;
+    /* 若混了大小值，整段用 word 比較簡單 */
+    w.u8((words?0x40:0)|(n-1));
+    for(let k=0;k<n;k++) words? w.i16(vals[i+k]) : w.u8(vals[i+k]<0?vals[i+k]+256:vals[i+k]);
+    i+=n;
+  }
+  return w.out();
+}
+
+/* 單一字的 gvar 資料：對每個非預設主體，存全部點的 delta */
+function vf_gvarGlyph(base, others, axisCount){
+  const tuples=[], datas=[];
+  for(const o of others){
+    const n=base.pts.length;
+    const dx=[], dy=[];
+    for(let i=0;i<n;i++){ dx.push(o.gp.pts[i].x-base.pts[i].x); dy.push(o.gp.pts[i].y-base.pts[i].y); }
+    for(let i=0;i<4;i++){ dx.push(0); dy.push(0); }     /* 四個 phantom point，前進寬度不變所以全 0 */
+    if(dx.every(v=>v===0)&&dy.every(v=>v===0)) continue;
+    const pts=new Uint8Array([0]);                       /* 0 = 全部的點 */
+    /* ★ x 與 y 必須「分開」打包。
+       解碼端是分兩次呼叫、各解 n 個值；若把 dx.concat(dy) 當一整串打包，
+       某個 run 會跨過 x/y 的邊界，解 x 時就會多解出來，數量對不上。 */
+    const bx=vf_packDeltas(dx), by=vf_packDeltas(dy);
+    const d=new Uint8Array(pts.length+bx.length+by.length);
+    d.set(pts,0); d.set(bx,pts.length); d.set(by,pts.length+bx.length);
+    tuples.push({peak:o.peak, size:d.length});
+    datas.push(d);
+  }
+  if(!tuples.length) return new Uint8Array(0);
+  const head=vf_W();
+  head.u16(tuples.length);                               /* tupleVariationCount */
+  const headerSize=4 + tuples.length*(4+axisCount*2);
+  head.u16(headerSize);                                  /* dataOffset */
+  for(const t of tuples){
+    head.u16(t.size);
+    head.u16(0x8000|0x2000);                             /* EMBEDDED_PEAK ＋ PRIVATE_POINTS */
+    for(const p of t.peak) head.f2dot14(p);
+  }
+  const total=head.len + datas.reduce((a,b)=>a+b.length,0);
+  const out=new Uint8Array(total + (total%2));
+  out.set(head.out(),0);
+  let off=head.len;
+  for(const d of datas){ out.set(d,off); off+=d.length; }
+  return out;
+}
+
+function vf_tableRecord(w, tag, data){ return {tag, data}; }
+
+function vf_checksum(d){
+  let s=0;
+  for(let i=0;i<d.length;i+=4){
+    const v=((d[i]||0)<<24)|((d[i+1]||0)<<16)|((d[i+2]||0)<<8)|(d[i+3]||0);
+    s=(s+(v>>>0))>>>0;
+  }
+  return s>>>0;
+}
+
+/* ==========================================================================
+   主函式
+   masters: [{name, coords:[軸值…（正規化 -1..1）], glyphs:{ch:contours}}]
+            第一個必須是預設實例（coords 全 0）
+   axes:    [{tag,name,min,def,max}]
+   chars:   [{ch, unicode}]
+   ========================================================================== */
+function vf_buildVariableFont(opt){
+  const {masters, axes, chars, family, psName, EM=1000, ASC=880, DESC=-120} = opt;
+  const nGlyphs=chars.length+1;
+  const axisCount=axes.length;
+
+  /* --- glyf / loca --- */
+  const base=masters[0];
+  const gps=masters.map(()=>[]);
+  for(let m=0;m<masters.length;m++){
+    gps[m].push({pts:[],ends:[]});                        /* .notdef 空的 */
+    for(const c of chars) gps[m].push(vf_glyphPoints(masters[m].glyphs[c.ch]));
+  }
+  /* 一致性檢查：不一致就直接失敗，不要產出壞字型 */
+  for(let g=0;g<nGlyphs;g++){
+    const n=gps[0][g].pts.length;
+    for(let m=1;m<masters.length;m++)
+      if(gps[m][g].pts.length!==n)
+        throw new Error("節點數不一致："+(chars[g-1]?chars[g-1].ch:".notdef")+
+          " 主體0="+n+" 主體"+m+"="+gps[m][g].pts.length);
+  }
+  const glyf=vf_W(), loca=[];
+  for(let g=0;g<nGlyphs;g++){ loca.push(glyf.len); glyf.bytes(vf_glyfEntry(gps[0][g],EM)); }
+  loca.push(glyf.len);
+  const locaW=vf_W(); for(const o of loca) locaW.u32(o);     /* long format */
+
+  /* --- gvar --- */
+  const others=masters.slice(1);
+  const gvarData=[], gvarOff=[];
+  const gv=vf_W(); let acc=0;
+  for(let g=0;g<nGlyphs;g++){
+    gvarOff.push(acc);
+    const d=vf_gvarGlyph(gps[0][g], others.map((o,i)=>({peak:o.coords, gp:gps[i+1][g]})), axisCount);
+    gvarData.push(d); acc+=d.length;
+  }
+  gvarOff.push(acc);
+  const gvarW=vf_W();
+  gvarW.u16(1); gvarW.u16(0);                             /* version 1.0 */
+  gvarW.u16(axisCount);
+  gvarW.u16(0); gvarW.u32(0);                             /* 沒有共用 tuple */
+  gvarW.u16(nGlyphs);
+  gvarW.u16(1);                                           /* flags: long offsets */
+  const gvarHeaderLen=20+(nGlyphs+1)*4;
+  gvarW.u32(gvarHeaderLen);                               /* glyphVariationDataArrayOffset */
+  for(const o of gvarOff) gvarW.u32(o);
+  for(const d of gvarData) gvarW.bytes(d);
+
+  /* --- fvar --- */
+  const fv=vf_W();
+  fv.u16(1); fv.u16(0);
+  fv.u16(16); fv.u16(2);
+  fv.u16(axisCount); fv.u16(20);
+  fv.u16(0); fv.u16(2);
+  for(const a of axes){
+    fv.tag(a.tag);
+    fv.u32(Math.round(a.min*65536)); fv.u32(Math.round(a.def*65536)); fv.u32(Math.round(a.max*65536));
+    fv.u16(0); fv.u16(a.nameID);
+  }
+
+  /* --- cmap：format 4 合併範圍 ＋ format 12 --- */
+  const sorted=chars.map((c,i)=>({u:c.unicode,g:i+1})).sort((a,b)=>a.u-b.u);
+  const groups=[];
+  for(const c of sorted){
+    const L=groups[groups.length-1];
+    if(L && c.u===L.end+1 && c.g===L.gEnd+1){ L.end=c.u; L.gEnd=c.g; }
+    else groups.push({start:c.u,end:c.u,gStart:c.g,gEnd:c.g});
+  }
+  const bmp=groups.filter(g=>g.start<=0xFFFF).map(g=>({...g,end:Math.min(g.end,0xFFFF)}));
+  const f4=vf_W();
+  const segs=bmp.concat([{start:0xFFFF,end:0xFFFF,gStart:0,gEnd:0}]);
+  const segX2=segs.length*2;
+  let sr=2; while(sr*2<=segX2) sr*=2;
+  f4.u16(4); f4.u16(16+segs.length*8); f4.u16(0);
+  f4.u16(segX2); f4.u16(sr); f4.u16(Math.log2(sr/2)); f4.u16(segX2-sr);
+  for(const s of segs) f4.u16(s.end);
+  f4.u16(0);
+  for(const s of segs) f4.u16(s.start);
+  for(const s of segs) f4.i16(s.gStart? (s.gStart-s.start)&0xFFFF : 0);
+  for(const s of segs) f4.u16(0);
+  const f12=vf_W();
+  f12.u16(12); f12.u16(0); f12.u32(16+groups.length*12); f12.u32(0); f12.u32(groups.length);
+  for(const g of groups){ f12.u32(g.start); f12.u32(g.end); f12.u32(g.gStart); }
+  const cm=vf_W();
+  cm.u16(0); cm.u16(2);
+  const encHdr=4+2*8;
+  cm.u16(3); cm.u16(1); cm.u32(encHdr);
+  cm.u16(3); cm.u16(10); cm.u32(encHdr+f4.len);
+  cm.bytes(f4.out()); cm.bytes(f12.out());
+
+  /* --- name --- */
+  const names=[[1,family],[2,"Regular"],[3,psName+";FANGCUN"],[4,family],[6,psName],
+               [16,family],[17,"Regular"]];
+  for(const a of axes) names.push([a.nameID, a.name]);
+  const nameW=vf_W();
+  nameW.u16(0); nameW.u16(names.length*2); nameW.u16(6+names.length*2*12);
+  const strs=[]; let so=0;
+  const recs=[];
+  for(const [id,txt] of names){
+    const utf16=[]; for(const ch of txt){ const c=ch.codePointAt(0); utf16.push((c>>8)&255,c&255); }
+    const mac=[]; for(const ch of txt) mac.push(ch.codePointAt(0)&255);
+    recs.push({p:1,e:0,l:0,id,off:so,len:mac.length}); strs.push(mac); so+=mac.length;
+    recs.push({p:3,e:1,l:0x409,id,off:so,len:utf16.length}); strs.push(utf16); so+=utf16.length;
+  }
+  for(const r of recs){ nameW.u16(r.p); nameW.u16(r.e); nameW.u16(r.l); nameW.u16(r.id);
+                        nameW.u16(r.len); nameW.u16(r.off); }
+  for(const s of strs) nameW.bytes(new Uint8Array(s));
+
+  /* --- 其餘固定表 --- */
+  let xMin=1e9,yMin=1e9,xMax=-1e9,yMax=-1e9;
+  for(const gp of gps[0]) for(const p of gp.pts){
+    if(p.x<xMin)xMin=p.x; if(p.x>xMax)xMax=p.x; if(p.y<yMin)yMin=p.y; if(p.y>yMax)yMax=p.y; }
+  if(xMin>xMax){ xMin=yMin=0; xMax=yMax=EM; }
+  const head=vf_W();
+  head.u16(1); head.u16(0); head.u32(0x10000); head.u32(0); head.u32(0x5F0F3CF5);
+  head.u16(0); head.u16(EM);
+  head.u32(0); head.u32(0); head.u32(0); head.u32(0);
+  head.i16(xMin); head.i16(yMin); head.i16(xMax); head.i16(yMax);
+  head.u16(0); head.u16(8); head.i16(2); head.i16(1); head.i16(0);
+  const hhea=vf_W();
+  hhea.u32(0x10000); hhea.i16(ASC); hhea.i16(DESC); hhea.i16(0);
+  hhea.u16(EM); hhea.i16(0); hhea.i16(0); hhea.i16(EM);
+  hhea.i16(1); hhea.i16(0); hhea.i16(0);
+  hhea.i16(0); hhea.i16(0); hhea.i16(0); hhea.i16(0);
+  hhea.i16(0); hhea.u16(nGlyphs);
+  const hmtx=vf_W();
+  for(let i=0;i<nGlyphs;i++){ hmtx.u16(EM); hmtx.i16(0); }
+  const maxp=vf_W();
+  let maxPts=0,maxCon=0;
+  for(const gp of gps[0]){ if(gp.pts.length>maxPts)maxPts=gp.pts.length;
+                           if(gp.ends.length>maxCon)maxCon=gp.ends.length; }
+  maxp.u32(0x10000); maxp.u16(nGlyphs);
+  maxp.u16(maxPts); maxp.u16(maxCon); maxp.u16(0); maxp.u16(0);
+  maxp.u16(2); maxp.u16(0); maxp.u16(0); maxp.u16(0);
+  maxp.u16(0); maxp.u16(0); maxp.u16(0); maxp.u16(0); maxp.u16(0);
+  /* OS/2 version 4：78 + 18 = 96 bytes，欄位順序照規格逐項寫，少一個就解不開 */
+  const os2=vf_W();
+  os2.u16(4);                                  /* version */
+  os2.i16(Math.round(EM*0.9));                 /* xAvgCharWidth */
+  os2.u16(400); os2.u16(5); os2.u16(0);        /* usWeightClass usWidthClass fsType */
+  os2.i16(650); os2.i16(650); os2.i16(0); os2.i16(75);        /* subscript */
+  os2.i16(650); os2.i16(650); os2.i16(0); os2.i16(350);       /* superscript */
+  os2.i16(50); os2.i16(Math.round(EM*0.26));   /* strikeout size / position */
+  os2.i16(0);                                  /* sFamilyClass */
+  os2.bytes(new Uint8Array(10));               /* panose */
+  os2.u32((1<<27)|(1<<16));                    /* ulUnicodeRange1 */
+  os2.u32(1<<3);                               /* ulUnicodeRange2 */
+  os2.u32(0); os2.u32(0);                      /* ulUnicodeRange3 4 */
+  os2.tag("FANG");                             /* achVendID */
+  os2.u16(0x40);                               /* fsSelection = REGULAR */
+  os2.u16(0x20); os2.u16(0xFFFF);              /* usFirstCharIndex usLastCharIndex */
+  os2.i16(ASC); os2.i16(DESC); os2.i16(0);     /* sTypo* */
+  os2.u16(ASC); os2.u16(-DESC);                /* usWin* */
+  os2.u32(1<<20); os2.u32(0);                  /* ulCodePageRange1 2（正體中文） */
+  os2.i16(Math.round(EM*0.52));                /* sxHeight */
+  os2.i16(Math.round(EM*0.72));                /* sCapHeight */
+  os2.u16(0); os2.u16(0x20); os2.u16(2);       /* usDefaultChar usBreakChar usMaxContext */
+  const post=vf_W();
+  post.u32(0x30000); post.u32(0); post.i16(0); post.i16(0);
+  post.u32(0); post.u32(0); post.u32(0); post.u32(0); post.u32(0);
+
+  /* --- 組表 --- */
+  const tabs=[
+    ["OS/2",os2.out()],["cmap",cm.out()],["fvar",fv.out()],["glyf",glyf.out()],
+    ["gvar",gvarW.out()],["head",head.out()],["hhea",hhea.out()],["hmtx",hmtx.out()],
+    ["loca",locaW.out()],["maxp",maxp.out()],["name",nameW.out()],["post",post.out()]
+  ].sort((a,b)=>a[0]<b[0]?-1:1);
+  const num=tabs.length;
+  let sr2=16; while(sr2*2<=num*16) sr2*=2;
+  const dir=vf_W();
+  dir.u32(0x00010000); dir.u16(num); dir.u16(sr2);
+  dir.u16(Math.log2(sr2/16)); dir.u16(num*16-sr2);
+  let off=12+num*16;
+  const offs=[];
+  for(const [tag,data] of tabs){
+    offs.push(off);
+    dir.tag(tag); dir.u32(vf_checksum(data)); dir.u32(off); dir.u32(data.length);
+    off+=data.length+((4-(data.length&3))&3);
+  }
+  const total=off;
+  const buf=new Uint8Array(total);
+  buf.set(dir.out(),0);
+  for(let i=0;i<tabs.length;i++) buf.set(tabs[i][1], offs[i]);
+  /* head.checkSumAdjustment */
+  const headIdx=tabs.findIndex(t=>t[0]==="head");
+  const adj=(0xB1B0AFBA - vf_checksum(buf))>>>0;
+  const ho=offs[headIdx]+8;
+  buf[ho]=(adj>>>24)&255; buf[ho+1]=(adj>>>16)&255; buf[ho+2]=(adj>>>8)&255; buf[ho+3]=adj&255;
+  return buf;
+}
+
+
+
 function toOtPath(list){
   const path=new opentype.Path();
   for(const cmds of list){
@@ -4681,6 +5053,52 @@ $("famNS")&&$("famNS").addEventListener("input",e=>{ $("famNSV").textContent=e.t
 $("famClose").addEventListener("click",()=>$("fammodal").classList.remove("on"));
 $("fammodal").addEventListener("click",e=>{ if(e.target===$("fammodal")) $("fammodal").classList.remove("on"); });
 
+
+/* 依字重把主體排序、換算成 wght 值與正規化座標，再交給寫表器 */
+async function famExportVar(picked, ids, fam, lat){
+  const N=8;                       /* 實測：節點 2.07 倍、形狀 IoU 0.9867，是甜蜜點 */
+  const sorted=picked.slice().sort((a,b)=>a.w-b.w);
+  const minW=sorted[0].w, maxW=sorted[sorted.length-1].w;
+  let defIdx=sorted.findIndex(s=>s.w===400);
+  if(defIdx<0) defIdx=Math.floor(sorted.length/2);
+  const defW=sorted[defIdx].w;
+  const norm=(w)=> w===defW ? 0 : (w<defW ? -(defW-w)/(defW-minW||1) : (w-defW)/(maxW-defW||1));
+
+  VF_STABLE=true;
+  try{
+    const masters=[];
+    const order=[defIdx].concat(sorted.map((_,i)=>i).filter(i=>i!==defIdx));
+    for(let k=0;k<order.length;k++){
+      const st=sorted[order[k]];
+      busy(true,"可變字型","計算 "+st.tw+"（"+(k+1)+"/"+order.length+"）…",
+           Math.round(k/order.length*80));
+      await yield_();
+      const f={...F,weight:Math.max(8,Math.round(F.weight*st.mul))};
+      const glyphs={};
+      for(let i=0;i<ids.length;i++){
+        glyphs[ids[i]]=glyphContours(ids[i],f,null,N);
+        if((i&1023)===0) await yield_();
+      }
+      masters.push({name:st.k, coords:[norm(st.w)], glyphs});
+    }
+    busy(true,"可變字型","組合 gvar…",88);
+    await yield_();
+    const buf=vf_buildVariableFont({
+      masters,
+      axes:[{tag:"wght",name:"Weight",min:minW,def:defW,max:maxW,nameID:256}],
+      chars:ids.map(id=>({ch:id,unicode:G[id].u})),
+      family:fam, psName:(lat||"Fangcun")+"-VF",
+      EM:EM, ASC:ASC, DESC:DESC
+    });
+    busy(false);
+    download(new Blob([buf],{type:"font/ttf"}), lat+"-Variable.ttf");
+    setTimeout(()=>alert("可變字型完成\n\n"+ids.length.toLocaleString()+" 字 · "+
+      sorted.length+" 個主體 · wght "+minW+"–"+maxW+"\n\n"+
+      "裝好之後在 Illustrator、Figma、Word 裡選這個字型，"+
+      "就能直接拉字重滑桿，不用切換不同的檔案。"),400);
+  } finally { VF_STABLE=false; }
+}
+
 async function famExport(){
   const picked=FAMILY_STYLES.filter(s=>s.on);
   if(!picked.length||!HAS_OT) return;
@@ -4691,6 +5109,15 @@ async function famExport(){
   const fam=(FAMILY||"").trim()||"方寸黑體";
   const lat=asciiSafe(LATIN)||"FangcunHei";
   $("fammodal").classList.remove("on");
+
+  /* ---------- 可變字型：一個檔案，裝好之後直接拉字重滑桿 ---------- */
+  if($("famVar") && $("famVar").checked){
+    if(picked.length<2){ alert("可變字型至少要勾兩個字重，才有東西可以插值。"); return; }
+    try{ await famExportVar(picked, ids, fam, lat); }
+    catch(e){ busy(false); alert("可變字型建置失敗\n\n"+(e&&e.message||e)); }
+    return;
+  }
+
   const done=[];
   for(let i=0;i<picked.length;i++){
     const st=picked[i];
