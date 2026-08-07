@@ -1102,7 +1102,13 @@
      改成 flex 換行 —— 放得下就一行，放不下才折，不會硬切成固定格。 */
   .scfoot>.scfoot-type{order:3;width:100%;margin:0;padding:2px 0 0;border-bottom:0;
     display:flex;flex-wrap:wrap;align-items:center;gap:3px 18px}
-  .scfoot>.scfoot-type .sclay-g{padding:0;flex:0 0 auto;width:auto}
+  /* ★ 原本是 flex:0 0 auto —— 第二個 0 是 flex-shrink:0，等於「不准縮」。
+     於是「預設」那組被鎖在 max-content（標籤＋13 顆＋重設 ≈ 600px），
+     內層的 flex-wrap:wrap 永遠用不到，整條就衝出右邊界。
+     改成可縮（0 1 auto）＋ min-width:0，寬度不夠時內層才會真的換行。
+     桌機寬度夠時行為不變，仍然是一行。 */
+  .scfoot>.scfoot-type .sclay-g{padding:0;flex:0 1 auto;width:auto;min-width:0;max-width:100%}
+  .scfoot>.scfoot-type .sclay-g>*{min-width:0;max-width:100%}
   .scfoot>.scfoot-type .seg{display:flex;flex-wrap:wrap;max-width:100%}
   .scfoot>.scfoot-type .seg button{flex:0 1 auto;padding:4px 8px;font-size:11px}
   .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:4px 9px;font-size:11px;min-height:0}
@@ -1750,6 +1756,8 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          width:1.00,slant:0.00,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
          seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,
          arch:0.00,inflate:0.00,wave:0.00,chop:0.00,
+         /* 斜筆粗細與中宮橫縱：出廠值＝舊行為，不動就零變化 */
+         diag:1.00,cnaniso:0.00,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -2679,6 +2687,10 @@ function pressAt(type,t,f){
   }
   return 1+(v-1)*g;
 }
+/* 斜筆粗細（撇捺點提）。原本這四種筆一律取 sw（豎畫粗細），
+   等於「斜筆永遠跟著豎畫走」——真明體的撇捺跟豎畫的粗細關係跟黑體完全不同。
+   出廠 1.00 ＝ 舊行為。 */
+const dg=f=>(f.diag===undefined?1:f.diag);
 function baseWidthAt(st,t,tan,f){
   const {hw,sw}=widths(f),k=st.w||1,isK=!!st.kage;
   switch(st.t){
@@ -2687,10 +2699,10 @@ function baseWidthAt(st,t,tan,f){
     case "zhe":{const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
       return (hw+(sw-hw)*s)*k;}
     /* tp = 出鋒軸：把「偏離等寬的量」整個縮放。tp=0 等寬，tp=1 是原本的行為 */
-    case "pie": return sw*k*tp(f,Math.max(isK?0.15:0.09,1-(isK?0.82:0.90)*Math.pow(t,isK?1.18:1.30)));
-    case "na":  return sw*k*(isK?1.00:1.06)*tp(f,Math.max(isK?0.19:0.13,Math.pow(t,isK?0.88:0.80))*(1+f.finish*(isK?0.18:0.30)*smooth(0.72,1,t)));
-    case "dian":return sw*k*tp(f,(isK?0.44:0.34)+(isK?0.58:0.72)*Math.pow(t,isK?0.78:0.70));
-    case "ti":  return sw*k*(isK?1.03:1.12)*tp(f,Math.max(isK?0.16:0.10,1-Math.pow(t,isK?1.03:1.15)));
+    case "pie": return sw*dg(f)*k*tp(f,Math.max(isK?0.15:0.09,1-(isK?0.82:0.90)*Math.pow(t,isK?1.18:1.30)));
+    case "na":  return sw*dg(f)*k*(isK?1.00:1.06)*tp(f,Math.max(isK?0.19:0.13,Math.pow(t,isK?0.88:0.80))*(1+f.finish*(isK?0.18:0.30)*smooth(0.72,1,t)));
+    case "dian":return sw*dg(f)*k*tp(f,(isK?0.44:0.34)+(isK?0.58:0.72)*Math.pow(t,isK?0.78:0.70));
+    case "ti":  return sw*dg(f)*k*(isK?1.03:1.12)*tp(f,Math.max(isK?0.16:0.10,1-Math.pow(t,isK?1.03:1.15)));
     default:{
       const s=Math.abs(tan[1])/Math.max(1e-6,len(tan));
       return (hw+(sw-hw)*s)*k;
@@ -4519,10 +4531,15 @@ const rnd=s=>{const x=Math.sin(s*12.9898)*43758.5453;return (x-Math.floor(x))*2-
 
 /* 弧形的位移量。宣告一定要在 ptWarp 之前 —— const 有暫時性死區，
    放在後面第一次呼叫就會丟 ReferenceError。 */
+/* 中宮的橫向／縱向分量。cnaniso 0 ＝ 兩者相同（舊行為）。 */
+const cnX=f=>f.counter*(1+0.35*(f.cnaniso||0));
+const cnY=f=>f.counter*(1-0.35*(f.cnaniso||0));
 function archOf(x,a){ const u=(x-500)/500; return a*260*(1-u*u); }
 function ptWarp(x,y,f){
   x=500+(x-500)*f.face*f.width; y=500+(y-500)*f.face;
-  x=powC(x,f.counter);  y=powC(y,f.counter);
+  /* 中宮橫縱：原本 x 與 y 一律套同一個 counter，內白只能等比鬆緊。
+     分開之後「豐」可以橫向壓緊而左右不動、「間」可以門框寬而內部窄。 */
+  x=powC(x,cnX(f));  y=powC(y,cnY(f));
   y=powG(y,f.gravity);
   x+=(y-500)*f.slant;               /* 傾斜放最後，且不動 y，所以完全可逆 */
   /* 弧形：整排字沿 x 拱起或下凹。只改 y，而且位移只跟 x 有關 ——
@@ -4534,7 +4551,7 @@ function ptUnwarp(x,y,f){
   if(f.arch) y-=archOf(x,f.arch);
   x-=(y-500)*f.slant;
   y=invG(y,f.gravity);
-  x=invC(x,f.counter);  y=invC(y,f.counter);
+  x=invC(x,cnX(f));  y=invC(y,cnY(f));   /* 必須跟 ptWarp 成對，否則拖曳編輯不可逆 */
   x=500+(x-500)/(f.face*f.width); y=500+(y-500)/f.face; return [x,y];
 }
 function orthogonalizeKagePoints(points,st){
@@ -4562,7 +4579,8 @@ function warpStroke(st,f){
   if(st.t==="heng"&&f.finish>0&&p.length===2) p[1]=[p[1][0],p[1][1]+f.finish*13];
   if(f.scatter>0&&p.length>1){
     /* 錯位：整筆往隨機方向推開並微轉。做標準字時的「散排」效果。 */
-    const sd=st.seed+(f.seed|0)*977;
+    const sd=(st.seed||1)+(f.seed|0)*977;   /* ★ 補 ||1：其餘三處都有，只有 warpStroke 這兩處漏了。
+                                               st.seed 是組字階段才填的，未定義時整條算成 NaN。 */
     const dx=rnd(sd*1.7)*f.scatter*90, dy=rnd(sd*2.3+11)*f.scatter*90;
     const a=rnd(sd*3.1+29)*f.scatter*0.16;
     const c=[p.reduce((s2,q)=>s2+q[0],0)/p.length, p.reduce((s2,q)=>s2+q[1],0)/p.length];
@@ -4570,7 +4588,7 @@ function warpStroke(st,f){
     p=p.map(([x,y])=>[c[0]+(x-c[0])*ca-(y-c[1])*sa+dx, c[1]+(x-c[0])*sa+(y-c[1])*ca+dy]);
   }
   if(f.hand>0&&p.length>1){
-    const sdH=st.seed+(f.seed|0)*613;
+    const sdH=(st.seed||1)+(f.seed|0)*613;  /* 同上 */
     const a=rnd(sdH)*f.hand*0.05;
     const c=[p.reduce((s,q)=>s+q[0],0)/p.length,p.reduce((s,q)=>s+q[1],0)/p.length];
     const j=[rnd(sdH+11)*f.hand*16,rnd(sdH+29)*f.hand*16];
@@ -4845,6 +4863,8 @@ const AXES=[
   /* 內白保護：字很粗時，筆畫之間該留的白會被擠掉糊成一團。
      這根軸會在該留白的地方挖出保證寬度的縫。出廠 0（關），
      只有做極粗的標準字才需要開，36 是實測的甜蜜點。 */
+  {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
+  {k:"cnaniso", n:"中宮橫縱",en:"CNAN", min:-1,  max:1,   step:0.02,lo:"縱鬆",hi:"橫鬆",f:v=>(+v).toFixed(2)},
   {k:"cmin",    n:"內白保護",en:"COUNTER MIN",min:0,max:60,step:2,lo:"關", hi:"強",f:v=>(+v)?(+v).toFixed(0):"關"}
 ];
 const PRESETS={
@@ -5504,9 +5524,9 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 /* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
 const SCAX_GROUPS=[
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
-  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap"]},
+  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
-  {t:"內白",en:"COUNTER", ks:["cmin"]}
+  {t:"內白",en:"COUNTER", ks:["cnaniso","cmin"]}
 ];
 function buildShowAxes(){
   const grid=$("scGrid"); if(!grid||grid.childElementCount) return;
@@ -6581,43 +6601,60 @@ const rrRnd=(a,b)=>a+Math.random()*(b-a);
 const rrPick=a=>a[Math.floor(Math.random()*a.length)];
 const rrChance=p=>Math.random()<p;
 function scRandomFace(){
-  const wt=Math.round(rrRnd(46,132));
-  const heavy=wt>96, light=wt<62;
-  const roundness=rrPick([0.02,0.06,0.12,0.20,0.34,0.55,0.78,1.00]);
-  const ct = heavy ? rrRnd(0.90,1.15)
-           : light ? rrRnd(0.95,1.85)
-                   : rrRnd(0.90,1.45);
+  /* 狂野版：字重、字寬、傾斜、對比全部拉到軸的實際邊界，
+     造型效果的機率與強度都提高，而且允許疊兩種。
+     仍然保留的護欄（純亂數必醜的那幾條）：
+       · 高對比一定配收筆與頓，否則橫畫細得像斷掉
+       · 端點跟圓角同向
+       · 視覺補償不離開 0.55–0.80
+       · 內白保護永遠 0（那段還是壞的） */
+  const wt=Math.round(rrRnd(34,150));                 /* 原本 46–132 → 拉到滿 */
+  const heavy=wt>100, light=wt<58;
+  const roundness=rrPick([0,0.04,0.10,0.20,0.34,0.55,0.78,0.92,1.00]);
+  /* 細字才撐得住強對比；明體預設本身就到 2.10，這裡也放行 */
+  const ct = heavy ? rrRnd(0.85,1.30)
+           : light ? rrRnd(0.90,2.10)
+                   : rrRnd(0.85,1.75);
   const hiCt = ct>1.4;
   Object.assign(F,{
     weight:wt,
-    optic:+rrRnd(0.60,0.78).toFixed(2),
+    optic:+rrRnd(0.55,0.80).toFixed(2),
     contrast:+ct.toFixed(2),
     round:roundness,
-    cap:+Math.max(0,Math.min(1,roundness+rrRnd(-0.08,0.12))).toFixed(2),
-    counter:+rrRnd(heavy?0.80:0.92, heavy?0.98:1.14).toFixed(2),
-    face:+rrRnd(1.00,1.10).toFixed(2),
-    gravity:+rrRnd(0.95,1.05).toFixed(2),
-    width:+rrRnd(0.90,1.12).toFixed(2),
-    slant: rrChance(0.18)? +rrRnd(-0.10,0.12).toFixed(2) : 0,
-    finish: hiCt? +rrRnd(0.60,1.00).toFixed(2) : (rrChance(0.30)? +rrRnd(0,0.35).toFixed(2) : 0),
-    dun:    hiCt? +rrRnd(0.55,1.10).toFixed(2) : (rrChance(0.30)? +rrRnd(0,0.40).toFixed(2) : 0),
-    press:  rrChance(0.35)? +rrRnd(0.20,1.10).toFixed(2) : 0,
-    hand:   rrChance(0.30)? +rrRnd(0.10,0.70).toFixed(2) : 0,
-    taper:  heavy? +rrRnd(0,0.50).toFixed(2) : +rrRnd(0.50,1.30).toFixed(2),
-    hook:   +rrRnd(0.70,1.30).toFixed(2),
-    rise:   +rrRnd(0,0.09).toFixed(3),
-    /* 造型軸先全部歸零，下面再決定要不要來一個 */
+    cap:+Math.max(0,Math.min(1,roundness+rrRnd(-0.14,0.18))).toFixed(2),
+    counter:+rrRnd(heavy?0.78:0.86, heavy?1.02:1.26).toFixed(2),
+    face:+rrRnd(0.90,1.10).toFixed(2),
+    gravity:+rrRnd(0.88,1.14).toFixed(2),
+    width:+rrRnd(0.76,1.22).toFixed(2),                /* 原本 0.90–1.12 */
+    slant: rrChance(0.34)? +rrRnd(-0.26,0.28).toFixed(2) : 0,   /* 機率與幅度都加大 */
+    finish: hiCt? +rrRnd(0.60,1.00).toFixed(2) : (rrChance(0.42)? +rrRnd(0,0.55).toFixed(2) : 0),
+    dun:    hiCt? +rrRnd(0.55,1.30).toFixed(2) : (rrChance(0.42)? +rrRnd(0,0.65).toFixed(2) : 0),
+    press:  rrChance(0.45)? +rrRnd(0.20,1.35).toFixed(2) : 0,
+    hand:   rrChance(0.38)? +rrRnd(0.10,0.95).toFixed(2) : 0,
+    taper:  heavy? +rrRnd(0,0.60).toFixed(2) : +rrRnd(0.40,1.55).toFixed(2),
+    /* 斜筆粗細：高對比那一路撇捺明顯比豎畫細；其餘放到接近滿軸 */
+    diag:   hiCt ? +rrRnd(0.45,0.80).toFixed(2) : +rrRnd(0.70,1.60).toFixed(2),
+    cnaniso: rrChance(0.50)? +rrRnd(-0.85,0.85).toFixed(2) : 0,
+    hook:   +rrRnd(0.45,1.75).toFixed(2),
+    rise:   +rrRnd(0,0.14).toFixed(3),
     scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0,
-    cmin:0,                     /* 內白保護的封閉內白判斷仍是壞的，不要開 */
+    cmin:0,
     seed:1+Math.floor(Math.random()*999)
   });
-  /* 三成機率加一個「造型」效果（標準字那一路）。一次只加一種 —— 疊起來會糊成一團。 */
-  if(rrChance(0.34)){
-    const k=rrPick(["scatter","wobble","spike","hollow","inflate","wave","chop","arch"]);
-    const r={scatter:[0.10,0.40],wobble:[0.15,0.50],spike:[0.40,1.00],hollow:[0.30,0.70],
-             inflate:[0.30,0.80],wave:[0.15,0.45],chop:[0.20,0.50],arch:[-0.30,0.30]}[k];
-    F[k]=+rrRnd(r[0],r[1]).toFixed(2);
-    if(k==="scatter") F.wobble=+rrRnd(0.10,0.30).toFixed(2);
+  /* 造型效果：六成機率來一種，其中三成再疊第二種。
+     強度也拉高了 —— 但仍然最多兩種，三種以上一定糊成一團。 */
+  const R={scatter:[0.12,0.62],wobble:[0.18,0.80],spike:[0.45,1.30],hollow:[0.30,0.85],
+           inflate:[0.30,0.95],wave:[0.18,0.75],chop:[0.20,0.75],arch:[-0.45,0.45]};
+  if(rrChance(0.60)){
+    const ks=["scatter","wobble","spike","hollow","inflate","wave","chop","arch"];
+    const k=rrPick(ks);
+    F[k]=+rrRnd(R[k][0],R[k][1]).toFixed(2);
+    if(k==="scatter") F.wobble=+rrRnd(0.12,0.42).toFixed(2);
+    if(rrChance(0.30)){
+      /* 疊第二種時強度減半，兩個都全開會看不出字 */
+      const k2=rrPick(ks.filter(x=>x!==k&&!(k==="scatter"&&x==="wobble")));
+      F[k2]=+(rrRnd(R[k2][0],R[k2][1])*0.55).toFixed(2);
+    }
   }
 }
 $("scReroll").addEventListener("click",()=>{
