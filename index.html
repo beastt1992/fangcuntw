@@ -888,7 +888,6 @@
        控制面板／復原／匯出那排按鈕（.scactions）也在這條裡面，
        整條藏掉的話手機就完全點不到控制面板了。 */
     #scPosterBar .scposter-wrap,#scPosterToggle{display:none !important}
-    #scPosterBar[hidden]{display:flex !important}   /* 這條要一直在，裡面有主要按鈕 */
     #scPosterBar{justify-content:flex-end}
   }
 
@@ -899,6 +898,10 @@
   #scMoreBox .seg,#scMoreBox #scPals,#scMoreBox .pals{flex-wrap:wrap;max-width:100%}
   #scMoreBox .seg button{flex:0 1 auto}
   #scMoreBox{overflow-x:hidden}
+  /* 這條列一直在（裡面有匯出等按鈕）；只有縮圖那一格會收起。
+     .scposter-wrap 是 flex，必須自己寫這條，否則 hidden 屬性不會生效。 */
+  #scPosterBar{display:flex !important}
+  #scPosterBar .scposter-wrap[hidden]{display:none !important}
 </style>
 </head>
 <body>
@@ -1049,8 +1052,8 @@
 
 
   <section id="showcase">
-    <div class="scbar scbar-studio" id="scPosterBar" hidden>
-      <div class="g scposter-wrap"><label>範例模板</label>
+    <div class="scbar scbar-studio" id="scPosterBar">
+      <div class="g scposter-wrap" hidden><label>範例模板</label>
         <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
         <div class="posterthumbs" id="scPoster"></div>
@@ -6545,18 +6548,22 @@ scBuildPosterThumbs();
 })();
 /* 範例海報列預設收起 —— 它常駐在畫布上方會一直吃掉展示空間。
    需要時用按鈕叫出來，套用完自動收回去，畫面留給作品本身。 */
+/* ★ 切換的是「縮圖那一格」，不是整條列 ——
+   那條列裡還有控制面板／復原／SVG／PNG 那排按鈕，整條藏掉會連它們一起沒。
+   另外 .scbar 設了 display:flex，會蓋掉瀏覽器對 hidden 屬性的預設處理，
+   所以要自己寫一條 [hidden]{display:none}，不能只靠設 .hidden。 */
 if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
-  const bar=$("scPosterBar"); if(!bar) return;
-  bar.hidden=!bar.hidden;
-  $("scPosterToggle").classList.toggle("on",!bar.hidden);
+  const wrap=document.querySelector("#scPosterBar .scposter-wrap"); if(!wrap) return;
+  wrap.hidden=!wrap.hidden;
+  $("scPosterToggle").classList.toggle("on",!wrap.hidden);
 });
 $("scPoster").addEventListener("click",e=>{
   const b=e.target.closest("button[data-poster]"); if(!b) return;
   const wantText = !!($("scPosterText") && $("scPosterText").checked);
   scApplyPoster(b.dataset.poster, wantText);
   /* 套用完就收起來，把畫面還給作品 */
-  const bar=$("scPosterBar");
-  if(bar){ bar.hidden=true; if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
+  const wrap=document.querySelector("#scPosterBar .scposter-wrap");
+  if(wrap){ wrap.hidden=true; if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
 });
 
 let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
