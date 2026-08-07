@@ -2462,6 +2462,10 @@ function svgD(cmds){
   }
   return d+" Z";
 }
+/* v62：布林運算後一個 glyph 可能包含「外框 + enclosed holes」。
+   這些 ring 必須放在同一個 SVG compound path 裡，nonzero winding 才會真的挖空。
+   以前每個 ring 各畫一個黑 path，內圈雖然方向正確，仍會被單獨填黑，看起來像沒內白。 */
+const svgCompoundD=list=>(list||[]).map(svgD).join(" ");
 /* ==== 可變字型寫表器（opentype.js 不支援，glyf/loca/gvar/fvar/STAT 自己寫）==== */
 /* ==========================================================================
    純 JS 的 TrueType 可變字型寫表器
@@ -2892,6 +2896,11 @@ function pcFlatten(cmds,SUB){
   if(Math.abs(L[0]-f[0])>1e-9||Math.abs(L[1]-f[1])>1e-9) pts.push([f[0],f[1]]);
   return pts;
 }
+function csSignedAreaSimple(r){
+  let a=0;if(!r||r.length<3)return 0;
+  for(let i=0,j=r.length-1;i<r.length;j=i++)a+=r[j][0]*r[i][1]-r[i][0]*r[j][1];
+  return a/2;
+}
 /* 輸入輪廓陣列，回傳去重疊後的輪廓陣列。失敗時原樣回傳，絕不讓字消失。 */
 function dedupContours(contours, SUB, TOL){
   const pc=pcLib();
@@ -2899,9 +2908,21 @@ function dedupContours(contours, SUB, TOL){
   SUB=SUB||4; TOL=(TOL==null)?1.2:TOL;
   let res;
   try{
-    const rings=contours.map(c=>[pcFlatten(c,SUB)]).filter(r=>r[0].length>=4);
-    if(rings.length<2) return contours;
-    res=pc.union(rings[0], ...rings.slice(1));
+    const items=contours.map(c=>{const p=pcFlatten(c,SUB);return {p,a:csSignedAreaSimple(p)};})
+      .filter(x=>x.p.length>=4);
+    if(items.length<2) return contours;
+
+    /* v62：protectCounters / polygon-clipping 會回傳「外框 ring + 反向 interior ring」。
+       以前把每個 ring 都當獨立黑 polygon 再 union，等於把 enclosed hole 填回去；
+       OTF 匯出時「多」的兩個內白因此會消失。
+       raw stroke contours 通常全部同向，所以只有真的出現雙向 winding 時才把反向 ring 當 hole。 */
+    let major=items[0]; for(const it of items) if(Math.abs(it.a)>Math.abs(major.a)) major=it;
+    const inkSign=major.a>=0?1:-1;
+    const inks=items.filter(x=>!x.a||Math.sign(x.a)===inkSign).map(x=>[x.p]);
+    const holes=items.filter(x=>x.a&&Math.sign(x.a)!==inkSign).map(x=>[x.p]);
+    if(!inks.length) return contours;
+    res=pc.union(inks[0],...inks.slice(1));
+    if(holes.length) res=pc.difference(res,...holes);
   }catch(e){ return contours; }
   const out=[];
   for(const poly of res) for(const ring of poly){
@@ -2919,6 +2940,7 @@ function dedupContours(contours, SUB, TOL){
   }
   return out.length?out:contours;
 }
+
 
 /* ==== 直排：GSUB(vert/vrt2) ＋ vmtx ＋ VORG，opentype.js 不輸出 GSUB ==== */
 /* ==========================================================================
@@ -3185,6 +3207,8 @@ function csToCmds(res){
 }
 /* cs 由呼叫端傳進來（glyphContours 已經算好了），不要在這裡重算 —— 會無限遞迴。 */
 
+/* v62：Enclosed counter + compound-path 修正；v61 medial ribbon 保留。
+
 /* v61：Local Medial Ribbon --------------------------------------------------
    舊的內白保護用「整筆首尾方向 + 一條矩形 band」。遇到兩筆斜率不同、弧線、
    漸開／漸收時，矩形一定會在端點或轉折切出不自然的缺口。
@@ -3446,6 +3470,110 @@ function csMedialRibbon(run,marked,samples,f,i,j){
   return {poly:[[ring]],i,j,ax:{a:[0,0],b:avg,dx:avg[0],dy:avg[1]},
           target:Math.max(...seq.map(m=>m.target)),open0,open1};
 }
+/* v62：Enclosed Counter Offset ----------------------------------------------
+   medial ribbon 處理的是「兩筆之間的開放／狹長白縫」；但像「多」兩個夕裡面的
+   enclosed space 是一個真正的封閉白區，不應該靠 pair ribbon 猜。
+
+   做法：
+     - 在 reference weight 先 union，直接讀出 polygon 的 interior rings = 原始 enclosed counters。
+     - 目前字重也 union，量現有 enclosed counter 的等效窄度 2A/P。
+     - reference width → target width 仍走同一條非線性 csCounterTarget()。
+     - 現有 hole 太小時，對「白區本身」做 polygon offset outward，再從黑字扣掉。
+     - 如果重到 hole 已完全消失，就從 reference hole inward-offset 到 target size 後重新挖回來。
+   這樣 enclosed 永遠是白區的 topology constraint，不會因為 SVG ring 被填黑或極粗字重而消失。 */
+function csRingArea(r){
+  let a=0; if(!r||r.length<3) return 0;
+  for(let i=0,j=r.length-1;i<r.length;j=i++) a+=r[j][0]*r[i][1]-r[i][0]*r[j][1];
+  return a/2;
+}
+function csRingPerim(r){
+  let L=0; if(!r||r.length<2) return 0;
+  for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];L+=Math.hypot(b[0]-a[0],b[1]-a[1]);}
+  return L;
+}
+function csRingCentroid(r){
+  let A=0,cx=0,cy=0;
+  if(!r||r.length<3) return [0,0];
+  for(let i=0,j=r.length-1;i<r.length;j=i++){
+    const q=r[j][0]*r[i][1]-r[i][0]*r[j][1]; A+=q;
+    cx+=(r[j][0]+r[i][0])*q; cy+=(r[j][1]+r[i][1])*q;
+  }
+  if(Math.abs(A)<1e-6){let x=0,y=0;for(const p of r){x+=p[0];y+=p[1];}return [x/r.length,y/r.length];}
+  return [cx/(3*A),cy/(3*A)];
+}
+function csHoleWidth(r){
+  const A=Math.abs(csRingArea(r)),P=csRingPerim(r);
+  return P>1 ? 2*A/P : 0;       /* 長縫時接近真實窄邊；比 bbox 對斜洞穩定 */
+}
+function csLineX(P,u,Q,v){
+  const d=u[0]*v[1]-u[1]*v[0]; if(Math.abs(d)<1e-7) return null;
+  const q=[Q[0]-P[0],Q[1]-P[1]], t=(q[0]*v[1]-q[1]*v[0])/d;
+  return [P[0]+u[0]*t,P[1]+u[1]*t];
+}
+function csOffsetRing(ring,delta){
+  /* 真正沿 edge normal 的 polygon offset，不是 centroid scale。
+     delta > 0 = 擴張白區；delta < 0 = 收縮白區。 */
+  let r=(ring||[]).slice();
+  if(r.length>2 && dist(r[0],r[r.length-1])<1e-6) r=r.slice(0,-1);
+  if(r.length<3||Math.abs(delta)<0.05) return r.concat([r[0].slice()]);
+  const ccw=csRingArea(r)>0, out=[];
+  const edge=(a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1;
+    /* CCW polygon 的外側在右；CW 在左。 */
+    const nx=ccw?dy/L:-dy/L, ny=ccw?-dx/L:dx/L;
+    return {u:[dx/L,dy/L],n:[nx,ny]};};
+  for(let i=0;i<r.length;i++){
+    const A=r[(i+r.length-1)%r.length],P=r[i],B=r[(i+1)%r.length];
+    const e0=edge(A,P),e1=edge(P,B);
+    const P0=[P[0]+e0.n[0]*delta,P[1]+e0.n[1]*delta];
+    const P1=[P[0]+e1.n[0]*delta,P[1]+e1.n[1]*delta];
+    let X=csLineX(P0,e0.u,P1,e1.u);
+    /* 銳角 miter 太長就退回 bevel 中點，避免 offset 尖刺切到別的筆畫。 */
+    if(!X || dist(X,P)>Math.max(8,Math.abs(delta)*3.2)) X=[(P0[0]+P1[0])/2,(P0[1]+P1[1])/2];
+    out.push(X);
+  }
+  if(out.length<3) return [];
+  out.push(out[0].slice()); return out;
+}
+function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
+  let refContours=[];
+  try{ for(const st of marked) refContours.push(...strokeContours(st,rf,st.ws,30)); }
+  catch(e){ return []; }
+  const rr=refContours.map(c=>[pcFlatten(c,4)]).filter(x=>x[0].length>=4);
+  if(!rr.length) return [];
+  let refUnion; try{refUnion=PCL.union(rr[0],...rr.slice(1));}catch(e){return [];}
+  const refs=[]; for(const poly of refUnion) for(let k=1;k<poly.length;k++){
+    const ring=poly[k],A=Math.abs(csRingArea(ring)),w=csHoleWidth(ring);
+    if(A>80&&w>2) refs.push({ring,c:csRingCentroid(ring),w,A});
+  }
+  if(!refs.length) return [];
+  const curs=[]; for(const poly of (currentUnion||[])) for(let k=1;k<poly.length;k++){
+    const ring=poly[k],A=Math.abs(csRingArea(ring)),w=csHoleWidth(ring);
+    if(A>20&&w>0.5) curs.push({ring,c:csRingCentroid(ring),w,A,used:false});
+  }
+  const cuts=[];
+  for(const R of refs){
+    const target=csCounterTarget(R.w,minGap,tau); if(target<1) continue;
+    let best=null,bd=Infinity;
+    for(const C of curs){if(C.used)continue;const d=dist(R.c,C.c);if(d<bd){bd=d;best=C;}}
+    /* reference hole 的中心通常只會移幾十；太遠就當作已閉合，不亂配別的洞。 */
+    if(best && bd<Math.max(90,R.w*1.8)){
+      best.used=true;
+      if(best.w>=target-0.8) continue;   /* 自己就夠寬，不必動 */
+      const delta=Math.min(40,(target-best.w)/2);
+      let q=csOffsetRing(best.ring,delta); if(q.length<4) continue;
+      try{ const clean=PCL.union([q]); for(const poly of clean) cuts.push(poly); }
+      catch(e){cuts.push([q]);}
+    }else{
+      /* hole 已經被粗筆完全吃掉：由 reference hole inward offset 到 target width 再挖回。 */
+      const shrink=Math.max(0,(R.w-target)/2);
+      let q=csOffsetRing(R.ring,-shrink); if(q.length<4||Math.abs(csRingArea(q))<30) continue;
+      try{ const clean=PCL.union([q]); for(const poly of clean) cuts.push(poly); }
+      catch(e){cuts.push([q]);}
+    }
+  }
+  return cuts;
+}
+
 function protectCounters(ch, f, minGap, cs){
   const PCL=pcLib(); if(!PCL || !cs || !minGap) return cs;
   let marked;
@@ -3493,7 +3621,9 @@ function protectCounters(ch, f, minGap, cs){
   if(!rings.length) return cs;
   let u; try{ u=PCL.union(rings[0],...rings.slice(1)); }catch(e){ return cs; }
 
-  const cuts=[];
+  /* enclosed counter 不是 medial ribbon：直接把 reference 內圈當白區 topology，
+     必要時對白區做 offset，確保「多／目／田」這種封閉內白不被粗筆吃掉。 */
+  const cuts=csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,u);
   for(const b of bands){
     let region=b.poly;
     /* 這層是保險。主要的交叉筆已在 local pairing 階段斷開；
@@ -4083,7 +4213,8 @@ function buildCells(){
   btn.setAttribute("aria-label","檢視 "+id);
   const svg=el("svg",{viewBox:"-14 -14 1028 1028",preserveAspectRatio:"xMidYMid meet"});
   const paths=[];
-  for(let i=0;i<n;i++){const p=el("path",{fill:"var(--ink)"});svg.appendChild(p);paths.push(p);}
+  /* 一個 glyph 用一個 compound path，interior ring 才能以 winding 挖成真正白洞。 */
+  const p=el("path",{fill:"var(--ink)","fill-rule":"nonzero"});svg.appendChild(p);paths.push(p);
   btn.appendChild(svg);
   const cap=document.createElement("div");cap.className="cap";
   cap.innerHTML='<b>'+(id==="　"?"␣":id)+'</b><span>'+(g.ids||strokeCount(id)+"畫")+'</span>';
@@ -4182,13 +4313,13 @@ function drawBig(){
   bigSvg.appendChild(el("line",{x1:EM,y1:0,x2:0,y2:EM,...dash}));
 
   const cs=glyphContours(current,FA(),varSel);
-  cs.forEach(c=>bigSvg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)",
-    "fill-rule":"nonzero",opacity:editMode?.55:(ENGINE==="compare"?.62:1)})));
+  if(cs.length) bigSvg.appendChild(el("path",{d:svgCompoundD(cs),fill:"var(--ink)",
+    "fill-rule":"nonzero",opacity:editMode?.55:(ENGINE==="compare"?.62:1)}));
   if(ENGINE==="compare"){
     /* 原樣的輪廓用線框疊上去，一眼看出設計軸把形狀推到哪 */
     try{
-      glyphContours(current,axesOf("reference"),varSel).forEach(c=>
-        bigSvg.appendChild(el("path",{d:svgD(c),class:"cmp-ref"})));
+      const rc=glyphContours(current,axesOf("reference"),varSel);
+      if(rc.length) bigSvg.appendChild(el("path",{d:svgCompoundD(rc),class:"cmp-ref","fill-rule":"nonzero"}));
     }catch(e){}
   }
   if(showSkel||editMode) glyphSkeleton(current,FA(),varSel).forEach(d=>bigSvg.appendChild(
@@ -4356,7 +4487,7 @@ function drawAll(){
   AXES.forEach(ax=>{ax.input.value=F[ax.k];ro[ax.k].textContent=ax.f(F[ax.k]);});
   cellPaths.forEach((paths,id)=>{
     const cs=glyphContours(id,FA(),null,14);
-    for(let i=0;i<paths.length;i++) paths[i].setAttribute("d",cs[i]?svgD(cs[i]):"");
+    if(paths[0]) paths[0].setAttribute("d",svgCompoundD(cs));
   });
   drawBig();
   $("statAxes").textContent="W"+F.weight+" C"+F.contrast.toFixed(2)+" R"+F.round.toFixed(2)+
@@ -4896,7 +5027,7 @@ function kagePreview(){
     if(it.ok){
       const tmp={u:0,s:it.strokes.length?it.strokes:undefined,c:it.parts.length?it.parts:undefined};
       const key="\u0000tmp"; G[key]=tmp;
-      try{ glyphContours(key,F).forEach(c=>svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }
+      try{ const cc=glyphContours(key,F); if(cc.length) svg.appendChild(el("path",{d:svgCompoundD(cc),fill:"var(--ink)","fill-rule":"nonzero"})); }
       catch(e){ it.ok=false; }
       delete G[key];
     }
@@ -5701,7 +5832,7 @@ function subScan(){
   for(const ch of have.slice(0,120)){
     const cell=document.createElement("div"); cell.className="pcell";
     const svg=el("svg",{viewBox:"-14 -14 1028 1028",preserveAspectRatio:"xMidYMid meet"});
-    try{ glyphContours(ch,FA(),null,20).forEach(c=>svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
+    try{ const cc=glyphContours(ch,FA(),null,20); if(cc.length) svg.appendChild(el("path",{d:svgCompoundD(cc),fill:"var(--ink)","fill-rule":"nonzero"})); }catch(e){}
     cell.appendChild(svg);
     const cap=document.createElement("div"); cap.className="pc";
     cap.innerHTML='<b>'+(ch==="\u3000"?"\u2423":ch)+'</b><span></span>';
@@ -5983,8 +6114,8 @@ function siblingsOf(id){
 }
 function miniGlyph(id){
   const svg=el("svg",{viewBox:"-20 -20 1040 1040",preserveAspectRatio:"xMidYMid meet"});
-  try{ glyphContours(id,FA(),null,14).forEach(c=>
-    svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
+  try{ const cc=glyphContours(id,FA(),null,14); if(cc.length)
+    svg.appendChild(el("path",{d:svgCompoundD(cc),fill:"var(--ink)","fill-rule":"nonzero"})); }catch(e){}
   return svg;
 }
 function drawMasters(){
@@ -6162,8 +6293,8 @@ function drawUsage(){
   for(const ch of users.slice(0,48)){
     const cell=document.createElement("div"); cell.className="u"; cell.title=ch;
     const svg=el("svg",{viewBox:"-20 -20 1040 1040",preserveAspectRatio:"xMidYMid meet"});
-    try{ glyphContours(ch,FA(),null,14).forEach(c=>
-      svg.appendChild(el("path",{d:svgD(c),fill:"var(--ink)"}))); }catch(e){}
+    try{ const cc=glyphContours(ch,FA(),null,14); if(cc.length)
+      svg.appendChild(el("path",{d:svgCompoundD(cc),fill:"var(--ink)","fill-rule":"nonzero"})); }catch(e){}
     cell.appendChild(svg);
     cell.addEventListener("click",()=>{ current=ch; mark(); drawAll(); });
     box.appendChild(cell);
