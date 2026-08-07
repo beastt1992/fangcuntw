@@ -7537,8 +7537,26 @@ async function boot(){
   const saved=loadLocal();
   if(saved) restore(saved);
   else {
+    /* 第一次進來的開場畫面：「永春」兩個大字 ＋ 依筆順上色。
+       這是整個工具最有代表性的一幕 —— 一眼看得出「每一筆都是分開的資料」，
+       那正是別的字型做不到、也是這套骨架的核心。
+       （只有在完全沒有存檔時才會走這裡；用過一次之後就照使用者自己的設定。） */
     document.querySelector('#presets button[data-p="hei"]').classList.add("on");
     scApplyPoster("minimal");
+    $("scTxt").value="永春";
+    scCanvas="square"; scLay="huge"; scDir="h"; scAlignMode="center";
+    scMargin=.14; scScale=1.10; scGxAdj=0; scGyAdj=0;
+    scCol="stroke";                       /* 依筆順上色 */
+    scSetPaletteKey("yan");               /* 岩彩：五個顏色最繽紛 */
+    scBgColor="#f1ece1"; scTransparentBg=false;
+    F.weight=104; F.round=.10;
+    scOff={}; scTr={}; scOvr={}; scCustom={}; scAxOvr={}; scSelKey=null;
+    document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));
+    document.querySelectorAll("#scLayout button").forEach(x=>x.classList.toggle("on",x.dataset.k===scLay));
+    document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x.dataset.k===scDir));
+    document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
+    document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
+    scSyncColors();
   }
   /* 舊版 localStorage 可能把已修正的 KAGE 部件覆蓋回去；啟動最後再跑一次引擎遷移。 */
   clearStrokeEstimates();
