@@ -911,6 +911,35 @@
      踩過兩次了，改用 class 一勞永逸。 */
   #scPosterBar{display:flex !important}
   #scPosterBar .scposter-wrap.is-off{display:none !important}
+
+  /* ==========================================================================
+     文字輸入框
+     它是這個畫面最主要的操作，但原本跟旁邊的滑桿共用同一組邊框與底色 ——
+     份量一樣就沒有主次，眼睛不知道要先看哪裡。
+     ========================================================================== */
+  .scfoot{position:relative}
+  .scfoot textarea{
+    border:1.5px solid var(--ink) !important;   /* 比周圍重一級 */
+    background:#fff !important;
+    box-shadow:0 1px 0 var(--ink);
+    padding-left:34px !important;               /* 留給左邊的筆號 */
+  }
+  .scfoot textarea::placeholder{color:#a09888}
+  .scfoot textarea:focus{
+    box-shadow:0 0 0 3px rgba(22,19,13,.10), 0 1px 0 var(--ink) !important;
+  }
+  /* 左側的筆記號：不用多一個標籤佔位置，也看得出這裡是打字的 */
+  .scfoot::before{
+    content:"✎";
+    position:absolute;left:23px;top:50%;transform:translateY(-50%);
+    font:400 15px/1 system-ui,sans-serif;color:var(--ink);
+    pointer-events:none;z-index:2;opacity:.75;
+  }
+  @media(max-width:700px){
+    .scfoot::before{left:19px;top:29px;transform:none}
+    .scfoot textarea{padding-left:32px !important}
+  }
+  @media(min-width:1100px){ .scfoot::before{left:23px} }
 </style>
 </head>
 <body>
