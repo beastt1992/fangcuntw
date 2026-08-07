@@ -734,6 +734,46 @@
     padding:4px 2px 5px;color:var(--mut,#8a8378);text-align:center;letter-spacing:.02em}
   .posterthumbs button.on .nm{color:var(--ink,#16130d)}
   @media(max-width:700px){ .posterthumbs button{width:56px} .posterthumbs .th{height:40px} }
+
+  /* ==========================================================================
+     展示控制的桌機版修正
+     原本有一組給手機的規則（.scstudio-tabs{width:100%} ＋ button{flex:1}）
+     沒有被 media query 包住，洩漏到桌機 —— 兩個分頁按鈕就撐滿一整列。
+     這裡用 min-width 把桌機該有的樣子補回來，手機不受影響。
+     ========================================================================== */
+  @media(min-width:760px){
+    /* ① 分頁按鈕照內容寬，不要撐滿 */
+    .scstudio-tabs{width:max-content}
+    .scstudio-tabs button{flex:0 0 auto;padding:6px 18px;font-size:11.5px}
+
+    /* ② 壓縮留白：格子放窄、行距收緊，讓工具擠上來不用捲 */
+    .scstudio-panel{padding:8px 0 0}
+    .scstudio-panel .sclay{padding:8px 10px 2px}
+    .sclay{grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
+           gap:0 14px;padding-bottom:5px;margin-bottom:5px}
+    .sclay-g{padding:2px 0;gap:6px}
+    .sclay-g>label{width:46px;font-size:11px}
+    .sclay-g>b{width:38px;font-size:9.5px}
+    .scstudio-sub{margin:1px 0 5px;padding-bottom:4px;font-size:10px}
+    .scstudio-panel+.scstudio-panel .scstudio-sub{margin-top:10px}
+    .scstudio-head{margin-bottom:6px}
+    .scbar-studio{min-height:0;padding:6px 14px;gap:8px}
+
+    /* ③ 整個控制區不要自己長出捲軸 */
+    #scMoreBox{max-height:none;overflow:visible}
+  }
+  /* 畫布縮放 */
+  .sczoomwrap{transform-origin:center center;transition:transform .12s ease-out}
+  .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
+    border:1px solid var(--line-2,#cfc8b8);background:var(--paper,#faf7f0);
+    border-radius:3px;overflow:hidden;z-index:5;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .sczoom button{border:0;border-right:1px solid var(--line-2,#cfc8b8);background:transparent;
+    color:var(--ink,#16130d);font:400 11px/1 var(--mono,ui-monospace,monospace);
+    padding:6px 9px;min-width:30px;cursor:pointer}
+  .sczoom button:last-child{border-right:0}
+  .sczoom button:hover{background:var(--line,#e8e3d6)}
+  .sczoom button[data-z="fit"]{min-width:46px;letter-spacing:.02em}
+  @media(max-width:700px){ .sczoom{right:8px;bottom:8px} .sczoom button{padding:8px 10px} }
 </style>
 </head>
 <body>
@@ -898,8 +938,17 @@
       </div>
     </div>
     <div class="scstage" id="scStage">
+      <!-- 縮放只作用在顯示層：包一層做 CSS transform，
+           不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
+      <div class="sczoomwrap" id="scZoomWrap">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
       <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
+      <div class="sczoom" id="scZoom">
+        <button type="button" data-z="out" title="縮小">−</button>
+        <button type="button" data-z="fit" title="回到符合視窗">100%</button>
+        <button type="button" data-z="in" title="放大">＋</button>
+      </div>
     </div>
     <div class="scfoot">
       <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">把繁體中文字型設計
@@ -6085,6 +6134,40 @@ $("scTxt").addEventListener("keydown",e=>{
   box.selectionStart=box.selectionEnd=a+1;
   box.dispatchEvent(new Event("input",{bubbles:true}));
 });
+/* ---- 畫布縮放 ----
+   只縮顯示層（外面包的 .sczoomwrap 做 CSS transform），
+   SVG 的實際尺寸與繪圖／匯出邏輯完全不動。
+   有紙張尺寸之後，A4 那種長版面在畫面上會很小，需要放大看細節。 */
+let scZoomLv=1;
+const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4];
+function scApplyZoom(){
+  const w=$("scZoomWrap"); if(!w) return;
+  w.style.transform = scZoomLv===1 ? "" : "scale("+scZoomLv+")";
+  const b=document.querySelector('#scZoom button[data-z="fit"]');
+  if(b) b.textContent=Math.round(scZoomLv*100)+"%";
+  /* 放大之後要能捲到看不見的部分 */
+  const st=$("scStage");
+  if(st) st.style.alignItems = scZoomLv>1 ? "flex-start" : "center";
+}
+function scZoomStep(dir){
+  const i=SC_ZOOMS.indexOf(scZoomLv);
+  let k = i>=0 ? i+dir : SC_ZOOMS.findIndex(v=>v>scZoomLv)+(dir>0?0:-1);
+  k=Math.max(0,Math.min(SC_ZOOMS.length-1,k));
+  scZoomLv=SC_ZOOMS[k]; scApplyZoom();
+}
+if($("scZoom")) $("scZoom").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-z]"); if(!b) return;
+  const z=b.dataset.z;
+  if(z==="in") scZoomStep(1);
+  else if(z==="out") scZoomStep(-1);
+  else { scZoomLv=1; scApplyZoom(); }
+});
+/* Ctrl / Cmd + 滾輪縮放 —— 跟設計軟體一致。單純滾動仍然是捲動。 */
+if($("scStage")) $("scStage").addEventListener("wheel",e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  e.preventDefault();
+  scZoomStep(e.deltaY<0?1:-1);
+},{passive:false});
 $("scTxt").addEventListener("input",()=>{scOvr={};scSelKey=null;scFitInput();scDraw();saveLocal();});
 $("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
 $("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
@@ -6151,12 +6234,16 @@ $("scStudioTabs").addEventListener("click",e=>{
 });
 
 const SC_POSTERS={
-  minimal:{txt:"把繁體中文字型設計\n變得更直覺",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
-  sign:{txt:"方寸字型\n繁體字設計",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
-  magazine:{txt:"方寸\n參數化中文字型工作室",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
-  matrix:{txt:"永方寸設計\n字型樣張",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
-  night:{txt:"台灣夜市\n招牌字研究",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
-  vertical:{txt:"方寸\n繁體中文字型工作室",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
+  /* 每個模板是一整頁的範例，不只一句話 ——
+     多行、長短交錯，看得出真的排起來是什麼樣子。
+     （per-字的大小變化要另外做：scOvr 目前只存顏色，
+       要做分區大小得先加 per-字尺寸覆寫。） */
+  minimal:{txt:"把繁體中文字型設計\n變得更直覺\n\n骨架與參數\n二十七根設計軸\n一萬三千字同時變",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.16,scale:.86,gx:.04,gy:.10,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:72,round:.06},
+  sign:{txt:"方寸字型\n繁體字設計\n\n招牌 標準字\n展場 指標\n包裝 標題",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.10,scale:1.02,gx:-.10,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:118,round:.08},
+  magazine:{txt:"方寸\n參數化中文字型工作室\n\n用骨架與參數\n設計整套繁體中文字型\n免費 開源 離線可用\n匯出 OTF 直接安裝",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.20,scale:.74,gx:.10,gy:.16,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:60,round:0},
+  matrix:{txt:"永方寸設計字型樣張\n春夏秋冬東南西北\n山水日月風雨雷電\n天地人和文武聖賢",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
+  night:{txt:"台灣夜市\n招牌字研究\n\n蚵仔煎 大腸麵線\n鹽酥雞 珍珠奶茶\n臭豆腐 肉圓 米糕",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.10,scale:.92,gx:-.06,gy:.08,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:108,round:.24},
+  vertical:{txt:"方寸\n繁體中文字型工作室\n骨架驅動 參數控制\n整套生成 匯出安裝",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.14,scale:.88,gx:.06,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
 };
 function scSetPaletteKey(k){
   const p=SCPAL.find(x=>x.k===k); if(!p)return;
