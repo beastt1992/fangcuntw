@@ -6,7 +6,7 @@
    file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /* 整個 app（含 3MB 字庫）第一次載入就快取起來，之後完全離線可用。 */
-const CACHE = "fangcun-v40-logo";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
+const CACHE = "fangcun-v41-hollow";   /* 換版本號 → 舊快取會被清掉，使用者不用重整兩次 */
 const CORE_ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
 const OPTIONAL_ASSETS = [
   "./icon.svg", "./icon-192.png", "./icon-512.png",

@@ -1980,6 +1980,9 @@ function strokeOutline(st,f,wScale,NS){
   capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds,f);
   return orient(cmds,-1);
 }
+/* 中空的內圈用專案既有的 reverseContour() 反轉繞向。
+   ★ 絕不能用 cmds.slice().reverse() —— 那只是把「指令」倒過來，
+   M 會跑到中間、控制點全接到錯的段上。中空一直是這樣壞的。 */
 function strokeContours(st,f,wScale,NS){
   const {hw}=widths(f);
   if(st.t==="ring"){
@@ -1996,9 +1999,11 @@ function strokeContours(st,f,wScale,NS){
     /* 中空：同一條骨架畫兩次，內圈用反向繞向挖掉 —— 線框標準字 */
     const outer=strokeOutline(st,f,wScale,NS);
     const {hw:HW}=widths(f);
-    const ring=Math.max(0.10,1-f.hollow);           /* 內圈相對外圈的寬度 */
+    /* 內圈相對外圈的寬度。值越大＝洞越大＝線框越細。
+       原本寫成 1-hollow，方向剛好相反：軸拉滿反而變回實心。 */
+    const ring=Math.min(0.92,Math.max(0.12,f.hollow));
     const inner=strokeOutline({...st,w:(st.w||1)*ring},f,wScale,NS);
-    return [outer, inner.slice().reverse()];
+    return [outer, reverseContour(inner)];
   }
   if(f.chop>0.01 && st.p && st.p.length>1){
     /* 斷裂：把一筆切成 2–3 段，段與段之間留白。
