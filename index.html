@@ -1366,12 +1366,12 @@
           <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
           <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
       </div>
-      <button class="btn ghost sm on" id="scTypeMore" type="button" aria-expanded="true">收合調整</button>
+      <button class="btn ghost sm" id="scTypeMore" type="button" aria-expanded="false">展開調整</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <!-- 字型軸整組：從左側搬下來收在底部，按「更多字型軸」展開。
          這是調字的工具，字型是主要操作，該在手邊而不是側欄裡。 -->
-    <div class="sctypebox" id="scTypeBox"><div class="sctypepanel">
+    <div class="sctypebox is-off" id="scTypeBox"><div class="sctypepanel">
         <!-- ★ 文字的三根滑桿從左側「文字」分節搬過來 ——
              這一盒現在是「所有拉桿都在這」，不用開側欄也不用展開。
              方向／對齊是按鈕不是拉桿，留在側欄。 -->
@@ -6867,20 +6867,11 @@ if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
   /* 手機用這個 class 把畫布的可視區讓給浮起來的面板（見 body.type-open .scstage） */
   document.body.classList.toggle("type-open", !off);
 });
-/* 手機／平板一進來先收起：這一區現在有三十幾個控制項再加二十一根軸，
-   直接展開的話畫布只剩一小條。桌機維持展開（HTML 的預設狀態）。
-   只在載入時設一次 —— 使用者自己開了之後就不再自動收，不跟他搶。 */
+/* 一進來一律收合 —— 桌機手機都一樣。
+   是寫在 HTML 的預設 class 上，不是載入後才用 JS 收：
+   靠 JS 收的話，載入那一瞬間會先閃一下整個展開的面板。
+   這裡只負責把 body 的 class 跟盒子的實際狀態對齊。 */
 try{
-  if(matchMedia("(max-width:1099px)").matches){
-    const box=$("scTypeBox"), btn=$("scTypeMore");
-    if(box && btn){
-      box.classList.add("is-off");
-      btn.classList.remove("on");
-      btn.setAttribute("aria-expanded","false");
-      btn.textContent="展開調整";
-    }
-  }
-  /* 初始狀態也要同步，不能只在按鈕上處理 —— 桌機一進來是展開的。 */
   document.body.classList.toggle("type-open",
     !!($("scTypeBox") && !$("scTypeBox").classList.contains("is-off")));
 }catch(e){}
