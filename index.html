@@ -1131,6 +1131,11 @@
     }
     /* 面板展開時，畫布把可視區讓出來（class 由收合鈕切換） */
     body.type-open .scstage{padding-bottom:46vh}
+    /* ★ 手機：字型預設列（13 顆＋重設）跟著一起收 ——
+       常駐的話光它就佔掉兩三行，收合狀態下畫布反而被壓縮。
+       桌機橫向空間夠，維持常駐（那是上一輪特地搬出來的，不要動到）。
+       用 CSS 控可見性就好，不搬 DOM —— 搬了容易留下重複 id 或斷掉的監聽。 */
+    body:not(.type-open) .scfoot>.scfoot-type{display:none}
   }
 </style>
 </head>
