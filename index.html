@@ -949,6 +949,15 @@
         </div>
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;
                       padding-top:10px;border-top:1px solid var(--line);cursor:pointer">
+          <input type="checkbox" id="famVert" checked style="margin-top:3px">
+          <span style="font-size:12.5px;line-height:1.7">
+            <b style="font-weight:400">支援直排（建議開著）</b><br>
+            <span class="tip" style="margin:0">
+              直排時句讀會移到右上、括號會轉九十度。InDesign、Illustrator 的直排文字框
+              會自動套用，橫排不受影響。</span>
+          </span>
+        </label>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;cursor:pointer">
           <input type="checkbox" id="famDedup" checked style="margin-top:3px">
           <span style="font-size:12.5px;line-height:1.7">
             <b style="font-weight:400">去除重疊（建議開著）</b><br>
@@ -1537,34 +1546,34 @@ const G = {
 "星":{u:0x661F,ids:"⿱日生",c:[{r:"日",box:[238,498,762,1000]},{r:"生",box:[58,0,942,522]}]},
 /* ===================== 全形標點 ===================== */
 "　":{u:0x3000,sp:1,s:[]},
-"。":{u:0x3002,sp:1,s:[{t:"ring",p:[[500,478]],r:150,w:0.86}]},
-"、":{u:0x3001,sp:1,s:[{t:"dian",p:[[406,604],[582,398]],bend:-0.10,w:1.28}]},
-"，":{u:0xFF0C,sp:1,s:[{t:"pie",p:[[574,600],[404,316]],bend:0.30,w:1.28}]},
+"。":{u:0x3002,sp:1,s:[{t:"ring",p:[[194,212]],r:150,w:0.86}]},
+"、":{u:0x3001,sp:1,s:[{t:"dian",p:[[99,324],[275,118]],bend:-0.10,w:1.28}]},
+"，":{u:0xFF0C,sp:1,s:[{t:"pie",p:[[293,328],[123,44]],bend:0.30,w:1.28}]},
 "：":{u:0xFF1A,sp:1,s:[{t:"dot",p:[[500,672]],rk:1.12},{t:"dot",p:[[500,330]],rk:1.12}]},
 "；":{u:0xFF1B,sp:1,s:[{t:"dot",p:[[500,686]],rk:1.12},
                        {t:"pie",p:[[566,506],[414,268]],bend:0.30,w:1.18}]},
 "！":{u:0xFF01,sp:1,s:[{t:"pie",p:[[500,882],[500,382]],w:1.42},{t:"dot",p:[[500,216]],rk:1.18}]},
 "？":{u:0xFF1F,sp:1,s:[{t:"zhe",p:[[326,738],[438,876],[618,832],[628,668],[500,540],[500,420]],w:0.98,fr:5},
                        {t:"dot",p:[[500,216]],rk:1.18}]},
-"「":{u:0x300C,sp:1,s:[{t:"zhe",p:[[808,862],[332,862],[332,428]],w:0.82,fr:0.35}]},
-"」":{u:0x300D,sp:1,s:[{t:"zhe",p:[[668,572],[668,138],[192,138]],w:0.82,fr:0.35}]},
-"（":{u:0xFF08,sp:1,s:[{t:"shu",p:[[652,904],[652,96]],bend:-0.21,w:0.80}]},
-"）":{u:0xFF09,sp:1,s:[{t:"shu",p:[[348,904],[348,96]],bend:0.21,w:0.80}]},
+"「":{u:0x300C,sp:1,s:[{t:"zhe",p:[[1058,862],[582,862],[582,428]],w:0.82,fr:0.35}]},
+"」":{u:0x300D,sp:1,s:[{t:"zhe",p:[[418,572],[418,138],[-58,138]],w:0.82,fr:0.35}]},
+"（":{u:0xFF08,sp:1,s:[{t:"shu",p:[[863,904],[863,96]],bend:-0.21,w:0.80}]},
+"）":{u:0xFF09,sp:1,s:[{t:"shu",p:[[137,904],[137,96]],bend:0.21,w:0.80}]},
   /* 補齊常用全形標點 —— 原本缺這十個 */
-  "『":{u:0x300E,sp:1,s:[{t:"zhe",p:[[856,862],[300,862],[300,428]],w:0.74,fr:0.32},
-                        {t:"zhe",p:[[856,700],[440,700],[440,428]],w:0.74,fr:0.32}]},
-  "』":{u:0x300F,sp:1,s:[{t:"zhe",p:[[700,572],[700,138],[144,138]],w:0.74,fr:0.32},
-                        {t:"zhe",p:[[560,572],[560,300],[144,300]],w:0.74,fr:0.32}]},
-  "〔":{u:0x3014,sp:1,s:[{t:"zhe",p:[[720,918],[430,918],[430,82]],w:0.80,fr:0.30},
-                        {t:"heng",p:[[430,82],[720,82]],w:0.80}]},
-  "〕":{u:0x3015,sp:1,s:[{t:"zhe",p:[[280,918],[570,918],[570,82]],w:0.80,fr:0.30},
-                        {t:"heng",p:[[570,82],[280,82]],w:0.80}]},
-  "【":{u:0x3010,sp:1,s:[{t:"zhe",p:[[736,918],[344,918],[344,82]],w:1.34,fr:0.22},
-                        {t:"heng",p:[[344,82],[736,82]],w:1.34},
-                        {t:"shu",p:[[598,842],[598,158]],w:0.70}]},
-  "】":{u:0x3011,sp:1,s:[{t:"zhe",p:[[264,918],[656,918],[656,82]],w:1.34,fr:0.22},
-                        {t:"heng",p:[[656,82],[264,82]],w:1.34},
-                        {t:"shu",p:[[402,842],[402,158]],w:0.70}]},
+  "『":{u:0x300E,sp:1,s:[{t:"zhe",p:[[1086,862],[530,862],[530,428]],w:0.74,fr:0.32},
+                        {t:"zhe",p:[[1086,700],[670,700],[670,428]],w:0.74,fr:0.32}]},
+  "』":{u:0x300F,sp:1,s:[{t:"zhe",p:[[470,572],[470,138],[-86,138]],w:0.74,fr:0.32},
+                        {t:"zhe",p:[[330,572],[330,300],[-86,300]],w:0.74,fr:0.32}]},
+  "〔":{u:0x3014,sp:1,s:[{t:"zhe",p:[[925,918],[635,918],[635,82]],w:0.80,fr:0.30},
+                        {t:"heng",p:[[635,82],[925,82]],w:0.80}]},
+  "〕":{u:0x3015,sp:1,s:[{t:"zhe",p:[[75,918],[365,918],[365,82]],w:0.80,fr:0.30},
+                        {t:"heng",p:[[365,82],[75,82]],w:0.80}]},
+  "【":{u:0x3010,sp:1,s:[{t:"zhe",p:[[1012,918],[620,918],[620,82]],w:1.34,fr:0.22},
+                        {t:"heng",p:[[620,82],[1012,82]],w:1.34},
+                        {t:"shu",p:[[874,842],[874,158]],w:0.70}]},
+  "】":{u:0x3011,sp:1,s:[{t:"zhe",p:[[-12,918],[380,918],[380,82]],w:1.34,fr:0.22},
+                        {t:"heng",p:[[380,82],[-12,82]],w:1.34},
+                        {t:"shu",p:[[126,842],[126,158]],w:0.70}]},
   "—":{u:0x2014,sp:1,s:[{t:"heng",p:[[40,500],[960,500]],w:0.92}]},
   "…":{u:0x2026,sp:1,s:[{t:"dot",p:[[196,196]],rk:1.06},
                         {t:"dot",p:[[500,196]],rk:1.06},
@@ -2500,6 +2509,8 @@ function vf_buildVariableFont(opt){
 /* 是否去重疊。匯出視窗的勾選框讀進來，預設開啟。
    宣告一定要在 toOtPath 與 cmdsOf 之前 —— let 有暫時性死區。 */
 let DEDUP_ON=true;
+/* 匯出時是否加直排支援（GSUB vert/vrt2 ＋ vmtx ＋ VORG）。 */
+let VERT_ON=true;
 let PC=null, PC_TRIED=false;
 function pcLib(){
   if(PC||PC_TRIED) return PC;
@@ -2556,6 +2567,188 @@ function dedupContours(contours, SUB, TOL){
   }
   return out.length?out:contours;
 }
+
+/* ==== 直排：GSUB(vert/vrt2) ＋ vmtx ＋ VORG，opentype.js 不輸出 GSUB ==== */
+/* ==========================================================================
+   直排支援：GSUB（vert / vrt2）＋ vmtx ＋ VORG
+   opentype.js 有 substitution.addSingle 這個 API，但 toArrayBuffer 根本不輸出
+   GSUB —— 驗過寫出來的檔案裡沒有這張表。所以自己寫。
+   結構比 gvar 單純：一個 Script（DFLT）＋兩個 Feature（vert/vrt2）
+   ＋一個 Lookup（type 1 single substitution, format 2）。
+   ========================================================================== */
+
+function vt_vtW(){
+  let b=new Uint8Array(4096), n=0;
+  const need=k=>{ if(n+k<=b.length) return;
+    let m=b.length; while(m<n+k) m*=2;
+    const t=new Uint8Array(m); t.set(b.subarray(0,n)); b=t; };
+  return {
+    u8:v=>{need(1); b[n++]=v&255;},
+    u16:v=>{need(2); b[n++]=(v>>8)&255; b[n++]=v&255;},
+    i16:v=>{need(2); v=v<0?v+65536:v; b[n++]=(v>>8)&255; b[n++]=v&255;},
+    u32:v=>{need(4); b[n++]=(v>>>24)&255; b[n++]=(v>>>16)&255; b[n++]=(v>>>8)&255; b[n++]=v&255;},
+    tag:s=>{need(4); for(let i=0;i<4;i++) b[n++]=s.charCodeAt(i);},
+    bytes:a=>{need(a.length); b.set(a,n); n+=a.length;},
+    get len(){return n;},
+    out:()=>b.slice(0,n)
+  };
+}
+
+/* pairs: [[fromGid, toGid], …]，會自己排序 */
+function vt_buildGSUBvert(pairs){
+  if(!pairs.length) return null;
+  const p=pairs.slice().sort((a,b)=>a[0]-b[0]);
+
+  /* --- Coverage format 1：明列所有來源 gid --- */
+  const cov=vt_vtW();
+  cov.u16(1); cov.u16(p.length);
+  for(const [a] of p) cov.u16(a);
+
+  /* --- SingleSubst format 2：逐一列出替換後的 gid --- */
+  const sub=vt_vtW();
+  sub.u16(2);                       /* format */
+  sub.u16(6+p.length*2);            /* coverageOffset：接在本表之後 */
+  sub.u16(p.length);
+  for(const [,b] of p) sub.u16(b);
+  sub.bytes(cov.out());
+
+  /* --- Lookup type 1 --- */
+  const lk=vt_vtW();
+  lk.u16(1);                        /* LookupType = single */
+  lk.u16(0);                        /* LookupFlag */
+  lk.u16(1);                        /* subTableCount */
+  lk.u16(8);                        /* subTableOffset */
+  lk.bytes(sub.out());
+
+  const lkList=vt_vtW();
+  lkList.u16(1);                    /* lookupCount */
+  lkList.u16(4);                    /* offset to Lookup[0] */
+  lkList.bytes(lk.out());
+
+  /* --- 兩個 Feature 共用同一個 Lookup --- */
+  const feat=vt_vtW();
+  const featHdr=2+2*(4+2);          /* count + 兩筆 record */
+  feat.u16(2);
+  feat.tag("vert"); feat.u16(featHdr);
+  feat.tag("vrt2"); feat.u16(featHdr+6);
+  /* FeatureTable：featureParams=0, lookupCount=1, lookupIndex=0 */
+  feat.u16(0); feat.u16(1); feat.u16(0);
+  feat.u16(0); feat.u16(1); feat.u16(0);
+
+  /* --- Script list --- 
+     ★ 只寫 DFLT 不夠：排版引擎（HarfBuzz、Illustrator）會用實際的文字系統
+     去查 feature，中文是 hani、日文假名是 kana。Noto 三個都掛，照做。 */
+  const SCRIPTS=["DFLT","hani","kana"];
+  const scrTbl=vt_vtW();
+  /* 每個 ScriptTable：defaultLangSysOffset(2) + langSysCount(2) + LangSysTable(8) = 12 bytes */
+  scrTbl.u16(4); scrTbl.u16(0);
+  scrTbl.u16(0); scrTbl.u16(0xFFFF); scrTbl.u16(2); scrTbl.u16(0); scrTbl.u16(1);
+  const one=scrTbl.out();
+  const scr=vt_vtW();
+  scr.u16(SCRIPTS.length);
+  const listHdr=2+SCRIPTS.length*6;
+  SCRIPTS.forEach((t,i)=>{ scr.tag(t); scr.u16(listHdr+i*one.length); });
+  for(let i=0;i<SCRIPTS.length;i++) scr.bytes(one);
+
+  const g=vt_vtW();
+  const hdr=10;
+  g.u32(0x00010000);
+  g.u16(hdr);                                   /* scriptListOffset */
+  g.u16(hdr+scr.len);                           /* featureListOffset */
+  g.u16(hdr+scr.len+feat.len);                  /* lookupListOffset */
+  g.bytes(scr.out()); g.bytes(feat.out()); g.bytes(lkList.out());
+  return g.out();
+}
+
+/* vmtx：每個 glyph 的直排前進高度與上側邊距 */
+function vt_buildVmtx(n, adv, tsb){
+  const w=vt_vtW();
+  for(let i=0;i<n;i++){ w.u16(adv); w.i16(tsb); }
+  return w.out();
+}
+function vt_buildVhea(n, asc, desc, adv){
+  const w=vt_vtW();
+  w.u32(0x00011000);       /* version 1.1 */
+  w.i16(asc); w.i16(desc); w.i16(0);
+  w.u16(adv);
+  w.i16(0); w.i16(0); w.i16(0);
+  w.i16(1); w.i16(0); w.i16(0);
+  w.i16(0); w.i16(0); w.i16(0); w.i16(0); w.i16(0);
+  w.u16(n);
+  return w.out();
+}
+/* VORG：直排原點的 y 座標 */
+function vt_buildVORG(y){
+  const w=vt_vtW();
+  w.u16(1); w.u16(0);
+  w.i16(y);
+  w.u16(0);                /* 沒有例外 */
+  return w.out();
+}
+
+/* 把上面幾張表塞進一個已經做好的 OTF/TTF（重建 table directory） */
+function vt_injectTables(buf, extra){
+  const b=new Uint8Array(buf);
+  const dv=new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const num=dv.getUint16(4);
+  const tabs=[];
+  for(let i=0;i<num;i++){
+    const p=12+i*16;
+    const tag=String.fromCharCode(b[p],b[p+1],b[p+2],b[p+3]);
+    const off=dv.getUint32(p+8), len=dv.getUint32(p+12);
+    tabs.push([tag, b.slice(off, off+len)]);
+  }
+  for(const [tag,data] of extra) if(data) tabs.push([tag,data]);
+  tabs.sort((a,b2)=>a[0]<b2[0]?-1:(a[0]>b2[0]?1:0));
+
+  const n2=tabs.length;
+  let sr=16; while(sr*2<=n2*16) sr*=2;
+  const out=vt_vtW();
+  const sfnt=dv.getUint32(0);
+  out.u32(sfnt); out.u16(n2); out.u16(sr);
+  out.u16(Math.log2(sr/16)); out.u16(n2*16-sr);
+  let off=12+n2*16;
+  const offs=[];
+  const sum=d=>{ let s=0; for(let i=0;i<d.length;i+=4){
+      s=(s+((((d[i]||0)<<24)|((d[i+1]||0)<<16)|((d[i+2]||0)<<8)|(d[i+3]||0))>>>0))>>>0; } return s>>>0; };
+  for(const [tag,data] of tabs){
+    offs.push(off);
+    out.tag(tag); out.u32(sum(data)); out.u32(off); out.u32(data.length);
+    off+=data.length+((4-(data.length&3))&3);
+  }
+  const total=off, res=new Uint8Array(total);
+  res.set(out.out(),0);
+  for(let i=0;i<tabs.length;i++) res.set(tabs[i][1], offs[i]);
+  /* head.checkSumAdjustment */
+  const hi=tabs.findIndex(t=>t[0]==="head");
+  if(hi>=0){
+    const adj=(0xB1B0AFBA - sum(res))>>>0, ho=offs[hi]+8;
+    res[ho]=(adj>>>24)&255; res[ho+1]=(adj>>>16)&255;
+    res[ho+2]=(adj>>>8)&255; res[ho+3]=adj&255;
+  }
+  return res;
+}
+
+/* ---------- 直排字形 ----------
+   實測 Noto Sans CJK 得到兩條規則（em=1000，字面中心 500,380）：
+     句讀（。、，）→ 繞中心旋轉 180°：(194,92) → (806,668)，實測 (803,665)
+     括號與長橫（「」（）〔〕【】…～）→ 繞中心順時針 90°：
+       （的中心 (824,380) → (500,56)，與 Noto 完全吻合
+   ★ GSUB 的 script 只寫 DFLT 沒有用：排版引擎會用實際文字系統去查，
+   中文是 hani、假名是 kana。Noto 三個都掛，我照做。 */
+const V_ROT180="。、，｡､";
+const V_ROT90 ="「」『』（）〔〕【】〈〉《》〖〗—…‥～ー";
+function vertMode(ch){ return V_ROT180.includes(ch)?180:(V_ROT90.includes(ch)?90:0); }
+function vertXform(cmds, mode){
+  const CX=500, CY=380;
+  const f = mode===180 ? (x,y)=>[2*CX-x, 2*CY-y]
+                       : (x,y)=>[CX+(y-CY), CY-(x-CX)];
+  return cmds.map(c=>{
+    if(c[0]==="Q"){ const a=f(c[1],c[2]), b=f(c[3],c[4]); return ["Q",a[0],a[1],b[0],b[1]]; }
+    const a=f(c[1],c[2]); return [c[0],a[0],a[1]];
+  });
+}
+
 
 function toOtPath(list){
   /* ★ 這裡也要去重疊。實裝測試、挑字匯出、部件預覽都是直接呼叫 toOtPath，
@@ -4242,8 +4435,11 @@ onmessage=function(e){
         else if(op===2){ p.quadraticCurveTo(a[k+1],a[k+2]+DESC,a[k+3],a[k+4]+DESC); k+=5; }
         else { p.close(); k+=1; }
       }
-      glyphs.push(new opentype.Glyph({name:"uni"+g.u.toString(16).toUpperCase(),
+      /* u<=0 代表無編碼字形（直排用），只給名字不給 unicode，
+         這樣它不會進 cmap，只會被 GSUB 的 vert 叫出來。 */
+      if(g.u>0) glyphs.push(new opentype.Glyph({name:"uni"+g.u.toString(16).toUpperCase(),
         unicode:g.u,advanceWidth:EM,path:p}));
+      else glyphs.push(new opentype.Glyph({name:"v"+(-g.u),advanceWidth:EM,path:p}));
     }
     var font=new opentype.Font({familyName:d.lat,styleName:d.styleEN,
       unitsPerEm:EM,ascender:d.asc,descender:DESC,glyphs:glyphs});
@@ -4321,12 +4517,37 @@ function cmdsOfF(id,NS,f){
   } return Float32Array.from(out);
 }
 async function buildFontBig(chars,NS,over){
-  const pack=[];
+  const pack=[]; const vertIdx=[];
   for(let i=0;i<chars.length;i++){
     const id=chars[i]; if(!G[id]||!G[id].u) continue;
     pack.push({u:G[id].u,cmds:(over?cmdsOfF(id,NS,over.f):cmdsOf(id,NS))});
+    vertIdx.push(vertMode(id) ? pack.length : 0);   /* 記下哪些字要直排字形 */
     if(i%150===0){ busy(true,undefined,"產生輪廓 "+i.toLocaleString()+" / "+chars.length.toLocaleString(),
                        i/chars.length*45); await yield_(); }
+  }
+  /* 直排字形：接在所有字之後，u 用負數表示「無編碼」。
+     glyph id = pack 的索引 +2（0=.notdef，1=space）。 */
+  const vpairs=[];
+  if(VERT_ON){
+    let vi=0;
+    for(let i=0;i<chars.length;i++){
+      const id=chars[i]; if(!G[id]||!G[id].u) continue;
+      const m=vertMode(id); if(!m) continue;
+      let cs=glyphContours(id,over?over.f:FA(),null,NS);
+      if(DEDUP_ON && cs.length>1) cs=dedupContours(cs);
+      const out=[];
+      for(const c of cs.map(x=>vertXform(x,m))){
+        for(const k of c){
+          if(k[0]==="M") out.push(0,k[1],k[2]);
+          else if(k[0]==="L") out.push(1,k[1],k[2]);
+          else out.push(2,k[1],k[2],k[3],k[4]);
+        }
+        out.push(3);
+      }
+      const fromGid = pack.findIndex(g=>g.u===G[id].u)+2;
+      pack.push({u:-(++vi), cmds:Float32Array.from(out)});
+      vpairs.push([fromGid, pack.length+1]);
+    }
   }
   busy(true,undefined,"編碼字型檔（背景執行，畫面不會卡）…",50);
   const styleTW=over?over.styleTW:(presetKey?PNAME[presetKey]:"Regular");
@@ -4337,7 +4558,20 @@ async function buildFontBig(chars,NS,over){
     let tick=50;
     const iv=setInterval(()=>{ tick=Math.min(96,tick+1.2); busy(true,undefined,undefined,tick); },400);
     w.onmessage=ev=>{ clearInterval(iv); w.terminate();
-      ev.data.ok ? res(ev.data.buf) : rej(new Error(ev.data.err)); };
+      if(!ev.data.ok){ rej(new Error(ev.data.err)); return; }
+      /* 直排表在這裡注入：worker 回傳的已經是完整的 OTF，
+         重建 table directory 加進 GSUB/vmtx/vhea/VORG 最單純。 */
+      try{
+        res((VERT_ON && vpairs.length)
+          ? vt_injectTables(new Uint8Array(ev.data.buf),[
+              ["GSUB", vt_buildGSUBvert(vpairs)],
+              ["vhea", vt_buildVhea(pack.length+2, EM/2, -EM/2, EM)],
+              ["vmtx", vt_buildVmtx(pack.length+2, EM, ASC)],
+              ["VORG", vt_buildVORG(ASC)]
+            ]).buffer
+          : ev.data.buf);
+      }catch(e){ res(ev.data.buf); }       /* 加不上去就給原本的，不讓匯出失敗 */
+    };
     w.onerror=er=>{ clearInterval(iv); w.terminate(); rej(new Error("Worker 失敗："+er.message)); };
     w.postMessage({glyphs:pack, em:EM, asc:ASC, desc:DESC,
       fam:(FAMILY||"").trim()||"方寸黑體", lat:asciiSafe(LATIN)||"FangcunHei",
@@ -5246,6 +5480,7 @@ async function famExport(){
   const fam=(FAMILY||"").trim()||"方寸黑體";
   const lat=asciiSafe(LATIN)||"FangcunHei";
   DEDUP_ON = !$("famDedup") || $("famDedup").checked;
+  VERT_ON  = !$("famVert")  || $("famVert").checked;
   $("fammodal").classList.remove("on");
 
   /* ---------- 可變字型：一個檔案，裝好之後直接拉字重滑桿 ---------- */
