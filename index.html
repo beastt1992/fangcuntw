@@ -1107,6 +1107,31 @@
     .scfoot>.scfoot-type .seg button,
     .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:6px 10px}
   }
+  /* ==========================================================================
+     手機：展開調整時仍然看得到字
+     原本面板是「佔版面高度」的一列 —— 一展開就把畫布那列（minmax(0,1fr)）
+     擠到接近 0，等於在看不見要調的字的情況下調字。
+     改成：面板跟畫布共用同一個格子、貼齊下緣 ——
+     它是浮在畫布上的，不佔任何版面高度，所以畫布與輸入框都還在。
+     再給畫布一段下留白，作品就會浮到面板上方那塊還看得見的區域。
+     ★ 這裡把五個子元素全部明確指定格位：只指定其中一個的話，
+       其餘靠自動排位的會被推到別的列去。
+     ========================================================================== */
+  @media(max-width:1099px){
+    #showcase.on{grid-template-rows:auto auto minmax(0,1fr) auto}
+    #showcase>#scPosterBar{grid-column:1;grid-row:1}
+    #showcase>#scColorBar{grid-column:1;grid-row:2}
+    #showcase>.scstagewrap{grid-column:1;grid-row:3}
+    #showcase>.scfoot{grid-column:1;grid-row:4}
+    #showcase>#scTypeBox{
+      grid-column:1;grid-row:3;align-self:end;z-index:6;
+      max-height:min(46vh,100%);overflow-y:auto;
+      border-top:1px solid var(--ink);
+      box-shadow:0 -12px 28px rgba(22,19,13,.18);
+    }
+    /* 面板展開時，畫布把可視區讓出來（class 由收合鈕切換） */
+    body.type-open .scstage{padding-bottom:46vh}
+  }
 </style>
 </head>
 <body>
@@ -6839,6 +6864,8 @@ if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
   b.classList.toggle("on",!off);
   b.setAttribute("aria-expanded",off?"false":"true");
   b.textContent = off ? "展開調整" : "收合調整";
+  /* 手機用這個 class 把畫布的可視區讓給浮起來的面板（見 body.type-open .scstage） */
+  document.body.classList.toggle("type-open", !off);
 });
 /* 手機／平板一進來先收起：這一區現在有三十幾個控制項再加二十一根軸，
    直接展開的話畫布只剩一小條。桌機維持展開（HTML 的預設狀態）。
@@ -6853,6 +6880,9 @@ try{
       btn.textContent="展開調整";
     }
   }
+  /* 初始狀態也要同步，不能只在按鈕上處理 —— 桌機一進來是展開的。 */
+  document.body.classList.toggle("type-open",
+    !!($("scTypeBox") && !$("scTypeBox").classList.contains("is-off")));
 }catch(e){}
 /* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
