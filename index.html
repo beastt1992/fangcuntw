@@ -924,12 +924,13 @@
 
 
   <section id="showcase">
-    <div class="scbar scbar-studio">
+    <div class="scbar scbar-studio" id="scPosterBar" hidden>
       <div class="g scposter-wrap"><label>範例模板</label>
         <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
         <div class="posterthumbs" id="scPoster"></div></div>
       <div class="scactions">
+        <button class="btn ghost sm" id="scPosterToggle" type="button">範例海報</button>
         <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
         <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
         <button class="btn ghost sm" id="scMore" type="button" aria-expanded="false">控制面板</button>
@@ -6324,7 +6325,20 @@ function scBuildPosterThumbs(){
     '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
 }
 scBuildPosterThumbs();
-$("scPoster").addEventListener("click",e=>{const b=e.target.closest("button[data-poster]");if(!b)return;scApplyPoster(b.dataset.poster);});
+/* 範例海報列預設收起 —— 它常駐在畫布上方會一直吃掉展示空間。
+   需要時用按鈕叫出來，套用完自動收回去，畫面留給作品本身。 */
+if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
+  const bar=$("scPosterBar"); if(!bar) return;
+  bar.hidden=!bar.hidden;
+  $("scPosterToggle").classList.toggle("on",!bar.hidden);
+});
+$("scPoster").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-poster]"); if(!b) return;
+  scApplyPoster(b.dataset.poster);
+  /* 套用完就收起來，把畫面還給作品 */
+  const bar=$("scPosterBar");
+  if(bar){ bar.hidden=true; if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
+});
 
 let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
 function scState(){
@@ -7238,7 +7252,9 @@ addEventListener("resize",()=>{
 });
 
 /* ---- 分頁切換 ---- */
-let MODE="work";
+/* 一進來就是展示畫面 —— 這是大部分時候真正在用的頁面，
+   工作台是要改字才進去的。實際切換在下面 setMode 定義好之後才呼叫。 */
+let MODE="show";
 function setMode(m){
   MODE=m;
   /* 「對照」是把原樣的輪廓疊在工作台大圖上，展示頁沒有那個疊圖，
@@ -7310,6 +7326,12 @@ addEventListener("beforeinstallprompt",e=>{
     deferredInstall=null; b.style.display="none";
   });
 }
+
+/* 開機切到展示模式（setMode 已定義） */
+try{ setMode("show");
+  document.querySelectorAll("#modes button[data-m]").forEach(x=>x.classList.toggle("on",x.dataset.m==="show"));
+}catch(e){}
+
 </script>
 </body>
 </html>
