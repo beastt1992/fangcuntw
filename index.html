@@ -982,6 +982,12 @@
     max-height:42vh;overflow-y:auto}
   .sctypebox.is-off{display:none}
   .sctypepanel .sclay{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 16px}
+  /* 展開盒的軸分組小標：橫貫整列的細線＋中文加英文小字，跟其他區塊的 h4 同一套語彙 */
+  .sctypegroup{grid-column:1/-1;font-size:11px;letter-spacing:.06em;color:var(--ink);
+    border-bottom:1px solid var(--line-2);padding:9px 0 4px;margin-top:3px}
+  .sctypegroup:first-child{margin-top:0}
+  .sctypegroup em{font-style:normal;font-family:var(--mono);font-size:8.5px;
+    letter-spacing:.18em;color:var(--muted);margin-left:6px}
   #scTypeMore.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 </style>
 </head>
@@ -1180,12 +1186,8 @@
     <!-- 字型軸整組：從左側搬下來收在底部，按「更多字型軸」展開。
          這是調字的工具，字型是主要操作，該在手邊而不是側欄裡。 -->
     <div class="sctypebox is-off" id="scTypeBox"><div class="sctypepanel">
-        <div class="sclay">
-          <div class="sclay-g"><label>字重</label>
-            <input type="range" id="scWt2" min="34" max="150" step="1" value="80"><b id="scWtV2">80</b></div>
-          <div class="sclay-g"><label>圓角</label>
-            <input type="range" id="scRd2" min="0" max="1" step="0.02" value="0.18"><b id="scRdV2">0.18</b></div>
-        </div>
+        <!-- 字重／圓角的複本列拿掉了：底部常駐列已經有這兩根，
+             同畫面兩組數字只會讓人搞不清楚哪個是真的。 -->
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
             <div class="seg" id="scPreset"></div>
@@ -5285,13 +5287,30 @@ function drawSpec(){
   s.scrollLeft=0;
 }
 
-/* 展示頁「更多」設計軸：字重和圓角維持原位不動，其餘十四根放進可收合區。
-   跟工作台共用同一張 AXES 表，以後加軸不用改兩個地方。 */
-const SCMORE_SKIP=new Set(["weight","round"]);
+/* 展示頁「更多」設計軸：六根常駐軸（字重/對比/圓角/字面率/中宮/出鋒）都在底部列上，
+   展開盒只放「其餘」的軸 —— 不再有任何軸同畫面出現兩次。
+   跟工作台共用同一張 AXES 表，以後加軸不用改兩個地方（沒歸組的會自動落到「其他」）。 */
+const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]);
+/* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
+const SCAX_GROUPS=[
+  {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
+  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap"]},
+  {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
+  {t:"內白",en:"COUNTER", ks:["cmin"]}
+];
 function buildShowAxes(){
   const grid=$("scGrid"); if(!grid||grid.childElementCount) return;
-  for(const a of AXES){
-    if(SCMORE_SKIP.has(a.k)) continue;
+  const byK={}; for(const a of AXES) byK[a.k]=a;
+  const covered=new Set(); for(const g of SCAX_GROUPS) for(const k of g.ks) covered.add(k);
+  const rest=AXES.filter(a=>!covered.has(a.k)&&!SCMORE_SKIP.has(a.k)).map(a=>a.k);
+  const groups=rest.length? SCAX_GROUPS.concat([{t:"其他",en:"MISC",ks:rest}]) : SCAX_GROUPS;
+  for(const g of groups){
+    const rows=g.ks.map(k=>byK[k]).filter(a=>a&&!SCMORE_SKIP.has(a.k));
+    if(!rows.length) continue;
+    const h=document.createElement("div"); h.className="sctypegroup";
+    h.innerHTML=g.t+" <em>"+g.en+"</em>";
+    grid.appendChild(h);
+    for(const a of rows){
     const row=document.createElement("div"); row.className="scmore-ax";
     const lb=document.createElement("label"); lb.textContent=a.n; row.appendChild(lb);
     const r=document.createElement("input");
@@ -5311,6 +5330,7 @@ function buildShowAxes(){
       scDraw(); scheduleSlow(); saveLocal();
     });
     grid.appendChild(row);
+    }
   }
 }
 function syncShowAxes(){
@@ -5318,8 +5338,8 @@ function syncShowAxes(){
   if(window.scSyncAxisBar) try{ window.scSyncAxisBar(); }catch(e){}
 
   scBuildPresets();
-  if($("scWt")) $("scWt").value=F.weight;
-  if($("scRd")) $("scRd").value=F.round;
+  /* 六根常駐軸的值與數字統一由 scSyncAxisBar 管（含單字模式的合併值），
+     這裡不要再直接寫 scWt/scRd，會把剛同步好的值蓋回全域。 */
   buildShowAxes();
   const src=(scAxMode&&scAxKey)? {...F,...(scAxOvr[scAxKey]||{})} : F;
   for(const a of AXES){
@@ -6412,13 +6432,21 @@ if($("scStage")) $("scStage").addEventListener("wheel",e=>{
 },{passive:false});
 $("scTxt").addEventListener("input",()=>{scOvr={};scSelKey=null;scFitInput();scDraw();saveLocal();});
 $("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
-$("scWt").addEventListener("input",e=>{F.weight=+e.target.value;scDraw();});
+$("scWt").addEventListener("input",e=>{const val=+e.target.value;
+  if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).weight=val;
+    scAxLabel(); scDraw(); saveLocal(); return; }               /* 單字模式：只改這個字 */
+  F.weight=val;scDraw();});
 $("scWt").addEventListener("change",()=>{scheduleSlow();saveLocal();});
-$("scRd").addEventListener("input",e=>{F.round=+e.target.value;scDraw();});
+$("scRd").addEventListener("input",e=>{const val=+e.target.value;
+  if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).round=val;
+    scAxLabel(); scDraw(); saveLocal(); return; }
+  F.round=val;scDraw();});
 $("scRd").addEventListener("change",()=>{scheduleSlow();saveLocal();});
 
 /* 底部常駐字型軸：其餘四根接上引擎，並把數字同步顯示。
-   格式跟上面兩根一致 —— input 即時重畫、change 才存檔與跑慢速工作。 */
+   格式跟上面兩根一致 —— input 即時重畫、change 才存檔與跑慢速工作。
+   單字模式下六根都改成只寫進選中字的 override（跟展開盒的軸同一套規則），
+   不然同一個模式下，底部列改全域、展開盒改單字，作用範圍不一致又看不出來。 */
 (function(){
   const rows=[["scWt","weight","scWtB",v=>String(Math.round(v))],
               ["scCt","contrast","scCtB",v=>(+v).toFixed(2)],
@@ -6432,18 +6460,25 @@ $("scRd").addEventListener("change",()=>{scheduleSlow();saveLocal();});
     const show=()=>{ if(b) b.textContent=fmt(el2.value); };
     /* 字重與圓角的引擎連動上面已經接過，這裡只補數字；其餘四根要自己接。 */
     if(id!=="scWt" && id!=="scRd"){
-      el2.addEventListener("input",e=>{ F[key]=+e.target.value; show(); scDraw(); });
+      el2.addEventListener("input",e=>{ const val=+e.target.value;
+        if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={}))[key]=val;
+          show(); scAxLabel(); scDraw(); saveLocal(); return; }
+        F[key]=val; show(); scDraw(); });
       el2.addEventListener("change",()=>{ scheduleSlow(); saveLocal(); });
     }else{
       el2.addEventListener("input",show);
     }
     show();
   }
-  /* 換預設風格或載入存檔之後，滑桿要跟著跳到新值 */
-  const sync=()=>{ for(const [id,key,badge,fmt] of rows){
+  /* 換預設風格、載入存檔、或單字模式下點選另一個字之後，滑桿要跟著跳到新值。
+     單字模式選中字時顯示該字的合併值（全域＋override）。
+     try 包住：載入初期 scAxMode 還沒宣告時直接退回全域值。 */
+  const sync=()=>{ let src=F;
+    try{ if(scAxMode&&scAxKey) src={...F,...(scAxOvr[scAxKey]||{})}; }catch(e){}
+    for(const [id,key,badge,fmt] of rows){
     const el3=$(id); if(!el3) continue;
-    el3.value=F[key];
-    const b=$(badge); if(b) b.textContent=fmt(F[key]);
+    el3.value=src[key];
+    const b=$(badge); if(b) b.textContent=fmt(src[key]);
   }};
   window.scSyncAxisBar=sync;
 })();
@@ -6631,24 +6666,7 @@ if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
   const off=box.classList.toggle("is-off");
   $("scTypeMore").classList.toggle("on",!off);
 });
-/* 字型分頁裡的字重／圓角，跟底部那組雙向連動 ——
-   兩處顯示同一個值，改哪邊都要即時反映到另一邊，不然使用者會看到兩個不同的數字。 */
-(function(){
-  const pairs=[["scWt","scWt2","scWtV2",v=>(+v).toFixed(0)],
-               ["scRd","scRd2","scRdV2",v=>(+v).toFixed(2)]];
-  for(const [srcId,dupId,valId,fmt] of pairs){
-    const src=$(srcId), dup=$(dupId), val=$(valId);
-    if(!src||!dup) continue;
-    const push=()=>{ dup.value=src.value; if(val) val.textContent=fmt(src.value); };
-    push();
-    src.addEventListener("input",push);
-    dup.addEventListener("input",()=>{
-      src.value=dup.value;
-      if(val) val.textContent=fmt(dup.value);
-      src.dispatchEvent(new Event("input",{bubbles:true}));
-    });
-  }
-})();
+/* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
 (function(){
   const isNarrow=()=>matchMedia("(max-width:1099px)").matches;
