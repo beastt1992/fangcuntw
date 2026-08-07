@@ -2497,6 +2497,9 @@ function vf_buildVariableFont(opt){
    個不合格），所以改用 polygon-clipping（MIT）。以 skia 為標準答案驗過
    26/26 合格、平均 IoU 0.9982。
    ========================================================================== */
+/* 是否去重疊。匯出視窗的勾選框讀進來，預設開啟。
+   宣告一定要在 toOtPath 與 cmdsOf 之前 —— let 有暫時性死區。 */
+let DEDUP_ON=true;
 let PC=null, PC_TRIED=false;
 function pcLib(){
   if(PC||PC_TRIED) return PC;
@@ -2555,6 +2558,10 @@ function dedupContours(contours, SUB, TOL){
 }
 
 function toOtPath(list){
+  /* ★ 這裡也要去重疊。實裝測試、挑字匯出、部件預覽都是直接呼叫 toOtPath，
+     不經過 cmdsOf —— 只在匯出那條路徑去重疊的話，app 裡看到的還是有白縫的版本。
+     實測每字 1.2ms，樣張十來個字完全無感。 */
+  if(DEDUP_ON && list && list.length>1) list=dedupContours(list);
   const path=new opentype.Path();
   for(const cmds of list){
     for(const c of cmds){
@@ -4286,8 +4293,6 @@ function getWorker(){
   }
   return new Worker(WORKER_URL);
 }
-/* 匯出時是否去重疊。UI 的勾選框讀進來，預設開啟。 */
-let DEDUP_ON=true;
 function cmdsOf(id,NS){
   const out=[];
   let cs=glyphContours(id,FA(),null,NS);
