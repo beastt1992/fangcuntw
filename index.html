@@ -783,7 +783,11 @@
      再加一道邊線與陰影把紙托出來。
      ========================================================================== */
   /* 展示模式的外層容器也吃 --sbg，只改 .scstage 的話外層還是會透出來 */
-  #showcase,.scstage{background:#6f6a62 !important}
+  /* 只有畫布「周圍」該是工作區灰 —— 我原本連 #showcase 整個區域
+     （含左工具列、底部文字列）都塗灰，整片變灰褐色就是「霧霧的」。
+     #showcase 回到 app 的紙色，灰只留在 .scstage。 */
+  #showcase{background:var(--paper,#f5f2e9) !important}
+  .scstage{background:#6f6a62 !important}
   /* 透明底的棋盤格原本畫在工作區上 —— 那是錯的層：
      它要表達的是「這張紙是透明的」，所以格紋屬於紙張，不屬於工作區。 */
   .scstage.transparent-bg{background-color:#6f6a62 !important;background-image:none !important}
@@ -1044,7 +1048,7 @@
         </div>
       </div>
 
-      <div class="scstudio-panel" data-panel="text">
+      <div class="scstudio-panel on" data-panel="text">
         <div class="scstudio-sub">版面</div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
@@ -1084,7 +1088,7 @@
         <div class="scmore-in" id="scGrid"></div>
       </div>
 
-      <div class="scstudio-panel" data-panel="text">
+      <div class="scstudio-panel on" data-panel="text">
         <div class="scstudio-sub">顏色</div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>上色</label><div class="seg wrapseg" id="scColor">
