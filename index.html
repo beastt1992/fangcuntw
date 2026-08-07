@@ -2147,7 +2147,7 @@ function svgD(cmds){
   }
   return d+" Z";
 }
-/* ==== 可變字型寫表器（opentype.js 不支援，glyf/loca/gvar/fvar 自己寫）==== */
+/* ==== 可變字型寫表器（opentype.js 不支援，glyf/loca/gvar/fvar/STAT 自己寫）==== */
 /* ==========================================================================
    純 JS 的 TrueType 可變字型寫表器
    opentype.js 不支援可變字型，所以 glyf / loca / gvar / fvar 要自己寫。
@@ -2287,6 +2287,40 @@ function vf_gvarGlyph(base, others, axisCount){
   return out;
 }
 
+
+/* STAT（Style Attributes）：可變字型的樣式描述表。
+   OpenType 1.8 之後要求可變字型要有它；macOS 與 Adobe 靠它決定
+   字型選單怎麼分組、哪個名字要省略。結構是平的，沒有 coverage/lookup。 */
+function vf_buildSTAT(axes, values, elidedNameID){
+  const w=vf_W();
+  const axisCount=axes.length, valueCount=values.length;
+  const designAxisSize=8;
+  const hdr=20;
+  const axesOff=hdr;
+  const offArrOff=axesOff+axisCount*designAxisSize;
+  const valuesOff=offArrOff+valueCount*2;
+  w.u16(1); w.u16(2);                       /* version 1.2 */
+  w.u16(designAxisSize); w.u16(axisCount);
+  w.u32(axesOff);
+  w.u16(valueCount);
+  w.u32(offArrOff);
+  w.u16(elidedNameID);
+  /* AxisRecord[] */
+  axes.forEach((a,i)=>{ w.tag(a.tag); w.u16(a.nameID); w.u16(i); });
+  /* offsets（相對 offArrOff） */
+  const each=12;                            /* format 1 的大小 */
+  for(let i=0;i<valueCount;i++) w.u16((valuesOff-offArrOff)+i*each);
+  /* AxisValue format 1：一個軸值對一個名字 */
+  for(const v of values){
+    w.u16(1);                               /* format */
+    w.u16(v.axisIndex);
+    w.u16(v.flags||0);
+    w.u16(v.nameID);
+    w.u32(Math.round(v.value*65536));
+  }
+  return w.out();
+}
+
 function vf_tableRecord(w, tag, data){ return {tag, data}; }
 
 function vf_checksum(d){
@@ -2351,16 +2385,24 @@ function vf_buildVariableFont(opt){
   for(const o of gvarOff) gvarW.u32(o);
   for(const d of gvarData) gvarW.bytes(d);
 
-  /* --- fvar --- */
+  /* --- fvar ---
+     ★ instanceCount 一定要填：0 的話，Illustrator／Word 的字重選單是空的，
+     使用者只能自己拖滑桿，看不到「細體／標準／粗體」這些名字。 */
+  const inst = opt.instances || [];
+  const instSize = axisCount*4 + 4;
   const fv=vf_W();
   fv.u16(1); fv.u16(0);
   fv.u16(16); fv.u16(2);
   fv.u16(axisCount); fv.u16(20);
-  fv.u16(0); fv.u16(2);
+  fv.u16(inst.length); fv.u16(instSize);
   for(const a of axes){
     fv.tag(a.tag);
     fv.u32(Math.round(a.min*65536)); fv.u32(Math.round(a.def*65536)); fv.u32(Math.round(a.max*65536));
     fv.u16(0); fv.u16(a.nameID);
+  }
+  for(const it of inst){
+    fv.u16(it.nameID); fv.u16(0);                 /* subfamilyNameID, flags */
+    for(const c of it.coords) fv.u32(Math.round(c*65536));
   }
 
   /* --- cmap：format 4 合併範圍 ＋ format 12 --- */
@@ -2397,6 +2439,7 @@ function vf_buildVariableFont(opt){
   const names=[[1,family],[2,"Regular"],[3,psName+";FANGCUN"],[4,family],[6,psName],
                [16,family],[17,"Regular"]];
   for(const a of axes) names.push([a.nameID, a.name]);
+  for(const [id,txt] of (opt.extraNames||[])) names.push([id, txt]);
   const nameW=vf_W();
   nameW.u16(0); nameW.u16(names.length*2); nameW.u16(6+names.length*2*12);
   const strs=[]; let so=0;
@@ -2465,11 +2508,13 @@ function vf_buildVariableFont(opt){
   post.u32(0); post.u32(0); post.u32(0); post.u32(0); post.u32(0);
 
   /* --- 組表 --- */
+  const statTbl = (opt.statValues && opt.statValues.length)
+    ? vf_buildSTAT(axes, opt.statValues, opt.elidedNameID||2) : null;
   const tabs=[
     ["OS/2",os2.out()],["cmap",cm.out()],["fvar",fv.out()],["glyf",glyf.out()],
     ["gvar",gvarW.out()],["head",head.out()],["hhea",hhea.out()],["hmtx",hmtx.out()],
     ["loca",locaW.out()],["maxp",maxp.out()],["name",nameW.out()],["post",post.out()]
-  ].sort((a,b)=>a[0]<b[0]?-1:1);
+  ].concat(statTbl?[["STAT",statTbl]]:[]).sort((a,b)=>a[0]<b[0]?-1:1);
   const num=tabs.length;
   let sr2=16; while(sr2*2<=num*16) sr2*=2;
   const dir=vf_W();
@@ -2492,80 +2537,6 @@ function vf_buildVariableFont(opt){
   const ho=offs[headIdx]+8;
   buf[ho]=(adj>>>24)&255; buf[ho+1]=(adj>>>16)&255; buf[ho+2]=(adj>>>8)&255; buf[ho+3]=adj&255;
   return buf;
-}
-
-
-
-
-/* ==========================================================================
-   去重疊（布林聯集）
-   為什麼要做：Illustrator 與瀏覽器是「逐輪廓算覆蓋率再合成」，重疊處的
-   交界會算出一條較亮的線 —— 就是筆畫交接處的白縫。Word/DirectWrite 是
-   整個字一次掃描填色，所以不受影響。A/B 測試字型已確認：去重疊後縫消失。
-   自己手寫的掃描線版本在「筆畫共邊／端點相接」的字上會算錯（26 字有 10
-   個不合格），所以改用 polygon-clipping（MIT）。以 skia 為標準答案驗過
-   26/26 合格、平均 IoU 0.9982。
-   ========================================================================== */
-/* 是否去重疊。匯出視窗的勾選框讀進來，預設開啟。
-   宣告一定要在 toOtPath 與 cmdsOf 之前 —— let 有暫時性死區。 */
-let DEDUP_ON=true;
-/* 匯出時是否加直排支援（GSUB vert/vrt2 ＋ vmtx ＋ VORG）。 */
-let VERT_ON=true;
-let PC=null, PC_TRIED=false;
-function pcLib(){
-  if(PC||PC_TRIED) return PC;
-  PC_TRIED=true;
-  try{
-    const el=document.getElementById("pcsrc");
-    if(!el) return null;
-    const w={};
-    /* UMD：在有 module/exports 時會走 CommonJS 分支，所以要遮掉 */
-    PC=new Function("window","self","globalThis",
-      "var module=undefined,exports=undefined,define=undefined;"+el.textContent+
-      ";return window.polygonClipping||self.polygonClipping;")(w,w,w) || null;
-  }catch(e){ PC=null; }
-  return PC;
-}
-function pcFlatten(cmds,SUB){
-  const pts=[]; let cur=null;
-  for(const c of cmds){
-    if(c[0]==="M"||c[0]==="L"){ cur=[c[1],c[2]]; pts.push(cur); }
-    else{ const a=cur,cx=c[1],cy=c[2],b=[c[3],c[4]];
-      for(let i=1;i<=SUB;i++){ const t=i/SUB,u=1-t;
-        pts.push([u*u*a[0]+2*u*t*cx+t*t*b[0], u*u*a[1]+2*u*t*cy+t*t*b[1]]); }
-      cur=b; } }
-  const f=pts[0];
-  if(!f) return pts;
-  const L=pts[pts.length-1];
-  if(Math.abs(L[0]-f[0])>1e-9||Math.abs(L[1]-f[1])>1e-9) pts.push([f[0],f[1]]);
-  return pts;
-}
-/* 輸入輪廓陣列，回傳去重疊後的輪廓陣列。失敗時原樣回傳，絕不讓字消失。 */
-function dedupContours(contours, SUB, TOL){
-  const pc=pcLib();
-  if(!pc||!contours||contours.length<2) return contours;
-  SUB=SUB||4; TOL=(TOL==null)?1.2:TOL;
-  let res;
-  try{
-    const rings=contours.map(c=>[pcFlatten(c,SUB)]).filter(r=>r[0].length>=4);
-    if(rings.length<2) return contours;
-    res=pc.union(rings[0], ...rings.slice(1));
-  }catch(e){ return contours; }
-  const out=[];
-  for(const poly of res) for(const ring of poly){
-    let p=ring.slice();
-    if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
-                  && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
-    if(p.length<3) continue;
-    const q=TOL>0 ? rdp(p.concat([p[0]]),TOL) : p.concat([p[0]]);
-    if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
-                  && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
-    if(q.length<3) continue;
-    const cmds=[["M",q[0][0],q[0][1]]];
-    for(let i=1;i<q.length;i++) cmds.push(["L",q[i][0],q[i][1]]);
-    out.push(cmds);
-  }
-  return out.length?out:contours;
 }
 
 /* ==== 直排：GSUB(vert/vrt2) ＋ vmtx ＋ VORG，opentype.js 不輸出 GSUB ==== */
@@ -5454,12 +5425,23 @@ async function famExportVar(picked, ids, fam, lat){
     }
     busy(true,"可變字型","組合 gvar…",88);
     await yield_();
+    /* 命名實例與 STAT：沒有的話 Illustrator／Word 的字重選單是空的，
+       使用者只能自己拖滑桿，看不到「細體／標準／粗體」這些名字。 */
+    const extraNames=[[256,"Weight"]], instances=[], statValues=[];
+    sorted.forEach((st,i)=>{
+      const nid=257+i;
+      extraNames.push([nid, st.k]);
+      instances.push({nameID:nid, coords:[st.w]});
+      statValues.push({axisIndex:0, nameID:nid, value:st.w,
+                       flags: st.w===400 ? 2 : 0});   /* 2 = ELIDABLE，標準不重複顯示 */
+    });
     const buf=vf_buildVariableFont({
       masters,
       axes:[{tag:"wght",name:"Weight",min:minW,def:defW,max:maxW,nameID:256}],
       chars:ids.map(id=>({ch:id,unicode:G[id].u})),
       family:fam, psName:(lat||"Fangcun")+"-VF",
-      EM:EM, ASC:ASC, DESC:DESC
+      EM:EM, ASC:ASC, DESC:DESC,
+      instances, statValues, extraNames, elidedNameID:2
     });
     busy(false);
     download(new Blob([buf],{type:"font/ttf"}), lat+"-Variable.ttf");
