@@ -3184,6 +3184,268 @@ function csToCmds(res){
   return out;
 }
 /* cs 由呼叫端傳進來（glyphContours 已經算好了），不要在這裡重算 —— 會無限遞迴。 */
+
+/* v61：Local Medial Ribbon --------------------------------------------------
+   舊的內白保護用「整筆首尾方向 + 一條矩形 band」。遇到兩筆斜率不同、弧線、
+   漸開／漸收時，矩形一定會在端點或轉折切出不自然的缺口。
+
+   新版改成：
+     1. 沿兩筆的實際骨架取樣，找彼此面對、方向大致一致的最近點。
+     2. 用「基準字重的外框白距離」當 referenceGap；原本相交就不人工切開。
+     3. referenceGap → targetGap 用非線性飽和曲線；cmin 是最大保護，不是固定寬。
+     4. 每一對局部最近點算角平分切線（local tangent bisector）與中點，形成 medial curve。
+     5. 沿 medial curve 建 variable-width ribbon；兩側折點用 quadratic fillet 近似圓順。
+     6. 開放端沿 medial tangent 延伸到字外；封閉端用圓帽收掉。
+     7. 中間若有第三筆穿過，局部配對直接斷開；布林前再扣第三筆當第二層保險。
+
+   這樣「手」的相鄰橫畫可以保持分離；「多」原本很窄的白又不會被硬撐成 cmin。 */
+function csStrokeSamples(st,f,N){
+  if(!st || !st.p || st.p.length<2) return [];
+  const {hw}=widths(f);
+  const fillet=((st.kage&&st.t==="zhe")
+    ? hw*(0.035+0.28*f.round)*(st.fr||1)
+    : hw*(0.10+0.62*f.round)*(st.fr||1)) * (1+(f.inflate||0)*1.6);
+  try{
+    const base=sampleSkeleton(st.p,st.bend||0,fillet,N||24,st.cv,st.kj);
+    const tail=appendKageTail(base,st,f,st.ws||1);
+    const S=(tail&&tail.s)||base, n=Math.max(1,S.length-1);
+    return S.map((q,k)=>({p:q.p,t:q.t,u:k/n}));
+  }catch(e){ return []; }
+}
+function csCounterTarget(referenceGap,maxGap,tau){
+  if(!(referenceGap>0) || !(maxGap>0)) return 0;
+  /* 沒有 20% 起步，也不是線性比例：
+     小縫近似保留原本尺度；中等縫開始壓縮；大縫漸近 maxGap。 */
+  const sat=maxGap*(1-Math.exp(-referenceGap/Math.max(8,tau)));
+  return Math.max(0,Math.min(referenceGap,sat,maxGap));
+}
+function csApproxInkStroke(st,S,f,px,py,pad){
+  if(!S||!S.length) return false;
+  let bi=0,bd=Infinity;
+  for(let q=0;q<S.length;q++){
+    const dx=px-S[q].p[0],dy=py-S[q].p[1],d=dx*dx+dy*dy;
+    if(d<bd){bd=d;bi=q;}
+  }
+  const q=S[bi];
+  let w=(q.cw||0)/2;
+  if(!(w>0)){
+    try{ w=widthAt(st,q.u,q.t,f)*(st.ws||1)/2; }catch(e){ w=Math.max(widths(f).hw,widths(f).sw)/2; }
+  }
+  const r=w+(pad||0);
+  return bd<=r*r;
+}
+function csConnectorBlocked(marked,samples,f,i,j,A,B){
+  /* 非相鄰的兩條平行筆中間如果還夾著第三筆，不應該跨過它造一條大白帶。
+     同樣地，T 字／交叉筆在中間時也直接把 medial run 斷開。 */
+  for(const u of [0.34,0.50,0.66]){
+    const px=A[0]+(B[0]-A[0])*u, py=A[1]+(B[1]-A[1])*u;
+    for(let k=0;k<marked.length;k++){
+      if(k===i||k===j) continue;
+      if(csApproxInkStroke(marked[k],samples[k],f,px,py,3)) return true;
+    }
+  }
+  return false;
+}
+function csPairMedialRuns(marked,samples,i,j,f,rf,minGap,tau){
+  const A=samples[i],B=samples[j];
+  if(A.length<2||B.length<2) return [];
+  const stA=marked[i],stB=marked[j];
+  const cosMin=Math.cos(48*Math.PI/180);       /* 可容許兩側斜率不同，不再卡死 12° */
+  const maxCenter=Math.max(260,minGap*4+Math.max(widths(f).hw,widths(f).sw)*1.7);
+  const matches=[];
+
+  for(let ai=0;ai<A.length;ai++){
+    const a=A[ai], ua=unit(a.t); if(len(ua)<0.5) continue;
+    const cand=[];
+    for(let bj=0;bj<B.length;bj++){
+      const b=B[bj], ub0=unit(b.t); if(len(ub0)<0.5) continue;
+      const rawDot=ua[0]*ub0[0]+ua[1]*ub0[1];
+      const align=Math.abs(rawDot); if(align<cosMin) continue;
+      const dx=b.p[0]-a.p[0],dy=b.p[1]-a.p[1],d=Math.hypot(dx,dy);
+      if(d<4||d>maxCenter) continue;
+      const vx=dx/d,vy=dy/d;
+      /* 最近點的連線應大致垂直於兩邊切線；否則多半只是端點擦過。 */
+      if(Math.abs(ua[0]*vx+ua[1]*vy)>0.58) continue;
+      if(Math.abs(ub0[0]*vx+ub0[1]*vy)>0.58) continue;
+
+      const rwa=a.rw||0,rwb=b.rw||0,cwa=a.cw||0,cwb=b.cw||0;
+      if(!(rwa>0&&rwb>0&&cwa>0&&cwb>0)) continue;
+      const referenceGap=d-(rwa+rwb)/2;
+      if(referenceGap<=0.75) continue;          /* 原本相交／接觸：不要硬切開 */
+      const target=csCounterTarget(referenceGap,minGap,tau);
+      if(target<0.8) continue;
+      const currentGap=d-(cwa+cwb)/2;
+      if(currentGap>target+12) continue;        /* 已經很寬，不需要進 ribbon */
+
+      const ub=rawDot<0?[-ub0[0],-ub0[1]]:ub0;
+      let mt=unit([ua[0]+ub[0],ua[1]+ub[1]]);
+      if(len(mt)<0.5) mt=ua;
+      let nx=-mt[1],ny=mt[0];
+      if(nx*vx+ny*vy<0){nx=-nx;ny=-ny;}
+
+      /* 中心不是單純兩骨架 midpoint：筆寬不同時，要落在兩個「面對面的外框」中間。 */
+      const along=d/2+(cwa-cwb)/4;
+      const mid=[a.p[0]+vx*along,a.p[1]+vy*along];
+      const score=d*(1+0.28*(1-align)) + Math.abs(currentGap-target)*0.08;
+      cand.push({i:ai,j:bj,mid,t:mt,n:[nx,ny],target,referenceGap,currentGap,
+                 need:currentGap<target-0.8,same:rawDot>=0,score,a:a.p,b:b.p});
+    }
+    /* blocker 檢查是昂貴的；先挑幾個幾何上最合理的候選，再檢查第三筆，
+       不要在 A×B 的每一組配對裡掃完整字的所有筆畫。 */
+    cand.sort((x,y)=>x.score-y.score);
+    let best=null;
+    for(let q=0;q<Math.min(4,cand.length);q++){
+      const c=cand[q];
+      if(!csConnectorBlocked(marked,samples,f,i,j,c.a,c.b)){ best=c; break; }
+    }
+    if(best){ delete best.a; delete best.b; matches.push(best); }
+  }
+  if(matches.length<3||!matches.some(m=>m.need)) return [];
+
+  /* B 可能跟 A 反向畫；映射到同方向後才做 monotonic run。 */
+  let vote=0; for(const m of matches) vote+=m.same?1:-1;
+  const sameDir=vote>=0;
+  for(const m of matches) m.jm=sameDir?m.j:(B.length-1-m.j);
+
+  const runs=[]; let cur=[];
+  const flush=()=>{
+    if(cur.length>=3 && cur.some(m=>m.need)){
+      let L=0; for(let k=1;k<cur.length;k++) L+=dist(cur[k-1].mid,cur[k].mid);
+      const spanA=cur[cur.length-1].i-cur[0].i;
+      const spanB=Math.abs(cur[cur.length-1].jm-cur[0].jm);
+      if(L>=34 && spanA>=2 && spanB>=1) runs.push(cur);
+    }
+    cur=[];
+  };
+  for(const m of matches){
+    if(cur.length){
+      const p=cur[cur.length-1];
+      const jump=dist(p.mid,m.mid);
+      const tangentDot=Math.abs(p.t[0]*m.t[0]+p.t[1]*m.t[1]);
+      if(m.i-p.i>2 || m.jm<p.jm-2 || m.jm-p.jm>6 || jump>125 || tangentDot<0.60) flush();
+    }
+    cur.push(m);
+  }
+  flush();
+  return runs;
+}
+function csRoundOpen(pts,steps){
+  if(!pts||pts.length<3) return pts?pts.slice():[];
+  const out=[pts[0]], K=steps||3;
+  for(let i=1;i<pts.length-1;i++){
+    const A=pts[i-1],P=pts[i],B=pts[i+1];
+    const d1=dist(A,P),d2=dist(P,B);
+    if(d1<2||d2<2){out.push(P);continue;}
+    const r=Math.min(18,d1*0.24,d2*0.24);
+    const u1=unit(sub(A,P)),u2=unit(sub(B,P));
+    const Q0=add(P,mul(u1,r)),Q1=add(P,mul(u2,r));
+    out.push(Q0);
+    for(let q=1;q<K;q++){
+      const t=q/K,u=1-t;
+      out.push([u*u*Q0[0]+2*u*t*P[0]+t*t*Q1[0],
+                u*u*Q0[1]+2*u*t*P[1]+t*t*Q1[1]]);
+    }
+    out.push(Q1);
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+function csAnyInk(marked,samples,f,p){
+  for(let k=0;k<marked.length;k++) if(csApproxInkStroke(marked[k],samples[k],f,p[0],p[1],4)) return true;
+  return false;
+}
+function csEndOpen(marked,samples,f,p,t,sign){
+  /* 連續幾個探針都沒有撞到墨，才當成真的通到字外；避免 closed counter 誤判。 */
+  for(const d of [22,46,78]){
+    const q=[p[0]+t[0]*d*sign,p[1]+t[1]*d*sign];
+    if(csAnyInk(marked,samples,f,q)) return false;
+  }
+  return true;
+}
+function csMedialRibbon(run,marked,samples,f,i,j){
+  let first=run.findIndex(m=>m.need),last=-1;
+  for(let k=run.length-1;k>=0;k--) if(run[k].need){last=k;break;}
+  if(first<0||last<0) return null;
+  first=Math.max(0,first-1); last=Math.min(run.length-1,last+1);
+  const seq=run.slice(first,last+1); if(seq.length<2) return null;
+
+  /* 中線只做很輕的 1-2-1 平滑；寬度只能往小修，絕不把局部窄縫平均大。 */
+  const mids=seq.map(m=>m.mid.slice());
+  if(mids.length>2){
+    const cp=mids.map(p=>p.slice());
+    for(let k=1;k<mids.length-1;k++) mids[k]=[
+      cp[k-1][0]*0.20+cp[k][0]*0.60+cp[k+1][0]*0.20,
+      cp[k-1][1]*0.20+cp[k][1]*0.60+cp[k+1][1]*0.20];
+  }
+  const hs=seq.map(m=>m.target/2);
+  if(hs.length>2){
+    const cp=hs.slice();
+    for(let k=1;k<hs.length-1;k++) hs[k]=Math.min(cp[k],cp[k-1]*0.20+cp[k]*0.60+cp[k+1]*0.20);
+  }
+
+  const geom=[];
+  for(let k=0;k<seq.length;k++){
+    let pt=mids[k], pathT;
+    if(k===0) pathT=unit(sub(mids[Math.min(1,mids.length-1)],mids[0]));
+    else if(k===mids.length-1) pathT=unit(sub(mids[k],mids[k-1]));
+    else pathT=unit(sub(mids[k+1],mids[k-1]));
+    let local=seq[k].t.slice();
+    if(local[0]*pathT[0]+local[1]*pathT[1]<0) pathT=[-pathT[0],-pathT[1]];
+    let tt=unit([local[0]*0.72+pathT[0]*0.28,local[1]*0.72+pathT[1]*0.28]);
+    if(len(tt)<0.5) tt=local;
+    let nn=[-tt[1],tt[0]];
+    if(nn[0]*seq[k].n[0]+nn[1]*seq[k].n[1]<0) nn=[-nn[0],-nn[1]];
+    geom.push({p:pt,t:tt,n:nn,h:hs[k]});
+  }
+
+  const open0=csEndOpen(marked,samples,f,geom[0].p,geom[0].t,-1);
+  const open1=csEndOpen(marked,samples,f,geom[geom.length-1].p,geom[geom.length-1].t,+1);
+  const EXT=1450;
+  if(open0){
+    const g=geom[0];
+    geom.unshift({p:[g.p[0]-g.t[0]*EXT,g.p[1]-g.t[1]*EXT],t:g.t.slice(),n:g.n.slice(),h:g.h});
+  }
+  if(open1){
+    const g=geom[geom.length-1];
+    geom.push({p:[g.p[0]+g.t[0]*EXT,g.p[1]+g.t[1]*EXT],t:g.t.slice(),n:g.n.slice(),h:g.h});
+  }
+
+  let L=geom.map(g=>[g.p[0]+g.n[0]*g.h,g.p[1]+g.n[1]*g.h]);
+  let R=geom.map(g=>[g.p[0]-g.n[0]*g.h,g.p[1]-g.n[1]*g.h]);
+  L=csRoundOpen(L,3); R=csRoundOpen(R,3);
+  const ring=[];
+  for(const p of L) ring.push(p);
+
+  /* 封閉端做真正的圓帽；開放端的帽已在字外，直連即可。 */
+  const g1=geom[geom.length-1];
+  if(!open1){
+    const K=6;
+    for(let q=1;q<=K;q++){
+      const a=Math.PI*q/K,c=Math.cos(a),sn=Math.sin(a);
+      ring.push([g1.p[0]+g1.n[0]*g1.h*c+g1.t[0]*g1.h*sn,
+                 g1.p[1]+g1.n[1]*g1.h*c+g1.t[1]*g1.h*sn]);
+    }
+  }else ring.push(R[R.length-1]);
+
+  for(let k=R.length-2;k>=0;k--) ring.push(R[k]);
+  const g0=geom[0];
+  if(!open0){
+    const K=6;
+    for(let q=1;q<=K;q++){
+      const a=Math.PI*q/K,c=Math.cos(a),sn=Math.sin(a);
+      ring.push([g0.p[0]-g0.n[0]*g0.h*c-g0.t[0]*g0.h*sn,
+                 g0.p[1]-g0.n[1]*g0.h*c-g0.t[1]*g0.h*sn]);
+    }
+  }
+  if(ring.length<4) return null;
+  ring.push(ring[0].slice());
+
+  let tx=0,ty=0;
+  for(const g of geom){tx+=g.t[0];ty+=g.t[1];}
+  const avg=unit([tx,ty]);
+  return {poly:[[ring]],i,j,ax:{a:[0,0],b:avg,dx:avg[0],dy:avg[1]},
+          target:Math.max(...seq.map(m=>m.target)),open0,open1};
+}
 function protectCounters(ch, f, minGap, cs){
   const PCL=pcLib(); if(!PCL || !cs || !minGap) return cs;
   let marked;
@@ -3194,94 +3456,33 @@ function protectCounters(ch, f, minGap, cs){
   if(!marked || marked.length<2) return cs;
 
   const ax=marked.map(csAxis);
-  const {hw,sw}=widths(f);
+  const samples=marked.map(st=>csStrokeSamples(st,f,18));
+  const refWeight=Math.min(f.weight,(F_DEFAULT&&F_DEFAULT.weight)||80);
+  const rf={...f,weight:refWeight,cmin:0};
+  const rw=widths(rf),refNominal=Math.max(rw.hw,rw.sw);
+  const tau=Math.max(24,Math.min(60,refNominal*0.46));
+
+  /* widthAt 是 protectCounters 裡最常被叫的昂貴函式之一。
+     每個取樣點的 current/reference 寬度只算一次，後面的 pair matching 直接查值。 */
+  for(let k=0;k<marked.length;k++) for(const q of samples[k]){
+    try{
+      q.cw=widthAt(marked[k],q.u,q.t,f )*(marked[k].ws||1);
+      q.rw=widthAt(marked[k],q.u,q.t,rf)*(marked[k].ws||1);
+    }catch(e){q.cw=q.rw=0;}
+  }
+
   const bands=[];
-  for(let i=0;i<ax.length;i++) for(let j=i+1;j<ax.length;j++){
-    if(!csParallel(ax[i],ax[j],12)) continue;
-    const g=csGap(ax[i],ax[j]); if(!g) continue;
-    const w1=Math.max(hw,sw)*(marked[i].w||1), w2=Math.max(hw,sw)*(marked[j].w||1);
-    const clear=Math.abs(g.dist)-(w1+w2)/2;
-    if(clear>=minGap || clear<-minGap*1.5) continue;
-    const mid=g.dist/2;
-    const cx=g.o[0]+g.nx*mid, cy=g.o[1]+g.ny*mid;
-    /* ★ 開放式縫隙的帶子兩端要「延伸出去」，不能往內縮。
-       封閉內白（口日目田）本來就被墨包住，帶子縮在裡面沒問題；
-       但「夕多易」這種縫是通到字外面的 —— 帶子停在墨中間，
-       就會切出一個內凹的槽把輪廓弄碎（實測「多」的撇捺整個變碎片）。
-       判斷：帶子中線往外一點的位置若已不在任何筆畫上，那端就是開放端，
-       延伸到字面盒外，讓切口乾淨地通出去。 */
-    const inInk=(px,py)=>{
-      for(let k=0;k<marked.length;k++){
-        const a2=ax[k], la2=Math.hypot(a2.dx,a2.dy); if(la2<1) continue;
-        const ux2=a2.dx/la2, uy2=a2.dy/la2;
-        const tt=((px-a2.a[0])*ux2+(py-a2.a[1])*uy2);
-        if(tt<-20||tt>la2+20) continue;
-        const dd=Math.abs((px-a2.a[0])*(-uy2)+(py-a2.a[1])*ux2);
-        if(dd < Math.max(hw,sw)*(marked[k].w||1)/2 + 6) return true;
-      }
-      return false;
-    };
-    const EXT=1400;
-    const e0=inInk(cx+g.ux*(g.lo-14), cy+g.uy*(g.lo-14));
-    const e1=inInk(cx+g.ux*(g.hi+14), cy+g.uy*(g.hi+14));
-    const L0 = e0 ? g.lo+10 : -EXT;
-    const L1 = e1 ? g.hi-10 :  EXT;
-    if(L1-L0<40) continue;
-    const h=minGap/2;   /* 暫時值，稍後由等比縮放重算 */
-    const P0=[cx+g.ux*L0, cy+g.uy*L0], P1=[cx+g.ux*L1, cy+g.uy*L1];
-    bands.push({poly:[[
-      [P0[0]+g.nx*h,P0[1]+g.ny*h],[P1[0]+g.nx*h,P1[1]+g.ny*h],
-      [P1[0]-g.nx*h,P1[1]-g.ny*h],[P0[0]-g.nx*h,P0[1]-g.ny*h],
-      [P0[0]+g.nx*h,P0[1]+g.ny*h]]], i, j, ax:ax[i],
-      /* 等比縮放要用的：骨架中心線距離、帶子的中線與方向 */
-      dist:Math.abs(g.dist), P0, P1, nx:g.nx, ny:g.ny});
+  for(let i=0;i<marked.length;i++) for(let j=i+1;j<marked.length;j++){
+    if(samples[i].length<2||samples[j].length<2) continue;
+    const runs=csPairMedialRuns(marked,samples,i,j,f,rf,minGap,tau);
+    for(const run of runs){
+      const b=csMedialRibbon(run,marked,samples,f,i,j);
+      if(b) bands.push(b);
+    }
   }
   if(!bands.length) return cs;
 
-  /* ★ v60：原始間距 → 非線性保護，不再用「全字最窄縫」做線性等比。
-
-     舊版 target = dist / dmin * minGap 有兩個問題：
-       1. 一道特別窄的縫會把全字其他縫一起放大；
-       2. 本來只差一點點的筆畫，也會被硬撐到 minGap，像「多」會被切太多。
-
-     新版先估算「基準字重時，兩筆外框真正留下多少白」 referenceGap：
-       referenceGap = 骨架中心距離 - 基準筆寬/2 - 基準筆寬/2
-
-     再用飽和曲線決定 target：
-       ・原本很近 → 只保很小的白，且絕不比原始白更大
-       ・原本較遠 → 保護快速增加
-       ・很遠之後 → 漸近 cmin，不會無限放大
-       ・原本已接觸 / 相交（referenceGap <= 0）→ 不人工切開
-
-     也就是 cmin 從「每道縫至少這麼寬」改成「最大保護寬度」。 */
-  {
-    const refWeight=Math.min(f.weight, (F_DEFAULT&&F_DEFAULT.weight)||80);
-    const rf={...f, weight:refWeight, cmin:0};
-    const rw=widths(rf);
-    const refBase=Math.max(rw.hw,rw.sw);
-    const tau=Math.max(28, Math.min(72, refBase*0.55));
-
-    for(const b of bands){
-      const wi=(marked[b.i].w||1), wj=(marked[b.j].w||1);
-      const referenceGap=Math.max(0, b.dist - refBase*(wi+wj)/2);
-
-      /* 20% 起步 + exponential saturation。
-         Math.min(referenceGap, ...) 是關鍵：窄縫最多恢復到原本的白，絕不把它撐大。 */
-      const sat=minGap*(0.20 + 0.80*(1-Math.exp(-referenceGap/tau)));
-      const target=Math.max(0, Math.min(referenceGap, sat, minGap));
-      b.target=target;
-      b.referenceGap=referenceGap;
-
-      if(target<1){ b.skip=true; continue; }
-      const h2=target/2;
-      b.poly=[[
-        [b.P0[0]+b.nx*h2, b.P0[1]+b.ny*h2],[b.P1[0]+b.nx*h2, b.P1[1]+b.ny*h2],
-        [b.P1[0]-b.nx*h2, b.P1[1]-b.ny*h2],[b.P0[0]-b.nx*h2, b.P0[1]-b.ny*h2],
-        [b.P0[0]+b.nx*h2, b.P0[1]+b.ny*h2]]];
-    }
-  }
-
-  /* 每一筆自己的輪廓，用來保護橫過帶子的筆畫 */
+  /* 每一筆自己的實際輪廓，用來保護穿越 ribbon 的第三筆。 */
   const per=marked.map(st=>{
     try{ return strokeContours(st,f,st.ws,30)
       .map(x=>pcFlatten(x,4)).filter(r=>r.length>=4).map(r=>[r]); }
@@ -3290,43 +3491,38 @@ function protectCounters(ch, f, minGap, cs){
 
   const rings=cs.map(c=>[pcFlatten(c,4)]).filter(r=>r[0].length>=4);
   if(!rings.length) return cs;
-  let u; try{ u=PCL.union(rings[0], ...rings.slice(1)); }catch(e){ return cs; }
+  let u; try{ u=PCL.union(rings[0],...rings.slice(1)); }catch(e){ return cs; }
 
   const cuts=[];
   for(const b of bands){
-    if(b.skip) continue;
     let region=b.poly;
+    /* 這層是保險。主要的交叉筆已在 local pairing 階段斷開；
+       若 ribbon fillet／圓帽仍碰到第三筆，再把第三筆從 cutter 裡扣掉。 */
     for(let k=0;k<marked.length && region.length;k++){
       if(k===b.i||k===b.j) continue;
-      if(csParallel(ax[k], b.ax, 25)) continue;       /* 平行的不是橫過 */
+      if(csParallel(ax[k],b.ax,28)) continue;
       for(const sp of per[k]){
-        try{ region=PCL.difference(region, sp); }catch(e){}
+        try{ region=PCL.difference(region,sp); }catch(e){}
         if(!region.length) break;
       }
     }
     for(const poly of region) cuts.push(poly);
   }
   if(!cuts.length) return cs;
-  let res; try{ res=PCL.difference(u, ...cuts); }catch(e){ return cs; }
-  const out=csToCmds(res);
-  if(!out.length) return cs;
 
-  /* ★ 保險：減完之後如果字被切散成更多塊，整個放棄不減。
-     寧可那個字沒有內白保護，也不要把筆畫切斷。
+  let res;
+  try{ res=PCL.difference(u,...cuts); }catch(e){ return cs; }
+  const out=csToCmds(res); if(!out.length) return cs;
 
-     ★ 要數「連通塊」（pc.union 回傳的 poly 數），不是外輪廓數 ——
-     兩塊分開的墨可能共用輪廓計數，用輪廓數判斷保險完全不會生效。
-
-     ★ 試過改用「量最細的墨」當標準，結果更糟：
-     帶子邊緣本來就一定會留下一小片薄墨，所以連下限放到 0.10 都只有
-     6/152 個字通過（連通塊版是 28）。那個指標測到的不是「筆畫被切斷」。 */
+  /* Safety 仍保留：如果布林後把整個字切成更多不相干的墨塊，寧可放棄這個字。
+     這是最後一道保險，不參與 targetGap 的幾何判斷。 */
   const blocks=(list)=>{
     const polys=list.map(c=>pcFlatten(c,3)).filter(p=>p.length>=4).map(p=>[p]);
     if(polys.length<2) return polys.length;
-    let u2; try{ u2=PCL.union(polys[0], ...polys.slice(1)); }catch(e){ return polys.length; }
+    let u2; try{u2=PCL.union(polys[0],...polys.slice(1));}catch(e){return polys.length;}
     return u2.length;
   };
-  if(blocks(out) > blocks(cs)) return cs;
+  if(blocks(out)>blocks(cs)) return cs;
   return out;
 }
 
