@@ -884,7 +884,12 @@
   /* 手機不放範例模板：縮圖在小螢幕上看不清楚，
      那一列又會擠掉本來就不多的畫布空間。模板留給桌機用。 */
   @media(max-width:1099px){
-    #scPosterBar,#scPosterToggle{display:none !important}
+    /* ★ 只藏「模板縮圖」那一格，不要藏整條 #scPosterBar ——
+       控制面板／復原／匯出那排按鈕（.scactions）也在這條裡面，
+       整條藏掉的話手機就完全點不到控制面板了。 */
+    #scPosterBar .scposter-wrap,#scPosterToggle{display:none !important}
+    #scPosterBar[hidden]{display:flex !important}   /* 這條要一直在，裡面有主要按鈕 */
+    #scPosterBar{justify-content:flex-end}
   }
 </style>
 </head>
