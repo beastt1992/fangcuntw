@@ -63,7 +63,7 @@
   本檔案不含任何 GPL 授權的程式碼。
 ================================================================================
 -->
-<!-- FANGCUN v71 · SHOWCASE STUDIO + POSTER PRESETS -->
+<!-- FANGCUN v108 · MOBILE CANVAS + LAYOUT ONE ROW -->
 <!-- FANGCUN-COUNTER-CELLS: v66 reference-topology-safety -->
 <html lang="zh-Hant">
 <head>
@@ -1150,87 +1150,63 @@
   .showacts{display:flex;align-items:center;gap:6px;flex:none}
   body:not(.in-show) .show-only{display:none !important}
 
-
   /* ==========================================================================
-     v107 手機展示列：畫布 / 版式
-     原本 #scPosterBar 繼承 .scbar 的 flex-wrap，畫布七顆按鈕把「版式」擠到
-     下一行右側，形成不對齊的 L 型排版。手機改成兩條明確工具列：
-       畫布｜自由 1:1 4:5 ...（按鈕區可橫向滑）
-       版式｜巨字 字陣
-     標籤固定、按鈕自己捲，不讓整列換行。
+     v108 手機：畫布＋版式固定同一行
+     - 模板縮圖收起時，畫布與版式就是同一條工具列
+     - 不換行；寬度不夠時整條左右滑，不把版式掉到第二行
+     - 模板縮圖展開時仍獨立佔下一列，不干擾畫布／版式
      ========================================================================== */
-  @media (max-width:700px){
+  @media(max-width:700px){
     #scPosterBar{
-      display:grid !important;
-      grid-template-columns:minmax(0,1fr);
-      gap:0 !important;
-      padding:0 !important;
-      min-height:0 !important;
-      height:auto !important;
-      overflow:hidden !important;
-      justify-content:stretch !important;
-      align-items:stretch !important;
-      background:var(--paper);
+      flex-wrap:nowrap !important;
+      justify-content:flex-start !important;
+      overflow-x:auto !important;
+      overflow-y:hidden !important;
+      gap:12px !important;
+      padding:7px 10px !important;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
     }
+    #scPosterBar::-webkit-scrollbar{display:none}
     #scPosterBar>.g:not(.scposter-wrap){
-      width:100%;
-      min-width:0;
-      display:grid;
-      grid-template-columns:48px minmax(0,1fr);
-      align-items:center;
-      gap:7px;
-      padding:6px 8px;
-      margin:0;
-      box-sizing:border-box;
-      white-space:nowrap;
-    }
-    #scPosterBar>.g:not(.scposter-wrap)+.g:not(.scposter-wrap){
-      border-top:1px solid var(--line);
+      flex:0 0 auto !important;
+      display:flex !important;
+      align-items:center !important;
+      gap:6px !important;
+      white-space:nowrap !important;
     }
     #scPosterBar>.g:not(.scposter-wrap)>label{
-      width:auto;
-      text-align:right;
-      padding-right:2px;
-      font-size:10px;
-      letter-spacing:.12em;
-      color:var(--muted);
+      display:inline-block !important;
+      flex:none !important;
+      width:auto !important;
+      margin:0 !important;
     }
     #scPosterBar #scCanvas,
     #scPosterBar #scLayout{
-      min-width:0;
-      width:100%;
-      display:flex;
+      display:flex !important;
       flex-wrap:nowrap !important;
-      gap:4px;
-      overflow-x:auto;
-      overflow-y:hidden;
-      scrollbar-width:none;
-      -webkit-overflow-scrolling:touch;
-      overscroll-behavior-x:contain;
-      padding:1px 0 2px;
+      gap:3px !important;
+      flex:none !important;
     }
-    #scPosterBar #scCanvas::-webkit-scrollbar,
-    #scPosterBar #scLayout::-webkit-scrollbar{display:none}
     #scPosterBar #scCanvas button,
     #scPosterBar #scLayout button{
-      flex:0 0 auto !important;
-      min-height:34px;
-      padding:5px 11px;
-      font-size:12px;
-      border-radius:8px;
+      flex:none !important;
+      white-space:nowrap !important;
     }
-    /* 範例縮圖展開時仍獨佔一列，不混進畫布 / 版式。 */
-    #scPosterBar .scposter-wrap{
-      grid-column:1;
-      width:100%;
-      min-width:0;
-      order:0;
-      padding:6px 8px;
-      border-bottom:1px solid var(--line);
+    /* 範例縮圖開啟時放到下一列；平常 is-off 不佔任何高度 */
+    #scPosterBar .scposter-wrap:not(.is-off){
+      position:absolute;
+      left:0;right:0;
+      top:100%;
+      z-index:20;
+      display:flex !important;
+      background:var(--paper);
+      border-bottom:1px solid var(--ink);
+      padding:7px 10px;
+      overflow-x:auto;
+      box-shadow:0 8px 18px rgba(22,19,13,.10);
     }
-    #scPosterBar .scposter-wrap.is-off{display:none !important}
   }
-
 </style>
 </head>
 <body>
