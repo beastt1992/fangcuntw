@@ -955,6 +955,30 @@
     .scaxes>.g>input[type=range]{width:76px;height:36px}
     .scaxes>.g>label{font-size:11px}
   }
+
+  /* ==========================================================================
+     底部區塊：文字一列、字型軸一列
+     原本 .scaxes 用 flex:1 1 100% 硬換行，把輸入框擠成一小格 ——
+     改成 scfoot 自己是縱向堆疊，每一列各自佔滿寬度。
+     ========================================================================== */
+  .scfoot{display:flex !important;flex-direction:column;align-items:stretch;
+    gap:7px;height:auto !important;padding:8px 14px !important}
+  .scfoot>textarea{width:100%;flex:none !important;order:1}
+  .scfoot>.scaxes{order:2;flex:none !important;width:100%}
+  .scfoot>#scTypeMore,.scfoot>.tag{order:3}
+  .scfoot>#scTypeMore{align-self:flex-start}
+  .scfoot>.tag{align-self:flex-end;margin-top:-24px}
+  @media(max-width:700px){
+    .scfoot>.tag{align-self:flex-start;margin-top:0}
+  }
+
+  /* 底部展開的整組字型軸 */
+  .sctypebox{border-top:1px solid var(--ink);background:var(--paper);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    max-height:42vh;overflow-y:auto}
+  .sctypebox.is-off{display:none}
+  .sctypepanel .sclay{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 16px}
+  #scTypeMore.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 </style>
 </head>
 <body>
@@ -1146,15 +1170,32 @@
         <div class="g"><label>中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
         <div class="g"><label>出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
       </div>
+      <button class="btn ghost sm" id="scTypeMore" type="button">更多字型軸</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
+    <!-- 字型軸整組：從左側搬下來收在底部，按「更多字型軸」展開。
+         這是調字的工具，字型是主要操作，該在手邊而不是側欄裡。 -->
+    <div class="sctypebox is-off" id="scTypeBox"><div class="sctypepanel">
+        <div class="sclay">
+          <div class="sclay-g"><label>字重</label>
+            <input type="range" id="scWt2" min="34" max="150" step="1" value="80"><b id="scWtV2">80</b></div>
+          <div class="sclay-g"><label>圓角</label>
+            <input type="range" id="scRd2" min="0" max="1" step="0.02" value="0.18"><b id="scRdV2">0.18</b></div>
+        </div>
+        <div class="sclay">
+          <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
+            <div class="seg" id="scPreset"></div>
+            <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
+          <div class="sclay-g"><label>單字</label>
+            <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
+            <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
+            <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
+        </div>
+        <div class="scmore-in" id="scGrid"></div>
+      </div></div>
     <div class="scmore" id="scMoreBox" hidden>
       <div class="scmore-head"><div><b>展示控制</b><span>這裡調整文字、版面、字型與顏色。上方模板會直接帶入範例文字與排版，之後仍可自由修改。</span></div><button class="btn ghost sm" id="scMoreClose" type="button">收起</button></div>
-      <div class="scstudio-tabs" id="scStudioTabs">
-        <!-- 文字／版面／顏色三個分頁併成一個：這三者是一起調的，
-             分開會一直來回切換。字型軸內容多，單獨留一頁。 -->
-        <button data-tab="text" class="on">版面</button><button data-tab="type">字型</button>
-      </div>
+      <!-- 字型軸整組搬到底部了，左側只剩版面，不需要分頁 -->
 
       <div class="scstudio-panel on" data-panel="text">
         <div class="scstudio-sub">文字</div>
@@ -1200,24 +1241,7 @@
         </div>
       </div>
 
-      <div class="scstudio-panel" data-panel="type">
-        <div class="sclay">
-          <div class="sclay-g"><label>字重</label>
-            <input type="range" id="scWt2" min="34" max="150" step="1" value="80"><b id="scWtV2">80</b></div>
-          <div class="sclay-g"><label>圓角</label>
-            <input type="range" id="scRd2" min="0" max="1" step="0.02" value="0.18"><b id="scRdV2">0.18</b></div>
-        </div>
-        <div class="sclay">
-          <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
-            <div class="seg" id="scPreset"></div>
-            <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
-          <div class="sclay-g"><label>單字</label>
-            <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
-            <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
-            <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
-        </div>
-        <div class="scmore-in" id="scGrid"></div>
-      </div>
+      
 
       <div class="scstudio-panel on" data-panel="text">
         <div class="scstudio-sub">顏色</div>
@@ -6471,7 +6495,8 @@ $("scSelRot").addEventListener("input",e=>{if(!scSelKey)return;(scTr[scSelKey]||
 $("scSelRot").addEventListener("change",saveLocal);
 $("scSelReset").addEventListener("click",()=>{if(!scSelKey)return;delete scTr[scSelKey];delete scOff[scSelKey];scUpdateInspector();scDraw();saveLocal();});
 
-$("scStudioTabs").addEventListener("click",e=>{
+/* 分頁列已經移除（字型搬到底部、左側只剩版面），元素可能不存在。 */
+if($("scStudioTabs")) $("scStudioTabs").addEventListener("click",e=>{
   const b=e.target.closest("button[data-tab]"); if(!b)return;
   document.querySelectorAll("#scStudioTabs button").forEach(x=>x.classList.toggle("on",x===b));
   document.querySelectorAll("#scMoreBox .scstudio-panel").forEach(x=>x.classList.toggle("on",x.dataset.panel===b.dataset.tab));
@@ -6595,6 +6620,13 @@ function scBuildPosterThumbs(){
     '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
 }
 scBuildPosterThumbs();
+/* 底部整組字型軸的展開／收起。用 class 不用 hidden 屬性 ——
+   這一區有 display 設定，hidden 會被作者樣式蓋掉（這個坑踩過兩次了）。 */
+if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
+  const box=$("scTypeBox"); if(!box) return;
+  const off=box.classList.toggle("is-off");
+  $("scTypeMore").classList.toggle("on",!off);
+});
 /* 字型分頁裡的字重／圓角，跟底部那組雙向連動 ——
    兩處顯示同一個值，改哪邊都要即時反映到另一邊，不然使用者會看到兩個不同的數字。 */
 (function(){
