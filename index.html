@@ -1264,8 +1264,7 @@
       </div>
     </div>
     <div class="scfoot">
-      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">把繁體中文字型設計
-變得更直覺</textarea>
+      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">永春</textarea>
       <!-- 這是調字的工具，字型軸就是主要操作 —— 常駐在底部列，不要藏進面板。
            放六根最能改變字型個性的；其餘二十一根仍在控制面板的「字型」分頁。 -->
       <div class="scaxes" id="scAxes">
@@ -7795,6 +7794,13 @@ async function boot(){
     document.querySelectorAll("#scAlign button").forEach(x=>x.classList.toggle("on",x.dataset.k===scAlignMode));
     document.querySelectorAll("#scColor button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCol));
     scSyncColors();
+    /* ★ 上面 scApplyPoster("minimal") 在它自己尾端就已經重畫過一次了，
+       但那是在設「永春」與這一整組開場設定「之前」——
+       所以畫布會停在 HTML 裡 textarea 的預設字（把繁體中文字型設計／變得更直覺），
+       輸入框卻已經是「永春」，兩邊對不起來。這裡補畫一次。
+       saveLocal 也要補：scApplyPoster 尾端存過一次，存到的是還沒套開場的狀態，
+       不覆蓋掉的話下次開啟會 restore 回錯的那份。 */
+    syncShowAxes(); scFitInput(); scDraw(); saveLocal();
   }
   /* 舊版 localStorage 可能把已修正的 KAGE 部件覆蓋回去；啟動最後再跑一次引擎遷移。 */
   clearStrokeEstimates();
