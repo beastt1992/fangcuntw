@@ -862,6 +862,12 @@
     .scstudio-panel.sec-open .sclay{display:grid}
     .scstudio-panel{padding:0}
   }
+
+  /* 手機不放範例模板：縮圖在小螢幕上看不清楚，
+     那一列又會擠掉本來就不多的畫布空間。模板留給桌機用。 */
+  @media(max-width:1099px){
+    #scPosterBar,#scPosterToggle{display:none !important}
+  }
 </style>
 </head>
 <body>
@@ -7448,8 +7454,14 @@ addEventListener("beforeinstallprompt",e=>{
 }
 
 /* 開機切到展示模式（setMode 已定義） */
-try{ setMode("show");
-  document.querySelectorAll("#modes button[data-m]").forEach(x=>x.classList.toggle("on",x.dataset.m==="show"));
+/* 開機進展示模式。
+   ★ 直接觸發「展示」按鈕的點擊，不要自己呼叫 setMode ——
+     按鈕高亮是 #tabs 的點擊處理器在做的，setMode 本身不管高亮。
+     （我原本寫 #modes，容器其實叫 #tabs，那行等於沒作用：
+       畫面切到展示了，但亮的還是「工作台」。） */
+try{
+  const b=document.querySelector('#tabs button[data-m="show"]');
+  if(b) b.click(); else setMode("show");
 }catch(e){}
 
 </script>
