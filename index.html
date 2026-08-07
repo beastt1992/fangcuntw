@@ -969,6 +969,9 @@
   .scaxes>.g>input[type=range]{width:88px;flex:none}
   .scaxes>.g>b{font-family:var(--mono);font-size:9.5px;font-weight:400;
     color:var(--ink);width:30px;text-align:right}
+  /* 字型軸與版面滑桿之間的分隔 */
+  .scaxes>.scaxes-sep{flex:0 0 auto;width:1px;align-self:stretch;
+    background:var(--line-2);margin:0 2px}
   @media(max-width:700px){
     .scaxes{gap:12px}
     .scaxes>.g>input[type=range]{width:76px;height:36px}
@@ -1045,6 +1048,8 @@
     /* 滑桿改成吃剩餘空間；原本是固定 76px＋min-width:72px，格子裡會撐破 */
     .scaxes>.g>input[type=range]{width:auto;flex:1 1 auto;min-width:0;height:32px}
     .scaxes>.g>b{flex:none;width:28px}
+    /* 格線下直立分隔線沒有意義，改成橫貫兩欄的細線 */
+    .scaxes>.scaxes-sep{grid-column:1/-1;width:auto;height:1px;margin:3px 0;align-self:auto}
     /* 這條是舊的「兩欄格線 scfoot」留下來的。scfoot 現在是縱向 flex（display 被
        !important 蓋掉了），但 min-height 是另一個屬性、沒被蓋到，等於白白多 104px。 */
     .scfoot{min-height:0 !important}
@@ -1288,6 +1293,14 @@
         <div class="g"><label>字面率</label><input type="range" id="scFa" min="0.84" max="1.10" step="0.01" value="1.05"><b id="scFaB">1.05</b></div>
         <div class="g"><label>中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
         <div class="g"><label>出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
+        <!-- 分隔線之後是版面層的滑桿。收合狀態下這一列還空著大半，
+             把最常調的四根滑桿提上來 —— 只提滑桿不提按鈕，
+             這一列的版型是「標籤＋滑桿＋數值」，混按鈕進來會亂。 -->
+        <div class="scaxes-sep" aria-hidden="true"></div>
+        <div class="g"><label>大小</label><input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
+        <div class="g"><label>字距</label><input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
+        <div class="g"><label>行距</label><input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
+        <div class="g"><label>留白</label><input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
       </div>
       <button class="btn ghost sm on" id="scTypeMore" type="button" aria-expanded="true">收合調整</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
@@ -1300,27 +1313,21 @@
              方向／對齊是按鈕不是拉桿，留在側欄。 -->
         <div class="sclay">
           <div class="sctypegroup">文字 <em>TEXT</em></div>
+          <!-- 大小／字距／行距已提到上方常駐列，不在這裡重複。 -->
           <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
             <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
           <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
             <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
             ><button data-k="right">靠右</button></div></div>
-          <div class="sclay-g"><label>大小</label>
-            <input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
-          <div class="sclay-g"><label>字距</label>
-            <input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
-          <div class="sclay-g"><label>行距</label>
-            <input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
         </div>
         <div class="sclay">
           <div class="sctypegroup">版面 <em>LAYOUT</em></div>
+          <!-- 留白已提到上方常駐列，不在這裡重複。 -->
           <div class="sclay-g" style="grid-column:1/-1"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
             <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
             ><button data-k="45">4:5</button><button data-k="34">3:4</button
             ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
           </div></div>
-          <div class="sclay-g"><label>留白</label>
-            <input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
           <div class="sclay-g"><label>背景</label>
             <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
           <div class="sclay-g"><label>版式</label><div class="seg" id="scLayout">
