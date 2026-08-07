@@ -3204,7 +3204,28 @@ function protectCounters(ch, f, minGap, cs){
     if(clear>=minGap || clear<-minGap*1.5) continue;
     const mid=g.dist/2;
     const cx=g.o[0]+g.nx*mid, cy=g.o[1]+g.ny*mid;
-    const L0=g.lo+10, L1=g.hi-10;
+    /* ★ 開放式縫隙的帶子兩端要「延伸出去」，不能往內縮。
+       封閉內白（口日目田）本來就被墨包住，帶子縮在裡面沒問題；
+       但「夕多易」這種縫是通到字外面的 —— 帶子停在墨中間，
+       就會切出一個內凹的槽把輪廓弄碎（實測「多」的撇捺整個變碎片）。
+       判斷：帶子中線往外一點的位置若已不在任何筆畫上，那端就是開放端，
+       延伸到字面盒外，讓切口乾淨地通出去。 */
+    const inInk=(px,py)=>{
+      for(let k=0;k<marked.length;k++){
+        const a2=ax[k], la2=Math.hypot(a2.dx,a2.dy); if(la2<1) continue;
+        const ux2=a2.dx/la2, uy2=a2.dy/la2;
+        const tt=((px-a2.a[0])*ux2+(py-a2.a[1])*uy2);
+        if(tt<-20||tt>la2+20) continue;
+        const dd=Math.abs((px-a2.a[0])*(-uy2)+(py-a2.a[1])*ux2);
+        if(dd < Math.max(hw,sw)*(marked[k].w||1)/2 + 6) return true;
+      }
+      return false;
+    };
+    const EXT=1400;
+    const e0=inInk(cx+g.ux*(g.lo-14), cy+g.uy*(g.lo-14));
+    const e1=inInk(cx+g.ux*(g.hi+14), cy+g.uy*(g.hi+14));
+    const L0 = e0 ? g.lo+10 : -EXT;
+    const L1 = e1 ? g.hi-10 :  EXT;
     if(L1-L0<40) continue;
     const h=minGap/2;
     const P0=[cx+g.ux*L0, cy+g.uy*L0], P1=[cx+g.ux*L1, cy+g.uy*L1];
