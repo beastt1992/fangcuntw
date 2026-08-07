@@ -1146,12 +1146,10 @@
 const EM=1000, ASC=880, DESC=-120;
 
 /* ★ 這兩個旗標放在最前面，不要放進任何功能區塊裡。
-   v1.49 換掉可變字型寫表器那一整段時，把夾在中間的宣告一起刪掉了，
-   結果匯出直接報「Can't find variable: DEDUP_ON」。
-   匯出時是否去除重疊（見「去除重疊」勾選框）。 */
-let DEDUP_ON=true;
-/* 匯出時是否加直排支援（GSUB vert/vrt2 ＋ vmtx ＋ VORG）。 */
-let VERT_ON=true;
+   v1.49 換掉可變字型寫表器那一整段時，把夾在中間的宣告連同 dedupContours
+   一起刪掉了，結果匯出直接報「Can't find variable」。 */
+let DEDUP_ON=true;    /* 匯出時是否去除重疊 */
+let VERT_ON=true;     /* 匯出時是否加直排支援 */
 /* 出廠值對照 Noto Sans CJK TC 實測校準：
    在黑度都對齊 Noto 0.298 的條件下掃過視覺補償，拐點在 0.4–0.55：
    補償 0 → 27 個密字會糊；0.45 → 約 19 個；補償 1.0 反而回升到 22（過度矯正）。
@@ -2547,6 +2545,72 @@ function vf_buildVariableFont(opt){
   const ho=offs[headIdx]+8;
   buf[ho]=(adj>>>24)&255; buf[ho+1]=(adj>>>16)&255; buf[ho+2]=(adj>>>8)&255; buf[ho+3]=adj&255;
   return buf;
+}
+
+/* ==========================================================================
+   去重疊（布林聯集）
+   為什麼要做：Illustrator 與瀏覽器是「逐輪廓算覆蓋率再合成」，重疊處的
+   交界會算出一條較亮的線 —— 就是筆畫交接處的白縫。Word/DirectWrite 是
+   整個字一次掃描填色，所以不受影響。A/B 測試字型已確認：去重疊後縫消失。
+   自己手寫的掃描線版本在「筆畫共邊／端點相接」的字上會算錯（26 字有 10
+   個不合格），所以改用 polygon-clipping（MIT）。以 skia 為標準答案驗過
+   26/26 合格、平均 IoU 0.9982。
+   ========================================================================== */
+let PC=null, PC_TRIED=false;
+function pcLib(){
+  if(PC||PC_TRIED) return PC;
+  PC_TRIED=true;
+  try{
+    const el=document.getElementById("pcsrc");
+    if(!el) return null;
+    const w={};
+    /* UMD：在有 module/exports 時會走 CommonJS 分支，所以要遮掉 */
+    PC=new Function("window","self","globalThis",
+      "var module=undefined,exports=undefined,define=undefined;"+el.textContent+
+      ";return window.polygonClipping||self.polygonClipping;")(w,w,w) || null;
+  }catch(e){ PC=null; }
+  return PC;
+}
+function pcFlatten(cmds,SUB){
+  const pts=[]; let cur=null;
+  for(const c of cmds){
+    if(c[0]==="M"||c[0]==="L"){ cur=[c[1],c[2]]; pts.push(cur); }
+    else{ const a=cur,cx=c[1],cy=c[2],b=[c[3],c[4]];
+      for(let i=1;i<=SUB;i++){ const t=i/SUB,u=1-t;
+        pts.push([u*u*a[0]+2*u*t*cx+t*t*b[0], u*u*a[1]+2*u*t*cy+t*t*b[1]]); }
+      cur=b; } }
+  const f=pts[0];
+  if(!f) return pts;
+  const L=pts[pts.length-1];
+  if(Math.abs(L[0]-f[0])>1e-9||Math.abs(L[1]-f[1])>1e-9) pts.push([f[0],f[1]]);
+  return pts;
+}
+/* 輸入輪廓陣列，回傳去重疊後的輪廓陣列。失敗時原樣回傳，絕不讓字消失。 */
+function dedupContours(contours, SUB, TOL){
+  const pc=pcLib();
+  if(!pc||!contours||contours.length<2) return contours;
+  SUB=SUB||4; TOL=(TOL==null)?1.2:TOL;
+  let res;
+  try{
+    const rings=contours.map(c=>[pcFlatten(c,SUB)]).filter(r=>r[0].length>=4);
+    if(rings.length<2) return contours;
+    res=pc.union(rings[0], ...rings.slice(1));
+  }catch(e){ return contours; }
+  const out=[];
+  for(const poly of res) for(const ring of poly){
+    let p=ring.slice();
+    if(p.length>2 && Math.abs(p[0][0]-p[p.length-1][0])<1e-9
+                  && Math.abs(p[0][1]-p[p.length-1][1])<1e-9) p.pop();
+    if(p.length<3) continue;
+    const q=TOL>0 ? rdp(p.concat([p[0]]),TOL) : p.concat([p[0]]);
+    if(q.length>1 && Math.abs(q[0][0]-q[q.length-1][0])<1e-9
+                  && Math.abs(q[0][1]-q[q.length-1][1])<1e-9) q.pop();
+    if(q.length<3) continue;
+    const cmds=[["M",q[0][0],q[0][1]]];
+    for(let i=1;i<q.length;i++) cmds.push(["L",q[i][0],q[i][1]]);
+    out.push(cmds);
+  }
+  return out.length?out:contours;
 }
 
 /* ==== 直排：GSUB(vert/vrt2) ＋ vmtx ＋ VORG，opentype.js 不輸出 GSUB ==== */
