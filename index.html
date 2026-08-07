@@ -6756,6 +6756,20 @@ if($("scTypeMore")) $("scTypeMore").addEventListener("click",()=>{
   b.setAttribute("aria-expanded",off?"false":"true");
   b.textContent = off ? "展開調整" : "收合調整";
 });
+/* 手機／平板一進來先收起：這一區現在有三十幾個控制項再加二十一根軸，
+   直接展開的話畫布只剩一小條。桌機維持展開（HTML 的預設狀態）。
+   只在載入時設一次 —— 使用者自己開了之後就不再自動收，不跟他搶。 */
+try{
+  if(matchMedia("(max-width:1099px)").matches){
+    const box=$("scTypeBox"), btn=$("scTypeMore");
+    if(box && btn){
+      box.classList.add("is-off");
+      btn.classList.remove("on");
+      btn.setAttribute("aria-expanded","false");
+      btn.textContent="展開調整";
+    }
+  }
+}catch(e){}
 /* 展開盒裡的字重／圓角複本已移除（常駐列就有），原本的雙向同步跟著拿掉。 */
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
 (function(){
