@@ -6136,6 +6136,22 @@ $("scArt").addEventListener("click",e=>{
   scUpdateInspector(); scDraw();
 });
 
+/* 取消選取：點畫布空白處、或按 Esc。
+   原本只有切換排列方向、清除搬字時才會取消 —— 選了一個字之後
+   那個框就一直掛在畫面上，沒有辦法退回未選取的狀態。 */
+$("scArt").addEventListener("pointerdown",e=>{
+  const hit=e.target.closest&&e.target.closest("[data-key]");
+  if(hit) return;                      /* 點在字上，交給下面的處理 */
+  if(scSelKey===null) return;
+  scSelKey=null; scUpdateInspector(); scDraw();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Escape" || MODE!=="show" || scSelKey===null) return;
+  const t=e.target, tag=t&&t.tagName;
+  if(tag==="INPUT"||tag==="TEXTAREA") return;   /* 打字時的 Esc 不算 */
+  scSelKey=null; scUpdateInspector(); scDraw();
+});
+
 /* ---------- 拖曳個別字 ---------- */
 let scDragging=null;
 $("scArt").addEventListener("pointerdown",e=>{
