@@ -870,9 +870,14 @@
     .scstudio-sub::after{content:"＋";font:400 13px/1 var(--mono,ui-monospace,monospace);
       color:var(--muted,#8a8378)}
     .scstudio-sub.open::after{content:"−"}
-    /* 小節內容 = 同一個 panel 裡小標之後的 .sclay */
-    .scstudio-panel .sclay{display:none}
-    .scstudio-panel.sec-open .sclay{display:grid}
+    /* ★ 只收合「有小標」的分節。
+       字型分頁沒有小標，永遠不會被標成 sec-open ——
+       原本這條會把它整個藏起來，手機上點開控制面板是一片空白。 */
+    /* 用 JS 標上的 .has-sub，不靠 :has() —— 舊瀏覽器不支援 :has()，
+       整條規則會被丟掉，那反而安全（全部顯示），但收合就失效了。
+       改用 class 就兩邊都可靠。 */
+    .scstudio-panel.has-sub .sclay{display:none}
+    .scstudio-panel.has-sub.sec-open .sclay{display:grid}
     .scstudio-panel{padding:0}
   }
 
@@ -1119,6 +1124,12 @@
       </div>
 
       <div class="scstudio-panel" data-panel="type">
+        <div class="sclay">
+          <div class="sclay-g"><label>字重</label>
+            <input type="range" id="scWt2" min="34" max="150" step="1" value="80"><b id="scWtV2">80</b></div>
+          <div class="sclay-g"><label>圓角</label>
+            <input type="range" id="scRd2" min="0" max="1" step="0.02" value="0.18"><b id="scRdV2">0.18</b></div>
+        </div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
             <div class="seg" id="scPreset"></div>
@@ -6435,11 +6446,31 @@ function scBuildPosterThumbs(){
     '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
 }
 scBuildPosterThumbs();
+/* 字型分頁裡的字重／圓角，跟底部那組雙向連動 ——
+   兩處顯示同一個值，改哪邊都要即時反映到另一邊，不然使用者會看到兩個不同的數字。 */
+(function(){
+  const pairs=[["scWt","scWt2","scWtV2",v=>(+v).toFixed(0)],
+               ["scRd","scRd2","scRdV2",v=>(+v).toFixed(2)]];
+  for(const [srcId,dupId,valId,fmt] of pairs){
+    const src=$(srcId), dup=$(dupId), val=$(valId);
+    if(!src||!dup) continue;
+    const push=()=>{ dup.value=src.value; if(val) val.textContent=fmt(src.value); };
+    push();
+    src.addEventListener("input",push);
+    dup.addEventListener("input",()=>{
+      src.value=dup.value;
+      if(val) val.textContent=fmt(dup.value);
+      src.dispatchEvent(new Event("input",{bubbles:true}));
+    });
+  }
+})();
 /* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
 (function(){
   const isNarrow=()=>matchMedia("(max-width:1099px)").matches;
   const nl=document.querySelectorAll("#scMoreBox .scstudio-sub");
   const subs=nl&&nl.length?Array.prototype.slice.call(nl):[];
+  /* 有小標的分節才參與收合；字型分頁沒有小標，不加這個 class 就照常顯示 */
+  subs.forEach(sub=>{ const pa=sub.closest(".scstudio-panel"); if(pa) pa.classList.add("has-sub"); });
   if(!subs.length) return;
   function setOpen(sub,on){
     sub.classList.toggle("open",on);
