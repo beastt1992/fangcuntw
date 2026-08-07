@@ -987,7 +987,7 @@
     gap:7px;height:auto !important;padding:8px 14px !important}
   .scfoot>textarea{width:100%;flex:none !important;order:1}
   .scfoot>.scaxes{order:2;flex:none !important;width:100%}
-  .scfoot>#scTypeMore,.scfoot>.tag{order:3}
+  .scfoot>#scTypeMore,.scfoot>.tag{order:4}
   .scfoot>#scTypeMore{align-self:flex-start}
   #scTypeMore.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   /* 「更多字型軸」按鈕移除後，這一列已經沒有東西可以疊，
@@ -1083,6 +1083,29 @@
     #scTypeBox .scmore-ax input[type=range]{height:28px}
     #scTypeBox .scmore-ax{padding:1px 0}
     #scTypeBox .seg button,#scTypeBox .btn.sm,#scTypeBox .btn.ghost.sm{padding:6px 10px}
+  }
+  /* ★ 這一列現在有十根滑桿，一行放不下 —— 原本是 overflow-x:auto，
+     結果就是要左右捲才看得到後面幾根（而且滑桿本身也要橫向拖，手勢會打架）。
+     改成換行：一行放不下就折到下一行，永遠不需要橫捲。 */
+  .scaxes{flex-wrap:wrap;overflow:visible;row-gap:2px}
+  /* 分隔線改成「強制換行」—— 字型軸六根一行、版面滑桿一行，分組自然看得出來 */
+  .scaxes>.scaxes-sep{flex-basis:100%;width:auto;height:0;border:0;margin:0;align-self:auto}
+  /* 滑桿吃剩餘空間，每格等寬排開，不留參差的尾巴 */
+  .scaxes>.g{flex:1 1 168px;min-width:0}
+  .scaxes>.g>input[type=range]{width:auto;flex:1 1 auto;min-width:56px}
+  .scaxes>.g>label{flex:none}
+  .scaxes>.g>b{flex:none}
+  /* 字型（預設列）從收合盒搬到常駐區 —— 收合之後仍然選得到字體。
+     它在 .scfoot 這個縱向 flex 裡自成一列，排在滑桿之後、收合鈕之前。 */
+  .scfoot>.scfoot-type{order:3;width:100%;margin:0;padding:2px 0 0;border-bottom:0}
+  .scfoot>.scfoot-type .sclay-g{padding:1px 0}
+  .scfoot>.scfoot-type .sctypegroup{padding:2px 0 1px;margin:0}
+  .scfoot>.scfoot-type .seg{display:flex;flex-wrap:wrap;max-width:100%}
+  .scfoot>.scfoot-type .seg button{flex:0 1 auto;padding:4px 8px;font-size:11px}
+  .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:4px 9px;font-size:11px;min-height:0}
+  @media(pointer:coarse){
+    .scfoot>.scfoot-type .seg button,
+    .scfoot>.scfoot-type .btn.sm,.scfoot>.scfoot-type .btn.ghost.sm{padding:6px 10px}
   }
 </style>
 </head>
@@ -1302,6 +1325,22 @@
         <div class="g"><label>行距</label><input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
         <div class="g"><label>留白</label><input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
       </div>
+        <div class="sclay scfoot-type">
+        <div class="sctypegroup">字型 <em>TYPE</em></div>
+        <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
+          <div class="seg" id="scPreset"></div>
+          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
+        <div class="sclay-g"><label>單字</label>
+          <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
+          <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
+          <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
+        <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
+             跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
+             同一塊面板兩個「隨機」意思不同，按下去只會嚇到人。 -->
+        <div class="sclay-g"><label>隨機字形</label>
+          <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
+          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
+      </div>
       <button class="btn ghost sm on" id="scTypeMore" type="button" aria-expanded="true">收合調整</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
@@ -1332,22 +1371,6 @@
             <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
           <div class="sclay-g"><label>版式</label><div class="seg" id="scLayout">
             <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>
-        </div>
-        <div class="sclay">
-          <div class="sctypegroup">字型 <em>TYPE</em></div>
-          <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
-            <div class="seg" id="scPreset"></div>
-            <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
-          <div class="sclay-g"><label>單字</label>
-            <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
-            <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
-            <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
-          <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
-               跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
-               同一塊面板兩個「隨機」意思不同，按下去只會嚇到人。 -->
-          <div class="sclay-g"><label>隨機字形</label>
-            <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
-            <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
         </div>
         <!-- ★ 單字層收攏成一組：以前「只調這個字／清除」在這盒、
              「搬字／選取／單字大小／旋轉／重設」在側欄，同一個「選中的字」的操作分居兩處。 -->
