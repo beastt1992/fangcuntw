@@ -891,6 +891,14 @@
     #scPosterBar[hidden]{display:flex !important}   /* 這條要一直在，裡面有主要按鈕 */
     #scPosterBar{justify-content:flex-end}
   }
+
+  /* 控制面板內的按鈕組一律可換行 —— 之前只寫在桌機的 media query 裡，
+     手機沒吃到，上色／調色盤那幾排就撐破容器。這條不分螢幕大小都要有。 */
+  #scMoreBox .sclay-g{flex-wrap:wrap;min-width:0}
+  #scMoreBox .sclay-g>*{min-width:0;max-width:100%}
+  #scMoreBox .seg,#scMoreBox #scPals,#scMoreBox .pals{flex-wrap:wrap;max-width:100%}
+  #scMoreBox .seg button{flex:0 1 auto}
+  #scMoreBox{overflow-x:hidden}
 </style>
 </head>
 <body>
