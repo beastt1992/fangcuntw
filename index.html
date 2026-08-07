@@ -774,6 +774,29 @@
   .sczoom button:hover{background:var(--line,#e8e3d6)}
   .sczoom button[data-z="fit"]{min-width:46px;letter-spacing:.02em}
   @media(max-width:700px){ .sczoom{right:8px;bottom:8px} .sczoom button{padding:8px 10px} }
+
+  /* ==========================================================================
+     畫布邊界
+     原本 .scstage 的背景跟著 --sbg（作品底色）一起變，整個工作區
+     被塗成同一色 —— 紙張邊界就消失了，看不出畫布多大。
+     工作區固定用中性色，紙張本身的底色由 SVG 裡的 rect 負責，
+     再加一道邊線與陰影把紙托出來。
+     ========================================================================== */
+  /* 展示模式的外層容器也吃 --sbg，只改 .scstage 的話外層還是會透出來 */
+  #showcase,.scstage{background:#6f6a62 !important}
+  /* 透明底的棋盤格原本畫在工作區上 —— 那是錯的層：
+     它要表達的是「這張紙是透明的」，所以格紋屬於紙張，不屬於工作區。 */
+  .scstage.transparent-bg{background-color:#6f6a62 !important;background-image:none !important}
+  #scArt{ box-shadow:0 2px 10px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.18) }
+  .scstage.transparent-bg #scArt{
+    background-color:#fff;
+    background-image:linear-gradient(45deg,#e6e2d8 25%,transparent 25%),
+      linear-gradient(-45deg,#e6e2d8 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#e6e2d8 75%),
+      linear-gradient(-45deg,transparent 75%,#e6e2d8 75%);
+    background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
+  }
+  @media(max-width:700px){ #scArt{box-shadow:0 1px 6px rgba(0,0,0,.25),0 0 0 1px rgba(0,0,0,.18)} }
 </style>
 </head>
 <body>
