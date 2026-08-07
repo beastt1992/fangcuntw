@@ -1158,12 +1158,15 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          width:1.00,slant:0.00,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
          seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,
          arch:0.00,inflate:0.00,wave:0.00,chop:0.00,
+         /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
+            拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
+         cap:0.18,
          simp:1.5};   /* 輪廓化簡容差，em=1000 下 1.5 肉眼看不出來 */
 const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
                'width','slant','taper','hook','dun','press','rise',
                'seed','scatter','wobble','spike','hollow',
-               'arch','inflate','wave','chop'];
+               'arch','inflate','wave','chop','cap'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -1673,33 +1676,41 @@ function latHalf(cx, cy, rx, ry, a0, a1, w){
   return {t:"zhe", p:latPts(cx,cy,rx,ry,a0,a1, Math.max(4,Math.round(Math.abs(a1-a0)/0.4))), w:w, fr:2.6, cv:"smooth"};
 }
 
+/* ★ 拉丁的斜線用 zhe（等粗），不用 pie/na。
+   pie 和 na 是漢字的撇與捺，天生會往末端收尖 ——
+   用在 A V W X Y Z k v w x y 上，斜線會比直線細一截，整排看起來像沒對齊。 */
+/* ★ 端點不要用 h:"conn"／e:"conn"。
+   conn 是 KAGE 的「接續」語意 —— 它會把筆畫往外延伸去接下一筆，
+   用在拉丁上就是每個端點都戳出一根小尖刺。留空讓它走預設的圓角端點就好。 */
 const LATGLY = {
 /* ---------- 數字（等寬 555，字面內 x 約 60..495） ---------- */
 "0":{u:0x30,aw:555,s:[...latRound(278, (BL+CAP)/2, 218, (CAP-BL)/2+OV, 0.92)]},
 "1":{u:0x31,aw:555,s:[
-  {t:"pie",p:[[120,LY(560)],[268,CAP]],w:0.88},
+  {t:"zhe",p:[[120,LY(560)],[268,CAP]],w:0.88},
   {t:"shu",p:[[268,CAP],[268,BL]],w:0.96},
   {t:"heng",p:[[130,BL],[420,BL]],w:0.92}]},
 "2":{u:0x32,aw:555,s:[
-  {t:"zhe",p:[[68,LY(560)],[278,CAP],[478,LY(560)],[420,LY(400)],[80,BL]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
+  latHalf(276, LY(560), 208, 200, Math.PI*0.92, -Math.PI*0.06, 0.92),
+  {t:"zhe",p:[[478,LY(520)],[420,LY(360)],[86,LY(30)]],bend:-0.20,w:0.92,fr:2.4,cv:"smooth"},
   {t:"heng",p:[[70,BL],[492,BL]],w:0.92}]},
 "3":{u:0x33,aw:555,s:[
   {t:"zhe",p:[[72,LY(620)],[268,CAP],[452,LY(600)],[268,LY(400)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"},
   {t:"zhe",p:[[268,LY(400)],[470,LY(200)],[268,LY(-13)],[70,LY(120)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"}]},
 "4":{u:0x34,aw:555,s:[
-  {t:"pie",p:[[352,CAP],[62,LY(200)]],w:0.90},
+  {t:"zhe",p:[[352,CAP],[62,LY(200)]],w:0.90},
   {t:"heng",p:[[52,LY(200)],[498,LY(200)]],w:0.92},
   {t:"shu",p:[[368,CAP],[368,BL]],w:0.96}]},
 "5":{u:0x35,aw:555,s:[
-  {t:"heng",p:[[452,CAP],[110,CAP]],w:0.92},
-  {t:"shu",p:[[110,CAP],[100,LY(430)]],w:0.92},
-  {t:"zhe",p:[[100,LY(430)],[300,LY(470)],[476,LY(250)],[300,LY(-13)],[74,LY(90)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"}]},
+  {t:"heng",p:[[456,CAP],[112,CAP]],w:0.92},
+  {t:"shu",p:[[112,CAP],[102,LY(440)]],w:0.92},
+  {t:"zhe",p:[[102,LY(440)],[300,LY(478)],[478,LY(260)],[470,LY(110)],[290,LY(-13)],[76,LY(86)]],
+   bend:-0.38,w:0.92,fr:2.6,cv:"smooth"}]},
 "6":{u:0x36,aw:555,s:[
   {t:"zhe",p:[[430,LY(640)],[268,LY(746)],[92,LY(480)],[80,LY(230)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"},
   ...latRound(282, LY(210), 196, 223, 0.92)]},
 "7":{u:0x37,aw:555,s:[
-  {t:"heng",p:[[62,CAP],[492,CAP]],w:0.92},
-  {t:"pie",p:[[492,CAP],[196,BL]],w:0.94}]},
+  {t:"heng",p:[[56,CAP],[496,CAP]],w:0.92},
+  {t:"zhe",p:[[496,CAP],[186,BL]],w:0.94}]},
 "8":{u:0x38,aw:555,s:[
   ...latRound(276, LY(556), 186, 190, 0.88),
   ...latRound(276, LY(180), 214, 193, 0.90)]},
@@ -1709,23 +1720,23 @@ const LATGLY = {
 
 /* ---------- 大寫 ---------- */
 "A":{u:0x41,aw:608,s:[
-  {t:"pie",p:[[304,CAP],[14,BL]],w:0.94},
-  {t:"na",p:[[304,CAP],[594,BL]],w:0.94},
+  {t:"zhe",p:[[304,CAP],[14,BL]],w:0.94},
+  {t:"zhe",p:[[304,CAP],[594,BL]],w:0.94},
   {t:"heng",p:[[112,LY(210)],[496,LY(210)]],w:0.86}]},
 "B":{u:0x42,aw:648,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
-  {t:"heng",p:[[112,CAP],[380,CAP]],w:0.90},
-  {t:"zhe",p:[[380,CAP],[556,LY(620)],[380,LY(410)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
-  {t:"heng",p:[[112,LY(410)],[398,LY(410)]],w:0.90},
-  {t:"zhe",p:[[398,LY(410)],[588,LY(200)],[398,BL]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
-  {t:"heng",p:[[112,BL],[398,BL]],w:0.90}]},
+  {t:"heng",p:[[112,CAP],[352,CAP]],w:0.92},
+  latHalf(352, LY(571), 200, 162, Math.PI/2, -Math.PI/2, 0.92),
+  {t:"heng",p:[[112,LY(410)],[368,LY(410)]],w:0.92},
+  latHalf(368, LY(205), 222, 205, Math.PI/2, -Math.PI/2, 0.92),
+  {t:"heng",p:[[112,BL],[368,BL]],w:0.92}]},
 "C":{u:0x43,aw:678,s:[
   {t:"zhe",p:[[604,LY(600)],[336,LY(746)],[80,LY(370)],[336,LY(-13)],[608,LY(140)]],bend:-0.42,w:0.94,fr:2.6, cv:"smooth"}]},
 "D":{u:0x44,aw:712,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
-  {t:"heng",p:[[112,CAP],[356,CAP]],w:0.90},
-  {t:"zhe",p:[[356,CAP],[636,LY(370)],[356,BL]],bend:-0.48,w:0.92,fr:2.6, cv:"smooth"},
-  {t:"heng",p:[[112,BL],[356,BL]],w:0.90}]},
+  {t:"heng",p:[[112,CAP],[330,CAP]],w:0.92},
+  latHalf(330, (BL+CAP)/2, 300, (CAP-BL)/2, Math.PI/2, -Math.PI/2, 0.94),
+  {t:"heng",p:[[112,BL],[330,BL]],w:0.92}]},
 "E":{u:0x45,aw:602,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
   {t:"heng",p:[[112,CAP],[540,CAP]],w:0.90},
@@ -1736,9 +1747,9 @@ const LATGLY = {
   {t:"heng",p:[[112,CAP],[534,CAP]],w:0.90},
   {t:"heng",p:[[112,LY(410)],[482,LY(410)]],w:0.88}]},
 "G":{u:0x47,aw:734,s:[
-  {t:"zhe",p:[[620,LY(600)],[348,LY(746)],[86,LY(370)],[348,LY(-13)],[634,LY(180)]],bend:-0.42,w:0.94,fr:2.6, cv:"smooth"},
-  {t:"shu",p:[[634,LY(180)],[634,LY(340)]],w:0.92},
-  {t:"heng",p:[[634,LY(340)],[420,LY(340)]],w:0.88}]},
+  latHalf(368, (BL+CAP)/2, 292, (CAP-BL)/2+OV, Math.PI*0.30, Math.PI*1.78, 0.94),
+  {t:"shu",p:[[660,LY(150)],[660,LY(330)]],w:0.92},
+  {t:"heng",p:[[660,LY(330)],[440,LY(330)]],w:0.90}]},
 "H":{u:0x48,aw:728,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
   {t:"shu",p:[[616,CAP],[616,BL]],w:0.96},
@@ -1749,35 +1760,35 @@ const LATGLY = {
   {t:"zhe",p:[[400,LY(180)],[250,LY(-13)],[64,LY(150)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"}]},
 "K":{u:0x4B,aw:648,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
-  {t:"pie",p:[[622,CAP],[112,LY(300)]],w:0.92},
-  {t:"na",p:[[286,LY(468)],[634,BL]],w:0.94}]},
+  {t:"zhe",p:[[622,CAP],[112,LY(300)]],w:0.92},
+  {t:"zhe",p:[[286,LY(468)],[634,BL]],w:0.94}]},
 "L":{u:0x4C,aw:546,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
   {t:"heng",p:[[112,BL],[520,BL]],w:0.90}]},
 "M":{u:0x4D,aw:812,s:[
   {t:"shu",p:[[112,BL],[112,CAP]],w:0.96},
-  {t:"na",p:[[112,CAP],[406,LY(180)]],w:0.90},
-  {t:"pie",p:[[700,CAP],[406,LY(180)]],w:0.90},
+  {t:"zhe",p:[[112,CAP],[406,LY(180)]],w:0.90},
+  {t:"zhe",p:[[700,CAP],[406,LY(180)]],w:0.90},
   {t:"shu",p:[[700,CAP],[700,BL]],w:0.96}]},
 "N":{u:0x4E,aw:730,s:[
   {t:"shu",p:[[112,BL],[112,CAP]],w:0.96},
-  {t:"na",p:[[112,CAP],[618,LY(120)]],w:0.92},
-  {t:"shu",p:[[618,LY(120)],[618,CAP]],w:0.96}]},
+  {t:"zhe",p:[[112,CAP],[618,BL]],w:0.92},
+  {t:"shu",p:[[618,BL],[618,CAP]],w:0.96}]},
 "O":{u:0x4F,aw:742,s:[...latRound(371, (BL+CAP)/2, 313, (CAP-BL)/2+OV, 0.94)]},
 "P":{u:0x50,aw:634,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
-  {t:"heng",p:[[112,CAP],[378,CAP]],w:0.90},
-  {t:"zhe",p:[[378,CAP],[576,LY(566)],[378,LY(400)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
-  {t:"heng",p:[[112,LY(400)],[378,LY(400)]],w:0.90}]},
+  {t:"heng",p:[[112,CAP],[350,CAP]],w:0.92},
+  latHalf(350, LY(566), 226, 167, Math.PI/2, -Math.PI/2, 0.92),
+  {t:"heng",p:[[112,LY(400)],[350,LY(400)]],w:0.92}]},
 "Q":{u:0x51,aw:742,s:[
   ...latRound(371, (BL+CAP)/2, 313, (CAP-BL)/2+OV, 0.94),
-  {t:"na",p:[[420,LY(150)],[660,LY(-80)]],w:0.94}]},
+  {t:"zhe",p:[[420,LY(150)],[660,LY(-80)]],w:0.94}]},
 "R":{u:0x52,aw:658,s:[
   {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
-  {t:"heng",p:[[112,CAP],[378,CAP]],w:0.90},
-  {t:"zhe",p:[[378,CAP],[566,LY(570)],[378,LY(410)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
-  {t:"heng",p:[[112,LY(410)],[378,LY(410)]],w:0.90},
-  {t:"na",p:[[330,LY(410)],[630,BL]],w:0.92}]},
+  {t:"heng",p:[[112,CAP],[350,CAP]],w:0.92},
+  latHalf(350, LY(571), 216, 162, Math.PI/2, -Math.PI/2, 0.92),
+  {t:"heng",p:[[112,LY(410)],[350,LY(410)]],w:0.92},
+  {t:"zhe",p:[[318,LY(410)],[622,BL]],w:0.94}]},
 "S":{u:0x53,aw:626,s:[
   {t:"zhe",p:[[566,LY(620)],[314,LY(746)],[82,LY(580)],[540,LY(300)],[556,LY(140)],[314,LY(-13)],[70,LY(130)]],
    bend:-0.38,w:0.92,fr:2.6, cv:"smooth"}]},
@@ -1789,23 +1800,23 @@ const LATGLY = {
   {t:"zhe",p:[[106,LY(200)],[359,LY(-13)],[612,LY(200)]],bend:-0.45,w:0.92,fr:2.6, cv:"smooth"},
   {t:"shu",p:[[612,LY(200)],[612,CAP]],w:0.96}]},
 "V":{u:0x56,aw:575,s:[
-  {t:"na",p:[[2,CAP],[288,BL]],w:0.94},
-  {t:"pie",p:[[574,CAP],[288,BL]],w:0.94}]},
+  {t:"zhe",p:[[2,CAP],[288,BL]],w:0.94},
+  {t:"zhe",p:[[574,CAP],[288,BL]],w:0.94}]},
 "W":{u:0x57,aw:878,s:[
-  {t:"na",p:[[26,CAP],[228,BL]],w:0.90},
-  {t:"pie",p:[[438,CAP],[228,BL]],w:0.90},
-  {t:"na",p:[[438,CAP],[650,BL]],w:0.90},
-  {t:"pie",p:[[850,CAP],[650,BL]],w:0.90}]},
+  {t:"zhe",p:[[26,CAP],[228,BL]],w:0.90},
+  {t:"zhe",p:[[438,CAP],[228,BL]],w:0.90},
+  {t:"zhe",p:[[438,CAP],[650,BL]],w:0.90},
+  {t:"zhe",p:[[850,CAP],[650,BL]],w:0.90}]},
 "X":{u:0x58,aw:612,s:[
-  {t:"na",p:[[16,CAP],[596,BL]],w:0.94},
-  {t:"pie",p:[[596,CAP],[16,BL]],w:0.94}]},
+  {t:"zhe",p:[[16,CAP],[596,BL]],w:0.94},
+  {t:"zhe",p:[[596,CAP],[16,BL]],w:0.94}]},
 "Y":{u:0x59,aw:576,s:[
-  {t:"na",p:[[8,CAP],[288,LY(370)]],w:0.94},
-  {t:"pie",p:[[568,CAP],[288,LY(370)]],w:0.94},
+  {t:"zhe",p:[[8,CAP],[288,LY(370)]],w:0.94},
+  {t:"zhe",p:[[568,CAP],[288,LY(370)]],w:0.94},
   {t:"shu",p:[[288,LY(370)],[288,BL]],w:0.96}]},
 "Z":{u:0x5A,aw:598,s:[
   {t:"heng",p:[[46,CAP],[552,CAP]],w:0.92},
-  {t:"pie",p:[[552,CAP],[46,BL]],w:0.94},
+  {t:"zhe",p:[[552,CAP],[46,BL]],w:0.94},
   {t:"heng",p:[[46,BL],[552,BL]],w:0.92}]},
 
 /* ---------- 小寫 ---------- */
@@ -1825,8 +1836,8 @@ const LATGLY = {
   {t:"zhe",p:[[516,LY(280)],[516,LY(470)],[294,LY(557)],[72,LY(272)],[294,LY(-13)],[512,LY(112)]],
    bend:-0.40,w:0.92,fr:2.6, cv:"smooth"}]},
 "f":{u:0x66,aw:376,s:[
-  {t:"zhe",p:[[366,LY(796)],[226,LY(796)],[186,LY(650)],[186,BL]],bend:-0.35,w:0.94,fr:2.4, cv:"smooth"},
-  {t:"heng",p:[[46,LY(543)],[356,LY(543)]],w:0.86}]},
+  {t:"zhe",p:[[368,LY(760)],[286,LY(796)],[196,LY(700)],[196,BL]],bend:-0.30,w:0.94,fr:2.4,cv:"smooth"},
+  {t:"heng",p:[[42,LY(543)],[360,LY(543)]],w:0.88}]},
 "g":{u:0x67,aw:620,s:[
   ...latRound(300, LY(272), 220, 285, 0.90),
   {t:"shu",p:[[520,LY(557)],[520,LY(-60)]],w:0.94},
@@ -1844,8 +1855,8 @@ const LATGLY = {
   {t:"dot",p:[[150,LY(700)]],rk:0.60}]},
 "k":{u:0x6B,aw:566,s:[
   {t:"shu",p:[[92,LY(796)],[92,BL]],w:0.96},
-  {t:"pie",p:[[534,LY(543)],[92,LY(190)]],w:0.90},
-  {t:"na",p:[[252,LY(316)],[548,BL]],w:0.92}]},
+  {t:"zhe",p:[[534,LY(543)],[92,LY(190)]],w:0.90},
+  {t:"zhe",p:[[252,LY(316)],[548,BL]],w:0.92}]},
 "l":{u:0x6C,aw:284,s:[{t:"shu",p:[[142,LY(796)],[142,BL]],w:0.96}]},
 "m":{u:0x6D,aw:922,s:[
   {t:"shu",p:[[92,LY(543)],[92,BL]],w:0.96},
@@ -1871,34 +1882,36 @@ const LATGLY = {
   {t:"zhe",p:[[466,LY(452)],[262,LY(557)],[68,LY(430)],[452,LY(230)],[462,LY(110)],[262,LY(-13)],[58,LY(100)]],
    bend:-0.36,w:0.90,fr:2.6, cv:"smooth"}]},
 "t":{u:0x74,aw:396,s:[
-  {t:"zhe",p:[[186,LY(700)],[186,LY(120)],[330,LY(-13)]],bend:-0.30,w:0.94,fr:2.4, cv:"smooth"},
-  {t:"heng",p:[[36,LY(543)],[356,LY(543)]],w:0.86}]},
+  {t:"zhe",p:[[176,LY(720)],[176,LY(110)],[300,LY(30)],[352,LY(-6)]],bend:-0.26,w:0.94,fr:2.4,cv:"smooth"},
+  {t:"heng",p:[[32,LY(543)],[352,LY(543)]],w:0.88}]},
 "u":{u:0x75,aw:610,s:[
   {t:"shu",p:[[92,LY(543)],[92,LY(160)]],w:0.96},
   {t:"zhe",p:[[92,LY(160)],[300,LY(-13)],[518,LY(160)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
   {t:"shu",p:[[518,LY(160)],[518,LY(543)]],w:0.96}]},
 "v":{u:0x76,aw:534,s:[
-  {t:"na",p:[[6,LY(543)],[267,BL]],w:0.92},
-  {t:"pie",p:[[528,LY(543)],[267,BL]],w:0.92}]},
+  {t:"zhe",p:[[6,LY(543)],[267,BL]],w:0.92},
+  {t:"zhe",p:[[528,LY(543)],[267,BL]],w:0.92}]},
 "w":{u:0x77,aw:816,s:[
-  {t:"na",p:[[18,LY(543)],[210,BL]],w:0.88},
-  {t:"pie",p:[[404,LY(543)],[210,BL]],w:0.88},
-  {t:"na",p:[[404,LY(543)],[600,BL]],w:0.88},
-  {t:"pie",p:[[796,LY(543)],[600,BL]],w:0.88}]},
+  {t:"zhe",p:[[18,LY(543)],[210,BL]],w:0.88},
+  {t:"zhe",p:[[404,LY(543)],[210,BL]],w:0.88},
+  {t:"zhe",p:[[404,LY(543)],[600,BL]],w:0.88},
+  {t:"zhe",p:[[796,LY(543)],[600,BL]],w:0.88}]},
 "x":{u:0x78,aw:498,s:[
-  {t:"na",p:[[16,LY(543)],[482,BL]],w:0.92},
-  {t:"pie",p:[[482,LY(543)],[16,BL]],w:0.92}]},
+  {t:"zhe",p:[[16,LY(543)],[482,BL]],w:0.92},
+  {t:"zhe",p:[[482,LY(543)],[16,BL]],w:0.92}]},
 "y":{u:0x79,aw:534,s:[
-  {t:"na",p:[[6,LY(543)],[290,LY(30)]],w:0.92},
-  {t:"pie",p:[[528,LY(543)],[196,LY(-190)]],w:0.92}]},
+  {t:"zhe",p:[[6,LY(543)],[276,LY(60)]],w:0.92},
+  {t:"zhe",p:[[528,LY(543)],[212,LY(-190)]],w:0.92}]},
 "z":{u:0x7A,aw:498,s:[
   {t:"heng",p:[[42,LY(543)],[456,LY(543)]],w:0.88},
-  {t:"pie",p:[[456,LY(543)],[42,BL]],w:0.92},
+  {t:"zhe",p:[[456,LY(543)],[42,BL]],w:0.92},
   {t:"heng",p:[[42,BL],[456,BL]],w:0.88}]}
 };
 
 /* 註冊進 G —— advance 用 aw（拉丁是比例寬，不是全形） */
-for(const [ch,def] of Object.entries(LATGLY)) G[ch]={u:def.u, s:def.s, aw:def.aw, sp:1};
+for(const [ch,def] of Object.entries(LATGLY))
+  G[ch]={u:def.u, aw:def.aw, sp:1,
+         s:def.s.map(st=>({...st, lat:1}))};   /* lat:1 讓斜接用較緊的上限 */
 
 const BASE=JSON.parse(JSON.stringify(G));
 
@@ -2122,7 +2135,11 @@ function widthAt(st,t,tan,f){
 const CAP_OF={taperL:"pt",taperR:"pt",point:"pt",hook:"hook",
               conn:"flat",kakato:"kakato",bend:"bend"};
 function caps(st,f){
-  const r=f.round;
+  /* ★ 端點造型改吃 f.cap，不再跟圓角軸綁在一起。
+     圓角 f.round 現在只管「折角的內外圓弧」，端點另外一根軸。
+     出廠值 cap = round = 0.18，所以不改設定的話輸出跟以前一模一樣。
+     拆開之後才做得到「折角很圓但端點切齊」這種標準字常見的組合。 */
+  const r=(f.cap==null?f.round:f.cap);
   if(st.h||st.e){
     /* 明體：橫畫開放的收筆長出三角（うろこ） */
     const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
@@ -3202,8 +3219,11 @@ function collect(id,box,wScale,out,seed,variant,depth,optic){
   /* box 已經是相對整個 em 的絕對位置，不再把父層 ws 重複相乘；深層 KAGE 引用不會越來越細。 */
   const ws=Math.min(wScale||1,opticalWeightScale(id,sx,sy,optic));
   const S=resolveStrokes(g,variant);
+  /* ★ 這是「白名單」複製 —— 沒列在這裡的欄位會被靜靜丟掉。
+     加新的筆畫屬性時一定要同時加進來，否則在引擎裡永遠讀不到。
+     （lat 就漏過一次：拉丁的斜接上限怎麼改都沒反應。） */
   if(S) S.forEach((st,i)=>out.push({t:st.t,bend:st.bend,w:st.w,end:st.end,fr:st.fr,cv:st.cv,
-    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,ws,
+    h:st.h,e:st.e,kh:st.kh,ke:st.ke,kage:st.kage,kj:st.kj,r:st.r,rk:st.rk,lat:st.lat,ws,
     /* 記下這一筆從哪個字形的第幾筆來、以及它被塞進哪個框 —— 
        有這些就能從組合字裡直接拖動部件的筆畫，改一次所有用到的字一起變 */
     src:id, sidx:i, sv:variant||null, bx:[x1,y1,sx,sy],
@@ -3342,7 +3362,12 @@ function markCorners(strokes,f){
     /* 斜接會在轉角補進官方 KAGE 沒有的墨（實測：關掉後對官方吻合度 0.8702→0.8750）。
        但它是當初修好「辶 斜線戳出去」的關鍵，風格模式要留著。
        所以只有原樣模式關掉 —— 原樣要的是忠實，風格要的是好看。 */
-    st[key]=(f.miter===0) ? 0 : Math.min(hw2*3.2, hw2/Math.max(0.28,sin));
+    /* ★ 拉丁的斜接上限要緊得多。
+       漢字的折角多半接近 90°，hw/sin 不會太大；但 A V W X Y 的頂點只有三四十度，
+       hw2*3.2 這個上限就直接變成一根戳出去的尖刺。拉丁改成 1.15 倍。 */
+    const tight = st.lat || strokes[best.i].lat;
+    st[key]=(f.miter===0) ? 0
+      : Math.min(hw2*(tight?1.15:3.2), hw2/Math.max(tight?0.55:0.28, sin));
   }
   return strokes;
 }
@@ -3529,37 +3554,38 @@ const AXES=[
   {k:"arch",    n:"弧形",  en:"ARCH",    min:-0.5,max:0.5, step:0.01,lo:"下凹",hi:"上拱",f:v=>(+v).toFixed(2)},
   {k:"inflate", n:"膨脹",  en:"INFLATE", min:0,   max:1.0, step:0.02,lo:"原樣",hi:"膨潤",f:v=>(+v).toFixed(2)},
   {k:"wave",    n:"波浪",  en:"WAVE",    min:0,   max:1.0, step:0.02,lo:"直",  hi:"扭動",f:v=>(+v).toFixed(2)},
-  {k:"chop",    n:"斷裂",  en:"CHOP",    min:0,   max:1.0, step:0.02,lo:"完整",hi:"破碎",f:v=>(+v).toFixed(2)}
+  {k:"chop",    n:"斷裂",  en:"CHOP",    min:0,   max:1.0, step:0.02,lo:"完整",hi:"破碎",f:v=>(+v).toFixed(2)},
+  {k:"cap",     n:"端點",  en:"CAP",     min:0,   max:1.0, step:0.02,lo:"方",  hi:"圓",f:v=>(+v).toFixed(2)}
 ];
 const PRESETS={
   /* ---- 標準字用的六組。跟上面七種「字體」不同：
          這些是刻意大幅變形的造型，做招牌、logo、海報標題用。 ---- */
   lgSharp:{weight:96,optic:0.70,contrast:1.10,round:0.04,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:0.96,slant:0.06,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.02,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.85,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.85,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18},
   lgPlump:{weight:118,optic:0.70,contrast:1.00,round:0.85,counter:0.94,gravity:1.00,face:1.10,
     hand:0,finish:0,width:1.06,slant:0,taper:0.30,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.62,wave:0.00,chop:0.00},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.62,wave:0.00,chop:0.00,cap:0.85},
   lgWire:{weight:70,optic:0.70,contrast:1.00,round:0.30,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.62,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
+    seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.62,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30},
   lgBroken:{weight:88,optic:0.70,contrast:1.02,round:0.10,counter:1.00,gravity:1.00,face:1.05,
     hand:0.18,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:23,scatter:0.14,wobble:0.30,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.52},
+    seed:23,scatter:0.14,wobble:0.30,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.52,cap:0.10},
   lgWave:{weight:92,optic:0.70,contrast:1.00,round:0.55,counter:1.00,gravity:1.00,face:1.06,
     hand:0,finish:0,width:1.00,slant:0,taper:0.60,hook:1.00,dun:0.00,press:0.00,rise:0.00,
-    seed:41,scatter:0.00,wobble:0.22,spike:0.00,hollow:0.00,arch:0.00,inflate:0.10,wave:0.30,chop:0.00},
+    seed:41,scatter:0.00,wobble:0.22,spike:0.00,hollow:0.00,arch:0.00,inflate:0.10,wave:0.30,chop:0.00,cap:0.55},
   lgScatter:{weight:84,optic:0.70,contrast:1.05,round:0.22,counter:1.00,gravity:1.00,face:1.05,
     hand:0.42,finish:0,width:1.00,slant:0,taper:1.10,hook:1.00,dun:0.00,press:0.00,rise:0.03,
-    seed:88,scatter:0.34,wobble:0.46,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
+    seed:88,scatter:0.34,wobble:0.46,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.22},
+  hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18},
+  yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:1.00},
+  ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.04},
+  hand:{weight:56,optic:0.30,contrast:1.30,round:0.78,counter:0.88,gravity:0.94,face:1.01,hand:0.85,finish:0.34,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.55,press:0.95,rise:0.100,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.78},
+  title:{weight:128,optic:0.62,contrast:1.00,round:0.10,counter:0.82,gravity:1.00,face:1.11,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.10},
   /* 原樣：對照 KAGE 官方黑體的輸出調出來的，最貼近 GlyphWiki 資料本來的樣子 */
-  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00},
-  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0}
+  kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30},
+  kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0,cap:0.02}
 };
 const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={lgSharp:"Sharp",lgPlump:"Plump",lgWire:"Wire",lgBroken:"Broken",lgWave:"Wave",lgScatter:"Scatter",hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
@@ -3744,7 +3770,7 @@ function drawBig(){
   if(editMode){
     const S=resolveStrokes(g,varSel);
     if(S) S.forEach((st,si)=>st.p.forEach((pt,pi)=>{
-      const w=warpStroke({...st,seed:7*31+si*7},F).p[pi];
+      const w=warpStroke({...st,seed:7*31+si*7,cap:0.02},F).p[pi];
       bigSvg.appendChild(el("circle",{cx:w[0],cy:EM-w[1],r:19,fill:"var(--paper)",
         stroke:"var(--skel)","stroke-width":4,cursor:"grab","data-k":"s","data-si":si,"data-pi":pi}));
     }));
