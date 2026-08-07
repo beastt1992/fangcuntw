@@ -1064,6 +1064,34 @@
        !important 蓋掉了），但 min-height 是另一個屬性、沒被蓋到，等於白白多 104px。 */
     .scfoot{min-height:0 !important}
   }
+  /* ==========================================================================
+     展開盒：緊湊規格
+     這一盒是二十一根軸的清單，密度優先 —— 佔的高度直接吃畫布。
+     兩個主因都在 @media(pointer:coarse) 裡（那是「所有觸控裝置」，不只手機）：
+       ① .scmore-in 被強制成單欄 → 21 根疊成一直排
+       ② input[type=range] 統一 40px 高 → 光滑桿就 840px
+     用 #scTypeBox 的 id 權重蓋掉，且只作用在這一盒，
+     左側控制面板（#scMoreBox）維持原本好按的尺寸，不受影響。
+     ========================================================================== */
+  #scTypeBox{padding:7px 14px calc(7px + env(safe-area-inset-bottom))}
+  #scTypeBox .scmore-in{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0 14px}
+  #scTypeBox .scmore-ax{gap:5px;padding:0}
+  #scTypeBox .scmore-ax label{width:42px;font-size:10.5px}
+  #scTypeBox .scmore-ax b{width:30px;font-size:9.5px}
+  #scTypeBox .scmore-ax input[type=range]{height:22px;flex:1 1 auto;min-width:0}
+  #scTypeBox .sctypegroup{padding:5px 0 2px;margin-top:2px;font-size:10px}
+  /* 上面那塊（預設／單字／隨機字形）也一起收緊 */
+  #scTypeBox .sclay{padding-bottom:4px;margin-bottom:4px;gap:0 14px}
+  #scTypeBox .sclay-g{padding:1px 0;gap:6px}
+  #scTypeBox .sclay-g>label{width:42px;font-size:10.5px}
+  #scTypeBox .seg button{padding:4px 8px;font-size:11px}
+  #scTypeBox .btn.sm,#scTypeBox .btn.ghost.sm{padding:4px 9px;font-size:11px;min-height:0}
+  /* 觸控裝置：滑桿與按鈕給回一點高度，但仍遠低於原本的 40px */
+  @media(pointer:coarse){
+    #scTypeBox .scmore-ax input[type=range]{height:28px}
+    #scTypeBox .scmore-ax{padding:1px 0}
+    #scTypeBox .seg button,#scTypeBox .btn.sm,#scTypeBox .btn.ghost.sm{padding:6px 10px}
+  }
 </style>
 </head>
 <body>
