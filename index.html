@@ -827,12 +827,15 @@
   @media(min-width:1100px){
     #showcase{
       grid-template-columns:288px minmax(0,1fr);
-      grid-template-rows:auto minmax(0,1fr) auto;
+      /* 第 4 列給 #scTypeBox（更多字型軸）。
+         ★ 每個子元素都要有明確格位 —— 漏掉的會被 grid 自動排進左欄底下，
+           整組軸就擠在左下角 288px 寬的格子裡。踩過一次。 */
+      grid-template-rows:auto minmax(0,1fr) auto auto;
       column-gap:0;
     }
-    /* 左欄：控制面板常駐，自己捲 */
+    /* 左欄：控制面板常駐，自己捲（跨滿含字型軸列的 4 列） */
     #showcase>#scMoreBox{
-      grid-column:1; grid-row:1 / 4;
+      grid-column:1; grid-row:1 / 5;
       display:block !important;      /* 蓋掉 hidden */
       border-right:1px solid var(--ink,#16130d); border-top:0;
       overflow-y:auto; overflow-x:hidden;
@@ -843,6 +846,7 @@
     #showcase>#scPosterBar{grid-column:2; grid-row:1}
     #showcase>.scstage{grid-column:2; grid-row:2}
     #showcase>.scfoot{grid-column:2; grid-row:3}
+    #showcase>#scTypeBox{grid-column:2; grid-row:4}
     /* 左欄常駐就不需要「收起」按鈕與開關 */
     #scMoreClose,#scMoreBtn{display:none}
     /* 欄內是窄的，格線改單欄 */
