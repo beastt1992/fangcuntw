@@ -717,6 +717,23 @@
     body.menu-open .menupanel{touch-action:auto}
   }
 
+  /* 三個分頁併成一頁之後的段落小標 */
+  .scstudio-sub{font:600 11px/1 ui-monospace,monospace;letter-spacing:.14em;
+    color:var(--mut,#8a8378);text-transform:uppercase;margin:2px 0 8px;
+    padding-bottom:6px;border-bottom:1px solid var(--line,#dcd6c8)}
+  .scstudio-panel+.scstudio-panel .scstudio-sub{margin-top:16px}
+  /* 模板縮圖 */
+  .posterthumbs{display:flex;gap:8px;flex-wrap:wrap}
+  .posterthumbs button{position:relative;width:64px;padding:0;border:1px solid var(--line,#dcd6c8);
+    border-radius:3px;background:none;cursor:pointer;overflow:hidden;line-height:0;
+    transition:border-color .12s,box-shadow .12s}
+  .posterthumbs button:hover{border-color:var(--ink,#16130d)}
+  .posterthumbs button.on{border-color:var(--ink,#16130d);box-shadow:0 0 0 1px var(--ink,#16130d)}
+  .posterthumbs .th{display:block;width:100%;height:46px}
+  .posterthumbs .nm{display:block;font:500 10px/1.35 system-ui,sans-serif;
+    padding:4px 2px 5px;color:var(--mut,#8a8378);text-align:center;letter-spacing:.02em}
+  .posterthumbs button.on .nm{color:var(--ink,#16130d)}
+  @media(max-width:700px){ .posterthumbs button{width:56px} .posterthumbs .th{height:40px} }
 </style>
 </head>
 <body>
@@ -869,11 +886,9 @@
   <section id="showcase">
     <div class="scbar scbar-studio">
       <div class="g scposter-wrap"><label>範例模板</label>
-        <div class="seg posterseg" id="scPoster">
-          <button data-poster="minimal">極簡海報</button><button data-poster="sign">招牌標題</button
-          ><button data-poster="magazine">雜誌版式</button><button data-poster="matrix">字陣樣張</button
-          ><button data-poster="night">夜市海報</button><button data-poster="vertical">直排文青</button>
-        </div></div>
+        <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
+             純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
+        <div class="posterthumbs" id="scPoster"></div></div>
       <div class="scactions">
         <button class="btn ghost sm" id="scUndo" type="button" title="復原">↶</button>
         <button class="btn ghost sm" id="scRedo" type="button" title="重做">↷</button>
@@ -887,7 +902,7 @@
       <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
     </div>
     <div class="scfoot">
-      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Ctrl / Cmd + Enter 換行）">把繁體中文字型設計
+      <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">把繁體中文字型設計
 變得更直覺</textarea>
       <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"></div>
       <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"></div>
@@ -896,11 +911,13 @@
     <div class="scmore" id="scMoreBox" hidden>
       <div class="scmore-head"><div><b>展示控制</b><span>這裡調整文字、版面、字型與顏色。上方模板會直接帶入範例文字與排版，之後仍可自由修改。</span></div><button class="btn ghost sm" id="scMoreClose" type="button">收起</button></div>
       <div class="scstudio-tabs" id="scStudioTabs">
-        <button data-tab="text" class="on">文字</button><button data-tab="layout">版面</button
-        ><button data-tab="type">字型</button><button data-tab="color">顏色</button>
+        <!-- 文字／版面／顏色三個分頁併成一個：這三者是一起調的，
+             分開會一直來回切換。字型軸內容多，單獨留一頁。 -->
+        <button data-tab="text" class="on">版面</button><button data-tab="type">字型</button>
       </div>
 
       <div class="scstudio-panel on" data-panel="text">
+        <div class="scstudio-sub">文字</div>
         <div class="sclay">
           <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
             <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
@@ -916,7 +933,8 @@
         </div>
       </div>
 
-      <div class="scstudio-panel" data-panel="layout">
+      <div class="scstudio-panel" data-panel="text">
+        <div class="scstudio-sub">版面</div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
             <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
@@ -955,7 +973,8 @@
         <div class="scmore-in" id="scGrid"></div>
       </div>
 
-      <div class="scstudio-panel" data-panel="color">
+      <div class="scstudio-panel" data-panel="text">
+        <div class="scstudio-sub">顏色</div>
         <div class="sclay">
           <div class="sclay-g" style="grid-column:1/-1"><label>上色</label><div class="seg wrapseg" id="scColor">
             <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
@@ -6054,10 +6073,12 @@ function scFitInput(){
 }
 $("scTxt").addEventListener("keydown",e=>{
   if(e.key!=="Enter") return;
-  /* 電腦用 Ctrl / Cmd + Enter；手機沒有修飾鍵，直接用鍵盤的換行鍵。 */
+  /* 電腦用 Shift + Enter 換行（跟聊天軟體、大部分編輯器一致）；
+     Ctrl / Cmd + Enter 也保留，舊習慣的人不會突然壞掉。
+     手機沒有修飾鍵，直接用鍵盤的換行鍵。 */
   const mobileInput=matchMedia("(pointer:coarse)").matches||matchMedia("(max-width:700px)").matches;
   if(mobileInput) return;
-  if(!(e.ctrlKey||e.metaKey)){ e.preventDefault(); return; }
+  if(!(e.shiftKey||e.ctrlKey||e.metaKey)){ e.preventDefault(); return; }
   e.preventDefault();
   const box=e.currentTarget, a=box.selectionStart, b=box.selectionEnd;
   box.value=box.value.slice(0,a)+"\n"+box.value.slice(b);
@@ -6130,18 +6151,12 @@ $("scStudioTabs").addEventListener("click",e=>{
 });
 
 const SC_POSTERS={
-  minimal:{txt:"把繁體中文字型設計
-變得更直覺",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
-  sign:{txt:"方寸字型
-繁體字設計",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
-  magazine:{txt:"方寸
-參數化中文字型工作室",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
-  matrix:{txt:"永方寸設計
-字型樣張",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
-  night:{txt:"台灣夜市
-招牌字研究",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
-  vertical:{txt:"方寸
-繁體中文字型工作室",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
+  minimal:{txt:"把繁體中文字型設計\n變得更直覺",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.18,scale:1.02,gx:.04,gy:.12,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:78,round:.06},
+  sign:{txt:"方寸字型\n繁體字設計",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.08,scale:1.18,gx:-.12,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:122,round:.08},
+  magazine:{txt:"方寸\n參數化中文字型工作室",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.24,scale:.90,gx:.10,gy:.20,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:64,round:0},
+  matrix:{txt:"永方寸設計\n字型樣張",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
+  night:{txt:"台灣夜市\n招牌字研究",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.12,scale:1.12,gx:-.08,gy:.10,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:112,round:.24},
+  vertical:{txt:"方寸\n繁體中文字型工作室",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.16,scale:1,gx:.08,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
 };
 function scSetPaletteKey(k){
   const p=SCPAL.find(x=>x.k===k); if(!p)return;
@@ -6169,6 +6184,59 @@ function scApplyPoster(k){
   $("scGy").value=scGyAdj; $("scGyV").textContent=scGyAdj===0?"預設":(scGyAdj>0?"+":"")+scGyAdj.toFixed(2);
   $("scWt").value=F.weight; $("scRd").value=F.round; scSyncColors(); scUpdateInspector(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
 }
+/* ---- 模板縮圖 ----
+   用每個模板自己的底色、墨色、方向與對齊畫一張小圖，
+   純文字按鈕看不出差別，要點過才知道。畫的是版面示意，不是真的排字
+   （真的排字要跑整套引擎，六張縮圖會讓面板開啟明顯變慢）。 */
+const SC_POSTER_NAMES={minimal:"極簡海報",sign:"招牌標題",magazine:"雜誌版式",
+                       matrix:"字陣樣張",night:"夜市海報",vertical:"直排文青"};
+function scPosterThumb(p){
+  const W=64,H=46;
+  const bg=p.bg||"#f4f0e7", ink=p.ink||"#17130e";
+  const m=Math.max(2,Math.round((p.margin||.12)*W*0.9));
+  const inW=W-m*2, inH=H-m*2;
+  let bars="";
+  if(p.lay==="grid"){
+    /* 字陣：畫格狀方塊 */
+    const n=3, gap=2, cell=Math.min((inW-gap*(n-1))/n,(inH-gap*(n-1))/n);
+    const ox=m+(inW-(cell*n+gap*(n-1)))/2, oy=m+(inH-(cell*n+gap*(n-1)))/2;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++)
+      bars+='<rect x="'+(ox+c*(cell+gap)).toFixed(1)+'" y="'+(oy+r*(cell+gap)).toFixed(1)+
+            '" width="'+cell.toFixed(1)+'" height="'+cell.toFixed(1)+'" fill="'+ink+'" opacity=".82"/>';
+  }else if(p.dir==="v"){
+    /* 直排：右起的直條 */
+    const cols=2, cw=Math.max(3,Math.round(inW*0.22)), gap=Math.round(inW*0.14);
+    for(let c=0;c<cols;c++){
+      const h=inH*(c===0?1:0.62);
+      const x=m+inW-cw-c*(cw+gap);
+      bars+='<rect x="'+x.toFixed(1)+'" y="'+m.toFixed(1)+'" width="'+cw+'" height="'+h.toFixed(1)+
+            '" rx="1" fill="'+ink+'" opacity="'+(c===0?".9":".55")+'"/>';
+    }
+  }else{
+    /* 橫排：兩三條橫棒，長度依對齊方式擺放 */
+    const rows=[{w:1.00,h:.30},{w:.62,h:.22}];
+    let y=m;
+    for(const r of rows){
+      const bw=inW*r.w, bh=Math.max(3,inH*r.h);
+      let x=m;
+      if(p.align==="center") x=m+(inW-bw)/2;
+      else if(p.align==="right") x=m+inW-bw;
+      bars+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+
+            '" height="'+bh.toFixed(1)+'" rx="1" fill="'+ink+'" opacity="'+(y===m?".9":".55")+'"/>';
+      y+=bh+Math.max(2,inH*0.12);
+    }
+  }
+  return '<svg class="th" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">'+
+         '<rect width="'+W+'" height="'+H+'" fill="'+bg+'"/>'+bars+'</svg>';
+}
+function scBuildPosterThumbs(){
+  const box=$("scPoster"); if(!box) return;
+  box.innerHTML=Object.keys(SC_POSTERS).map(k=>
+    '<button type="button" data-poster="'+k+'" title="'+(SC_POSTER_NAMES[k]||k)+'">'+
+    scPosterThumb(SC_POSTERS[k])+
+    '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
+}
+scBuildPosterThumbs();
 $("scPoster").addEventListener("click",e=>{const b=e.target.closest("button[data-poster]");if(!b)return;scApplyPoster(b.dataset.poster);});
 
 let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
