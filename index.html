@@ -787,7 +787,12 @@
      （含左工具列、底部文字列）都塗灰，整片變灰褐色就是「霧霧的」。
      #showcase 回到 app 的紙色，灰只留在 .scstage。 */
   #showcase{background:var(--paper,#f5f2e9) !important}
-  .scstage{background:#6f6a62 !important}
+  /* 工作區用淺灰，紙緣靠邊線與陰影界定 —— 深灰會把整個畫面壓暗。 */
+  .scstage{background:#d9d4c9 !important}
+  /* ★ 畫面上的 SVG 本來沒有底色矩形：紙張底色一直是靠 --sbg 塗在容器上的。
+     容器改色之後紙就沒底色了，工作區的灰直接透上來 ——「畫布灰灰的」就是這樣來的。
+     底色要塗在紙本身（#scArt）上。 */
+  #scArt{background:var(--sbg,#f5f2e9)}
   /* 透明底的棋盤格原本畫在工作區上 —— 那是錯的層：
      它要表達的是「這張紙是透明的」，所以格紋屬於紙張，不屬於工作區。 */
   .scstage.transparent-bg{background-color:#6f6a62 !important;background-image:none !important}
@@ -837,6 +842,25 @@
     #scMoreBox .sclay-g{padding:3px 0}
     #scMoreBox .scstudio-tabs{width:100%}
     #scMoreBox .scstudio-tabs button{flex:1}
+  }
+
+  /* ==========================================================================
+     手機：分節收合
+     桌機把文字／版面／顏色併成一頁是對的（有側欄空間，不用來回切）；
+     但手機上那就是一條很長的捲軸 —— 大改版前面板只有 14 個控制項，
+     現在有 43 個。所以手機改成可收合的分節，一次只看一段。
+     ========================================================================== */
+  @media(max-width:1099px){
+    .scstudio-sub{cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+      margin:0;padding:11px 2px;border-bottom:1px solid var(--line,#ddd6c4);
+      font-size:12px;letter-spacing:.08em;-webkit-tap-highlight-color:transparent}
+    .scstudio-sub::after{content:"＋";font:400 13px/1 var(--mono,ui-monospace,monospace);
+      color:var(--muted,#8a8378)}
+    .scstudio-sub.open::after{content:"−"}
+    /* 小節內容 = 同一個 panel 裡小標之後的 .sclay */
+    .scstudio-panel .sclay{display:none}
+    .scstudio-panel.sec-open .sclay{display:grid}
+    .scstudio-panel{padding:0}
   }
 </style>
 </head>
@@ -6394,6 +6418,32 @@ function scBuildPosterThumbs(){
     '<span class="nm">'+(SC_POSTER_NAMES[k]||k)+'</span></button>').join("");
 }
 scBuildPosterThumbs();
+/* 手機的分節收合：點小標開合自己那一段，預設只開第一段。 */
+(function(){
+  const isNarrow=()=>matchMedia("(max-width:1099px)").matches;
+  const nl=document.querySelectorAll("#scMoreBox .scstudio-sub");
+  const subs=nl&&nl.length?Array.prototype.slice.call(nl):[];
+  if(!subs.length) return;
+  function setOpen(sub,on){
+    sub.classList.toggle("open",on);
+    const panel=sub.closest(".scstudio-panel");
+    if(panel) panel.classList.toggle("sec-open",on);
+  }
+  subs.forEach((sub,i)=>{
+    sub.addEventListener("click",()=>{
+      if(!isNarrow()) return;
+      const now=sub.classList.contains("open");
+      subs.forEach(x=>setOpen(x,false));      /* 一次只開一段，才不用捲 */
+      setOpen(sub,!now);
+    });
+  });
+  function sync(){
+    if(isNarrow()) subs.forEach((x,i)=>setOpen(x,i===0));
+    else subs.forEach(x=>setOpen(x,true));    /* 桌機全開 */
+  }
+  sync();
+  matchMedia("(max-width:1099px)").addEventListener("change",sync);
+})();
 /* 範例海報列預設收起 —— 它常駐在畫布上方會一直吃掉展示空間。
    需要時用按鈕叫出來，套用完自動收回去，畫面留給作品本身。 */
 if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
