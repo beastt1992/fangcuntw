@@ -2838,7 +2838,22 @@ function buildFont(){
   });
   return font;
 }
-let faceRef=null;
+let faceRef=null, faceSeq=0;
+/* 掛上預覽字型。原本的寫法是「先刪舊的 → await load → 加新的」，
+   await 中間若又被呼叫（拖滑桿一定會），就會有兩份以上同名的 SEPreview
+   同時掛在 document.fonts 上，瀏覽器逐字挑用哪一份 → 畫面出現不一致。
+   正確順序：先 load 好，確認自己是最新的請求，才刪舊的、加新的。 */
+async function swapPreviewFace(buf){
+  const seq=++faceSeq;
+  const face=new FontFace("SEPreview",buf);
+  await face.load();
+  if(seq!==faceSeq) return false;          /* 期間有更新的請求，這份丟棄 */
+  /* 保險：把所有殘留的同名字型清乾淨，不只清我們記得的那一個 */
+  const stale=[]; document.fonts.forEach(f=>{ if(f.family==="SEPreview") stale.push(f); });
+  for(const f of stale) document.fonts.delete(f);
+  document.fonts.add(face); faceRef=face;
+  return true;
+}
 /* 大字集時的即時預覽：只建樣張輸入框用到的那幾個字 */
 async function refreshLiveFontSmall(){
   const st=$("fontState");
@@ -2853,8 +2868,7 @@ async function refreshLiveFontSmall(){
     const font=new opentype.Font({familyName:"SEPrev",styleName:"Regular",
       unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
     const buf=font.toArrayBuffer();
-    if(faceRef) document.fonts.delete(faceRef);
-    faceRef=new FontFace("SEPreview",buf); await faceRef.load(); document.fonts.add(faceRef);
+    if(!await swapPreviewFace(buf)) return;   /* 已有更新的請求，這份作廢 */
     $("spec").classList.add("live");
     st.textContent="預覽 "+need.length+" 字（字庫共 "+
       ALL.filter(i=>G[i]&&G[i].u).length.toLocaleString()+" 字）";
@@ -2870,9 +2884,7 @@ async function refreshLiveFont(){
   st.textContent="生成中…";st.className="";
   try{
     const buf=buildFont().toArrayBuffer();
-    if(faceRef) document.fonts.delete(faceRef);
-    faceRef=new FontFace("SEPreview",buf);
-    await faceRef.load(); document.fonts.add(faceRef);
+    if(!await swapPreviewFace(buf)) return;   /* 已有更新的請求，這份作廢 */
     $("spec").classList.add("live");
     st.textContent="字型已生成 · "+(ALL.filter(i=>G[i].u).length+1)+" 字 · "+(buf.byteLength/1024).toFixed(1)+" KB";
     st.className="ok";
