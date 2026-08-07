@@ -1149,6 +1149,88 @@
      body.in-show 是 setMode 既有的 class，不用另外加狀態。 */
   .showacts{display:flex;align-items:center;gap:6px;flex:none}
   body:not(.in-show) .show-only{display:none !important}
+
+
+  /* ==========================================================================
+     v107 手機展示列：畫布 / 版式
+     原本 #scPosterBar 繼承 .scbar 的 flex-wrap，畫布七顆按鈕把「版式」擠到
+     下一行右側，形成不對齊的 L 型排版。手機改成兩條明確工具列：
+       畫布｜自由 1:1 4:5 ...（按鈕區可橫向滑）
+       版式｜巨字 字陣
+     標籤固定、按鈕自己捲，不讓整列換行。
+     ========================================================================== */
+  @media (max-width:700px){
+    #scPosterBar{
+      display:grid !important;
+      grid-template-columns:minmax(0,1fr);
+      gap:0 !important;
+      padding:0 !important;
+      min-height:0 !important;
+      height:auto !important;
+      overflow:hidden !important;
+      justify-content:stretch !important;
+      align-items:stretch !important;
+      background:var(--paper);
+    }
+    #scPosterBar>.g:not(.scposter-wrap){
+      width:100%;
+      min-width:0;
+      display:grid;
+      grid-template-columns:48px minmax(0,1fr);
+      align-items:center;
+      gap:7px;
+      padding:6px 8px;
+      margin:0;
+      box-sizing:border-box;
+      white-space:nowrap;
+    }
+    #scPosterBar>.g:not(.scposter-wrap)+.g:not(.scposter-wrap){
+      border-top:1px solid var(--line);
+    }
+    #scPosterBar>.g:not(.scposter-wrap)>label{
+      width:auto;
+      text-align:right;
+      padding-right:2px;
+      font-size:10px;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+    #scPosterBar #scCanvas,
+    #scPosterBar #scLayout{
+      min-width:0;
+      width:100%;
+      display:flex;
+      flex-wrap:nowrap !important;
+      gap:4px;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scrollbar-width:none;
+      -webkit-overflow-scrolling:touch;
+      overscroll-behavior-x:contain;
+      padding:1px 0 2px;
+    }
+    #scPosterBar #scCanvas::-webkit-scrollbar,
+    #scPosterBar #scLayout::-webkit-scrollbar{display:none}
+    #scPosterBar #scCanvas button,
+    #scPosterBar #scLayout button{
+      flex:0 0 auto !important;
+      min-height:34px;
+      padding:5px 11px;
+      font-size:12px;
+      border-radius:8px;
+    }
+    /* 範例縮圖展開時仍獨佔一列，不混進畫布 / 版式。 */
+    #scPosterBar .scposter-wrap{
+      grid-column:1;
+      width:100%;
+      min-width:0;
+      order:0;
+      padding:6px 8px;
+      border-bottom:1px solid var(--line);
+    }
+    #scPosterBar .scposter-wrap.is-off{display:none !important}
+  }
+
 </style>
 </head>
 <body>
