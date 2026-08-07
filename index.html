@@ -4184,6 +4184,27 @@ function csOffsetRing(ring,delta){
    current union 在極粗字重可能自己產生細長假洞（「豐」中央那條針縫），
    也可能把真正的洞吃掉。先只保留每個 polygon 的 exterior，填掉所有 current holes；
    後面再只把「reference 本來存在」的 enclosed counters 挖回來。 */
+/* ★ 只填掉「假洞」，保留真正的內白。
+   原本這裡呼叫 csSolidInk 把所有內圈無條件丟掉（先毀掉再由參考字形重建），
+   但重建那條路徑（csEnclosedCounterCuts）有四個 return [] 與兩個 continue，
+   加上 A>80 && w>2 的門檻 —— 只要重建對某個洞失敗，那個洞就永久是黑的。
+   實測 cmin=36 時「目田口日貝間」的內白 100% 被填死，就是這樣來的。
+   改成保留原本就存在的洞，只濾掉粗筆碰撞產生的針縫／小三角，
+   重建機制仍然照跑（負責把內白撐大），但不再是「唯一的洞來源」。 */
+function csKeepRealHoles(u,minArea,minW){
+  const out=[];
+  for(const poly of (u||[])){
+    if(!poly||!poly[0]||poly[0].length<4) continue;
+    const keep=[poly[0]];
+    for(let k=1;k<poly.length;k++){
+      const r=poly[k];
+      if(!r||r.length<4) continue;
+      if(Math.abs(csRingArea(r))>=minArea && csHoleWidth(r)>=minW) keep.push(r);
+    }
+    out.push(keep);
+  }
+  return out.length?out:(u||[]);
+}
 function csSolidInk(PCL,u){
   const shells=[];
   for(const poly of (u||[])) if(poly&&poly[0]&&poly[0].length>=4) shells.push([poly[0]]);
@@ -4279,7 +4300,9 @@ function protectCounters(ch, f, minGap, cs){
   /* v69：Boolean 母體先填掉 current 自己的所有 enclosed holes。
      合法 enclosed counters 由 reference topology 在下一行重建；這會消除「豐」極粗時
      由輪廓碰撞偶然形成的針縫/假洞，同時不會漏掉已經被粗筆吃光的真 counter。 */
-  const u=csSolidInk(PCL,uRaw);
+  /* 針縫／假洞的門檻：1000 em 底下 240 單位² 約是 15×16 的小點，
+     真正的內白（「口」約 35 萬）差三個數量級，不會誤殺。 */
+  const u=csKeepRealHoles(uRaw,240,1.2);
 
   /* enclosed counter 不是 medial ribbon：直接把 reference 內圈當白區 topology，
      必要時由 reference 白區重建 target，確保「多／目／田／豐」這種封閉內白不被粗筆吃掉。 */
