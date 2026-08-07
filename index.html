@@ -6386,8 +6386,22 @@ const SC_POSTERS={
      （per-字的大小變化要另外做：scOvr 目前只存顏色，
        要做分區大小得先加 per-字尺寸覆寫。） */
   minimal:{txt:"把繁體中文字型設計\n變得更直覺\n\n骨架與參數\n二十七根設計軸\n一萬三千字同時變",canvas:"45",lay:"huge",dir:"h",align:"left",margin:.16,scale:.86,gx:.04,gy:.10,pal:"mo",col:"mono",blend:"normal",bg:"#f4f0e7",ink:"#17130e",weight:72,round:.06},
-  sign:{txt:"方寸字型\n繁體字設計\n\n招牌 標準字\n展場 指標\n包裝 標題",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.10,scale:1.02,gx:-.10,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:118,round:.08},
-  magazine:{txt:"方寸\n參數化中文字型工作室\n\n用骨架與參數\n設計整套繁體中文字型\n免費 開源 離線可用\n匯出 OTF 直接安裝",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.20,scale:.74,gx:.10,gy:.16,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:60,round:0},
+  sign:{txt:"方寸字型\n繁體字設計\n\n招牌 標準字\n展場 指標\n包裝 標題",canvas:"45",lay:"huge",dir:"h",align:"center",margin:.10,scale:1.02,gx:-.10,gy:.04,pal:"yan",col:"mono",blend:"normal",bg:"#b6382f",ink:"#fff8e8",weight:118,round:.08,
+    /* 招牌：頭兩個字放大當標題、後三行縮小當說明，標題再略微上移 */
+    tr:{"0|0|方":{s:1.34,r:0},"0|1|寸":{s:1.34,r:0},"0|2|字":{s:.92,r:0},"0|3|型":{s:.92,r:0},
+        "3|0|招":{s:.60,r:0},"3|1|牌":{s:.60,r:0},"3|3|標":{s:.60,r:0},"3|4|準":{s:.60,r:0},"3|5|字":{s:.60,r:0},
+        "4|0|展":{s:.60,r:0},"4|1|場":{s:.60,r:0},"4|3|指":{s:.60,r:0},"4|4|標":{s:.60,r:0},
+        "5|0|包":{s:.60,r:0},"5|1|裝":{s:.60,r:0},"5|3|標":{s:.60,r:0},"5|4|題":{s:.60,r:0}},
+    off:{"0|0|方":[0,-.06],"0|1|寸":[0,-.06]}},
+  magazine:{txt:"方寸\n參數化中文字型工作室\n\n用骨架與參數\n設計整套繁體中文字型\n免費 開源 離線可用\n匯出 OTF 直接安裝",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.20,scale:.74,gx:.10,gy:.16,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:60,round:0,
+    /* 雜誌：刊頭兩個字放到兩倍、副標中、資訊行最小；刊頭刻意錯開一點 */
+    tr:{"0|0|方":{s:2.05,r:0},"0|1|寸":{s:2.05,r:0},
+        "1|0|參":{s:.78,r:0},"1|1|數":{s:.78,r:0},"1|2|化":{s:.78,r:0},"1|3|中":{s:.78,r:0},
+        "1|4|文":{s:.78,r:0},"1|5|字":{s:.78,r:0},"1|6|型":{s:.78,r:0},"1|7|工":{s:.78,r:0},
+        "1|8|作":{s:.78,r:0},"1|9|室":{s:.78,r:0},
+        "5|0|免":{s:.56,r:0},"5|1|費":{s:.56,r:0},"5|3|開":{s:.56,r:0},"5|4|源":{s:.56,r:0},
+        "6|0|匯":{s:.56,r:0},"6|1|出":{s:.56,r:0}},
+    off:{"0|0|方":[-.04,-.10],"0|1|寸":[.06,.05]}},
   matrix:{txt:"永方寸設計字型樣張\n春夏秋冬東南西北\n山水日月風雨雷電\n天地人和文武聖賢",canvas:"square",lay:"grid",dir:"h",align:"center",margin:.08,scale:1,gx:-.04,gy:-.04,pal:"qing",col:"pageGrad",blend:"normal",bg:"#f8f6f0",ink:"#16324f",weight:92,round:.18},
   night:{txt:"台灣夜市\n招牌字研究\n\n蚵仔煎 大腸麵線\n鹽酥雞 珍珠奶茶\n臭豆腐 肉圓 米糕",canvas:"916",lay:"huge",dir:"h",align:"center",margin:.10,scale:.92,gx:-.06,gy:.08,pal:"ye",col:"stroke",blend:"normal",bg:"#08080e",ink:"#ffffff",weight:108,round:.24},
   vertical:{txt:"方寸\n繁體中文字型工作室\n骨架驅動 參數控制\n整套生成 匯出安裝",canvas:"34",lay:"huge",dir:"v",align:"center",margin:.14,scale:.88,gx:.06,gy:.06,pal:"cha",col:"mono",blend:"normal",bg:"#ece4d4",ink:"#3a2a17",weight:84,round:.10}
@@ -6409,6 +6423,14 @@ function scApplyPoster(k, withText){
   scBgColor=p.bg; scMonoColor=p.ink; scTransparentBg=false; scSetPaletteKey(p.pal);
   F.weight=p.weight; F.round=p.round; presetKey=null;
   scOff={}; scTr={}; scCustom={}; scOvr={}; scAxOvr={}; scSelKey=null;
+  /* ★ 模板可以指定「哪個字要多大、偏多少、轉幾度」。
+     鍵值是「列|欄|字」，跟你在畫面上逐字調整用的是同一組資料 ——
+     所以套用之後還是可以自己再拖、再改。
+     只有連文字一起帶入時才套：文字不一樣的話，位置對不上。 */
+  if(withText){
+    if(p.tr)  for(const k in p.tr)  scTr[k]={...p.tr[k]};
+    if(p.off) for(const k in p.off) scOff[k]=p.off[k].slice();
+  }
   document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));
   document.querySelectorAll("#scLayout button").forEach(x=>x.classList.toggle("on",x.dataset.k===scLay));
   document.querySelectorAll("#scDirection button").forEach(x=>x.classList.toggle("on",x.dataset.k===scDir));
