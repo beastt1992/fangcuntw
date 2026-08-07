@@ -41,6 +41,7 @@
   本檔案不含任何 GPL 授權的程式碼。
 ================================================================================
 -->
+<!-- FANGCUN-MOBILE-FIX: v37.2 safe-area + menu portal -->
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -600,6 +601,28 @@
     .menupanel .btn{padding:11px 14px;font-size:13px}
     .menunote{font-size:12px;max-width:none}
   }
+
+
+  /* ==========================================================================
+     v37.2 手機修正：安全區與頂部選單
+     - iOS 瀏覽器本身已處理瀏海時，safe-area-inset-top 可能是 0；不可再強塞 44/54px。
+     - PWA 全螢幕時直接採用系統回報的安全區，避免瀏海下方出現雙倍留白。
+     ========================================================================== */
+  @media (max-width:700px){
+    :root{
+      --safe-top:env(safe-area-inset-top, 0px);
+      --safe-bottom:env(safe-area-inset-bottom, 0px);
+    }
+  }
+  .menuback{z-index:999}
+  .menupanel{z-index:1000}
+
+
+  @media (pointer:coarse){
+    body.menu-open{overflow:hidden!important;touch-action:none}
+    body.menu-open .menupanel{touch-action:auto}
+  }
+
 </style>
 </head>
 <body>
@@ -4181,6 +4204,17 @@ function glyphStats(id,f,N){
   out.ok=!out.err;
   return out;
 }
+function runGlyphRegression(){
+  const broken=[];
+  for(const ch of QA_CORPUS){
+    if(!G[ch]) continue;
+    const st=glyphStats(ch,axesOf("fangcun"),24);
+    if(!st.ok) broken.push(ch+":"+(st.err||"未知錯誤"));
+  }
+  if(broken.length) console.warn("方寸啟動檢查：",broken.join("、"));
+  return broken;
+}
+
 function qaBaseline(){ try{ return JSON.parse(localStorage.getItem(QA_KEY)||"null"); }catch(e){ return null; } }
 
 async function qaRun(){
@@ -4695,6 +4729,19 @@ $("qaAbout").addEventListener("click",()=>{
    八顆按鈕收成三個。按鈕本身沒有被重建 —— 只是搬進面板，
    id 與事件監聽完全沒動（這是刻意的：重建 DOM 是以前把版面弄壞的原因）。
    ========================================================================== */
+
+/* iOS Safari 會裁切放在橫向捲動 .bar 裡的 fixed 面板。
+   把背景與三個面板搬到 body 直屬層，按鈕仍留在頭列，id 與原事件完全不變。 */
+function mountMenuPortal(){
+  const back=$("menuBack");
+  if(back && back.parentNode!==document.body) document.body.appendChild(back);
+  for(const id of ["pFile","pAdv","pExp"]){
+    const panel=$(id);
+    if(panel && panel.parentNode!==document.body) document.body.appendChild(panel);
+  }
+}
+mountMenuPortal();
+
 const MENUS=[["mFile","pFile"],["mAdv","pAdv"],["mExp","pExp"]];
 function closeMenus(except){
   for(const [b,p] of MENUS){
@@ -4704,6 +4751,7 @@ function closeMenus(except){
   }
   const back=$("menuBack");
   if(back) back.hidden = !MENUS.some(([,p])=>$(p)&&!$(p).hidden);
+  document.body.classList.toggle("menu-open", MENUS.some(([,p])=>$(p)&&!$(p).hidden));
 }
 /* 面板是 fixed，位置要自己算。桌機掛在按鈕下方並靠右對齊，
    超出視窗右緣或下緣時往內收；手機交給 CSS 貼底，不算座標。 */
@@ -4734,13 +4782,14 @@ for(const [b,p] of MENUS){
     if(open) placeMenu(b,p);
     $(b).setAttribute("aria-expanded",open?"true":"false");
     const back=$("menuBack"); if(back) back.hidden=!open;
+    document.body.classList.toggle("menu-open",open);
   });
   /* 面板裡按了任何一顆就收起來 —— 它們各自的原本行為照舊 */
   $(p).addEventListener("click",e=>{
     if(e.target.closest("button")) setTimeout(()=>closeMenus(null),0);
   });
 }
-document.addEventListener("click",e=>{ if(!e.target.closest(".menu")) closeMenus(null); });
+document.addEventListener("click",e=>{ if(!e.target.closest(".menu,.menupanel")) closeMenus(null); });
 $("menuBack").addEventListener("click",()=>closeMenus(null));
 addEventListener("keydown",e=>{ if(e.key==="Escape") closeMenus(null); });
 addEventListener("resize",()=>{
