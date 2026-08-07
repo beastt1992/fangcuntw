@@ -6445,21 +6445,75 @@ const RND_AXES=["scatter","wobble","hand"];
 const rndOff=()=>RND_AXES.every(k=>(F[k]||0)<0.01);
 function scSeedLabel(){
   const el2=$("scSeedV"); if(!el2) return;
-  el2.textContent = rndOff() ? "尚未開啟隨機" : "種子 "+F.seed;
+  /* 種子只影響錯位／粗細不均／書寫感的亂數花樣；那三根都關著時它不會有任何效果，
+     標出來才不會以為是壞的。 */
+  el2.textContent = rndOff() ? "種子 "+F.seed+"（未用到）" : "種子 "+F.seed;
+}
+
+/* ==========================================================================
+   重骰：抽一整套設計軸
+   舊版只換 F.seed —— 但 seed 只餵給錯位／粗細不均／書寫感的亂數花樣，
+   決定字體長相的軸一根都沒動，所以按十次都是同一個字體在換抖動樣式。
+   現在改成真的抽一套「字體個性」：粗細、方圓、對比、收筆…全部重抽。
+
+   抽樣是有結構的，不是每根軸各自亂數 —— 純亂數幾乎必然難看
+   （超粗＋強對比會糊成一團、方角配圓端點會很怪）。這裡照的是字體設計的相依關係：
+     · 先定「骨」（粗細），再定「皮」（方圓與對比），其餘跟著走
+     · 高對比是明體那一路，細字才撐得住；而且一定要配收筆與頓，否則橫畫細得像斷掉
+     · 端點跟圓角同向
+     · 視覺補償固定落在 0.60–0.78：好看的字幾乎都在這一段
+   ========================================================================== */
+const rrRnd=(a,b)=>a+Math.random()*(b-a);
+const rrPick=a=>a[Math.floor(Math.random()*a.length)];
+const rrChance=p=>Math.random()<p;
+function scRandomFace(){
+  const wt=Math.round(rrRnd(46,132));
+  const heavy=wt>96, light=wt<62;
+  const roundness=rrPick([0.02,0.06,0.12,0.20,0.34,0.55,0.78,1.00]);
+  const ct = heavy ? rrRnd(0.90,1.15)
+           : light ? rrRnd(0.95,1.85)
+                   : rrRnd(0.90,1.45);
+  const hiCt = ct>1.4;
+  Object.assign(F,{
+    weight:wt,
+    optic:+rrRnd(0.60,0.78).toFixed(2),
+    contrast:+ct.toFixed(2),
+    round:roundness,
+    cap:+Math.max(0,Math.min(1,roundness+rrRnd(-0.08,0.12))).toFixed(2),
+    counter:+rrRnd(heavy?0.80:0.92, heavy?0.98:1.14).toFixed(2),
+    face:+rrRnd(1.00,1.10).toFixed(2),
+    gravity:+rrRnd(0.95,1.05).toFixed(2),
+    width:+rrRnd(0.90,1.12).toFixed(2),
+    slant: rrChance(0.18)? +rrRnd(-0.10,0.12).toFixed(2) : 0,
+    finish: hiCt? +rrRnd(0.60,1.00).toFixed(2) : (rrChance(0.30)? +rrRnd(0,0.35).toFixed(2) : 0),
+    dun:    hiCt? +rrRnd(0.55,1.10).toFixed(2) : (rrChance(0.30)? +rrRnd(0,0.40).toFixed(2) : 0),
+    press:  rrChance(0.35)? +rrRnd(0.20,1.10).toFixed(2) : 0,
+    hand:   rrChance(0.30)? +rrRnd(0.10,0.70).toFixed(2) : 0,
+    taper:  heavy? +rrRnd(0,0.50).toFixed(2) : +rrRnd(0.50,1.30).toFixed(2),
+    hook:   +rrRnd(0.70,1.30).toFixed(2),
+    rise:   +rrRnd(0,0.09).toFixed(3),
+    /* 造型軸先全部歸零，下面再決定要不要來一個 */
+    scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0,
+    cmin:0,                     /* 內白保護的封閉內白判斷仍是壞的，不要開 */
+    seed:1+Math.floor(Math.random()*999)
+  });
+  /* 三成機率加一個「造型」效果（標準字那一路）。一次只加一種 —— 疊起來會糊成一團。 */
+  if(rrChance(0.34)){
+    const k=rrPick(["scatter","wobble","spike","hollow","inflate","wave","chop","arch"]);
+    const r={scatter:[0.10,0.40],wobble:[0.15,0.50],spike:[0.40,1.00],hollow:[0.30,0.70],
+             inflate:[0.30,0.80],wave:[0.15,0.45],chop:[0.20,0.50],arch:[-0.30,0.30]}[k];
+    F[k]=+rrRnd(r[0],r[1]).toFixed(2);
+    if(k==="scatter") F.wobble=+rrRnd(0.10,0.30).toFixed(2);
+  }
 }
 $("scReroll").addEventListener("click",()=>{
-  const wasOff=rndOff();
-  if(wasOff){                       /* 先開一點，不然按了沒反應 */
-    F.scatter=0.26; F.wobble=0.34;
-    presetKey=null;
-    document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
-    document.querySelectorAll("#scPreset button").forEach(x=>x.classList.remove("on"));
-  }
-  F.seed=1+Math.floor(Math.random()*999);
+  scRandomFace();
+  presetKey=null;
+  document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
+  document.querySelectorAll("#scPreset button").forEach(x=>x.classList.remove("on"));
   scSeedLabel();
   syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
-  if(wasOff) $("scHint").textContent=
-    "已開啟錯位與粗細不均 —— 再按「重骰」會換一組隨機；同一盒的「造型」那組可以調強弱或關掉";
+  $("scHint").textContent="重骰：整組設計軸都換了一套 —— 不喜歡就再按一次，或按上面的預設回到標準字體";
 });
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
