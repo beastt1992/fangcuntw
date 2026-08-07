@@ -421,7 +421,12 @@
     .tabs button,.presets button{min-height:36px;padding:5px 10px;font-size:12px}
     .bar>.spacer{display:none}
     .bar .btn{flex:none;min-height:36px;padding:5px 10px;font-size:12px}
-    .bar #btnExport{position:sticky;right:0;z-index:3;box-shadow:-8px 0 10px var(--paper)}
+    /* ★ 這條本來寫 #btnExport —— 那是選單「展開後裡面」的項目（字型檔 OTF），
+       根本不在頂列裡，所以 sticky 完全沒作用，頂列一往右捲匯出就不見了。
+       真正在頂列上的是 #mExp，它包在 .menu 裡，sticky 要打在外框才有用。 */
+    .bar #mExpWrap{position:sticky;right:0;z-index:3;background:var(--paper);
+      box-shadow:-8px 0 10px var(--paper)}
+    .bar .menu{flex:none}
 
     .mid{grid-row:2;min-height:0;display:flex;flex-direction:column;overflow:hidden;border-top:none}
     .mobile-panes{display:flex;flex:none;height:42px;border-bottom:1px solid var(--ink);background:var(--paper);z-index:4}
@@ -768,6 +773,13 @@
      捲動範圍還是照原尺寸算，所以放大後往上、往左永遠捲不到。
      zoom 會實際改變佔位，捲軸才會對。 */
   .sczoomwrap{transition:none;margin:auto}
+  /* ★ 畫布縮不進手機的真正原因：#scArt 有 JS 算出來的 width 屬性（4:5 畫布約 694px），
+     而這層 wrapper 只有 margin:auto、沒有寬度上限 —— 於是 wrapper 撐到 694px，
+     #scArt{max-width:100%} 的 100% 就是那 694px，等於完全沒有限制。
+     包這層之前 #scArt 直接是 .scstage 的 flex 子元素，100% 算的是舞台寬度，會自己縮好。
+     只在縮放 1.0（scApplyZoom 會掛 .is-fit）時套上限，放大時照常溢出可捲，功能不受影響。 */
+  .sczoomwrap.is-fit{max-width:100%}
+  .sczoomwrap.is-fit>#scArt{max-width:100%;height:auto}
   /* ★ flex 的 justify-content:center 在「內容比容器寬」時，
      左半邊會溢出到捲動範圍外、永遠捲不到（截圖裡紙張靠左就是這個）。
      改用子元素 margin:auto —— 溢出時兩側都捲得到，沒溢出時照樣置中。 */
@@ -1011,6 +1023,27 @@
   .sctypegroup em{font-style:normal;font-family:var(--mono);font-size:8.5px;
     letter-spacing:.18em;color:var(--muted);margin-left:6px}
   #scTypeMore.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+  /* ==========================================================================
+     手機：底部字形軸列改成兩欄格線
+     原本是一列橫向捲動（.scaxes{overflow-x:auto}），但那一列裡面全是
+     要橫向拖的滑桿 —— 拖滑桿和捲整列是同一個手勢，想拉字重會變成整條列滑走。
+     桌機有滑鼠所以看不出來，手機上等於不能用。
+     改成格線之後：六根一次全看得到、沒有隱藏內容、也沒有手勢衝突。
+     寫在檔案最後，確保蓋得過前面 .scaxes 那幾條同權重的規則。
+     ========================================================================== */
+  @media(max-width:700px){
+    .scaxes{display:grid;grid-template-columns:1fr 1fr;
+      gap:0 10px;overflow:visible;padding-bottom:0}
+    .scaxes>.g{min-width:0}
+    .scaxes>.g>label{flex:none;width:36px;font-size:10.5px}
+    /* 滑桿改成吃剩餘空間；原本是固定 76px＋min-width:72px，格子裡會撐破 */
+    .scaxes>.g>input[type=range]{width:auto;flex:1 1 auto;min-width:0;height:32px}
+    .scaxes>.g>b{flex:none;width:28px}
+    /* 這條是舊的「兩欄格線 scfoot」留下來的。scfoot 現在是縱向 flex（display 被
+       !important 蓋掉了），但 min-height 是另一個屬性、沒被蓋到，等於白白多 104px。 */
+    .scfoot{min-height:0 !important}
+  }
 </style>
 </head>
 <body>
@@ -1059,7 +1092,7 @@
       </div>
     </div>
 
-    <div class="menu">
+    <div class="menu" id="mExpWrap">
       <button class="btn menubtn" id="mExp" type="button" aria-expanded="false">匯出<i></i></button>
       <div class="menupanel" id="pExp" hidden>
         <button class="btn ghost sm" id="btnExport" type="button">字型檔 OTF · 全部或指定字數</button>
@@ -1179,7 +1212,7 @@
     <div class="scstage" id="scStage">
       <!-- 縮放只作用在顯示層：包一層做 CSS transform，
            不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
-      <div class="sczoomwrap" id="scZoomWrap">
+      <div class="sczoomwrap is-fit" id="scZoomWrap">
       <svg id="scArt" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
       <div class="schint" id="scHint">點一個字選取 · 開啟搬字後可直接拖曳</div>
@@ -1218,6 +1251,12 @@
             <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
             <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
             <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
+          <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
+               跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
+               同一塊面板兩個「隨機」意思不同，按下去只會嚇到人。 -->
+          <div class="sclay-g"><label>隨機字形</label>
+            <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
+            <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
         </div>
         <div class="scmore-in" id="scGrid"></div>
       </div></div>
@@ -1285,9 +1324,6 @@
           <div class="sclay-g"><label>自訂色</label>
             <input type="color" id="scPick" value="#c2453a">
             <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
-          <div class="sclay-g"><label>隨機</label>
-            <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
-            <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
           <div class="sclay-g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
         </div>
       </div>
@@ -6397,7 +6433,7 @@ $("scReroll").addEventListener("click",()=>{
   scSeedLabel();
   syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
   if(wasOff) $("scHint").textContent=
-    "已開啟錯位與粗細不均 —— 再按「重骰」會換一組隨機；在「更多」裡可以調強弱或關掉";
+    "已開啟錯位與粗細不均 —— 再按「重骰」會換一組隨機；同一盒的「造型」那組可以調強弱或關掉";
 });
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
@@ -6437,6 +6473,9 @@ const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4];
 function scApplyZoom(){
   const w=$("scZoomWrap"); if(!w) return;
   w.style.zoom = scZoomLv===1 ? "" : scZoomLv;
+  /* 縮放 1.0 ＝「符合視窗」，這時才讓畫布受舞台寬度限制（見 .sczoomwrap.is-fit）。
+     放大時拿掉限制，才捲得到被放大的部分。 */
+  w.classList.toggle("is-fit", scZoomLv===1);
   const b=document.querySelector('#scZoom button[data-z="fit"]');
   if(b) b.textContent=Math.round(scZoomLv*100)+"%";
   /* zoom 會佔實際空間，flex 的置中與捲動都會自己算對，不用另外改對齊。 */
