@@ -1623,10 +1623,283 @@ const CXED=["白","石","貝","古","胡","自","頁","舌",
             "天","主","話","活","吾","語","這","進","連","軍","集","問","間","酒","媽","嗎",
             "是","政","看","的","市","引","星"];
 const PUNCT=["　","。","、","，","：","；","！","？","「","」","『","』","（","）","〔","〕","【","】","—","…","‧","・","～",
-             "?","!",",",":",";","(",")","[","]","~",".","-"];
+             "?","!",",",":",";","(",")","[","]","~",".","-",
+             /* 拉丁字母與數字 —— PUNCT 是寫死的匯出清單，
+                只在 G 加字形定義的話，畫面看得到但匯出的字型不會有。 */
+             ..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"];
 const ORDER=[...COMP,...CXED];
 const ALL=[...ORDER,...PUNCT];
 const VNAME={left:"左偏旁",right:"右偏旁",top:"置頂",bottom:"墊底",enclose:"包圍"};
+
+/* ==========================================================================
+   拉丁字母與阿拉伯數字（62 字）
+   依 Noto Sans CJK 實測：基線 0 / x-height 543 / cap height 733（em=1000）。
+   直畫粗細實測拉丁 78、漢字 78–81 —— 幾乎一致，**共用同一根字重軸**，不另外換算。
+   ★ 圓形字必須「一筆繞完」：拆成左右兩半會變成兩片各自封閉的瓣狀外框，
+     在接縫處疊出凸起（實測 O 的輪廓數 2、半徑起伏 169）。
+   ★ 弧線用 cv:"smooth"：多點折線走一般路徑會逐點做圓角，圓看起來像多邊形。
+   ========================================================================== */
+/* 內部座標換算：Noto 的 y=0（基線）→ 這裡 y=120；y=733（cap）→ 853 */
+const LAT_BASE = 120;
+const LY = y => LAT_BASE + y;          /* Noto 座標 → 字面盒座標 */
+
+const XH  = LY(543);   /* x-height 663 */
+const CAP = LY(733);   /* cap height 853 */
+const BL  = LY(0);     /* baseline 120 */
+const OV  = 13;        /* 圓形字的上下超出量 */
+const DESCB = LY(-190);/* 下伸部 -70 */
+
+/* 圓弧：沿橢圓取多點當骨架。
+   三個點加 bend 撐不出圓 —— 實測會變成菱形。用 9 點取樣，
+   引擎的曲線平滑會把它接成真正的圓弧，而且提按／出鋒都吃得到。 */
+function latPts(cx, cy, rx, ry, a0, a1, n){
+  const out=[];
+  for(let i=0;i<=n;i++){
+    const t=a0+(a1-a0)*i/n;
+    out.push([cx+rx*Math.cos(t), cy+ry*Math.sin(t)]);
+  }
+  return out;
+}
+/* 整圓：★必須用「一筆繞完」，不能拆成左右兩半。
+   拆兩筆的話會變成兩片各自封閉的瓣狀外框、在接縫處疊出凸起 ——
+   實測 O 的半徑起伏 169 單位（應該接近 0）。
+   繞一圈的頭尾重合，引擎會把它當封閉曲線處理。 */
+function latRound(cx, cy, rx, ry, w){
+  const H=Math.PI/2;
+  return [{t:"zhe", p:latPts(cx,cy,rx,ry, H, H+2*Math.PI, 24), w:w, fr:2.6, cv:"smooth"}];
+}
+/* 任意弧：a0→a1 用弧度（0 = 右、π/2 = 上） */
+function latHalf(cx, cy, rx, ry, a0, a1, w){
+  return {t:"zhe", p:latPts(cx,cy,rx,ry,a0,a1, Math.max(4,Math.round(Math.abs(a1-a0)/0.4))), w:w, fr:2.6, cv:"smooth"};
+}
+
+const LATGLY = {
+/* ---------- 數字（等寬 555，字面內 x 約 60..495） ---------- */
+"0":{u:0x30,aw:555,s:[...latRound(278, (BL+CAP)/2, 218, (CAP-BL)/2+OV, 0.92)]},
+"1":{u:0x31,aw:555,s:[
+  {t:"pie",p:[[120,LY(560)],[268,CAP]],w:0.88},
+  {t:"shu",p:[[268,CAP],[268,BL]],w:0.96},
+  {t:"heng",p:[[130,BL],[420,BL]],w:0.92}]},
+"2":{u:0x32,aw:555,s:[
+  {t:"zhe",p:[[68,LY(560)],[278,CAP],[478,LY(560)],[420,LY(400)],[80,BL]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[70,BL],[492,BL]],w:0.92}]},
+"3":{u:0x33,aw:555,s:[
+  {t:"zhe",p:[[72,LY(620)],[268,CAP],[452,LY(600)],[268,LY(400)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"zhe",p:[[268,LY(400)],[470,LY(200)],[268,LY(-13)],[70,LY(120)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"}]},
+"4":{u:0x34,aw:555,s:[
+  {t:"pie",p:[[352,CAP],[62,LY(200)]],w:0.90},
+  {t:"heng",p:[[52,LY(200)],[498,LY(200)]],w:0.92},
+  {t:"shu",p:[[368,CAP],[368,BL]],w:0.96}]},
+"5":{u:0x35,aw:555,s:[
+  {t:"heng",p:[[452,CAP],[110,CAP]],w:0.92},
+  {t:"shu",p:[[110,CAP],[100,LY(430)]],w:0.92},
+  {t:"zhe",p:[[100,LY(430)],[300,LY(470)],[476,LY(250)],[300,LY(-13)],[74,LY(90)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"}]},
+"6":{u:0x36,aw:555,s:[
+  {t:"zhe",p:[[430,LY(640)],[268,LY(746)],[92,LY(480)],[80,LY(230)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"},
+  ...latRound(282, LY(210), 196, 223, 0.92)]},
+"7":{u:0x37,aw:555,s:[
+  {t:"heng",p:[[62,CAP],[492,CAP]],w:0.92},
+  {t:"pie",p:[[492,CAP],[196,BL]],w:0.94}]},
+"8":{u:0x38,aw:555,s:[
+  ...latRound(276, LY(556), 186, 190, 0.88),
+  ...latRound(276, LY(180), 214, 193, 0.90)]},
+"9":{u:0x39,aw:555,s:[
+  ...latRound(274, LY(536), 196, 210, 0.92),
+  {t:"zhe",p:[[476,LY(500)],[464,LY(250)],[288,LY(-13)],[126,LY(96)]],bend:-0.40,w:0.92,fr:2.6, cv:"smooth"}]},
+
+/* ---------- 大寫 ---------- */
+"A":{u:0x41,aw:608,s:[
+  {t:"pie",p:[[304,CAP],[14,BL]],w:0.94},
+  {t:"na",p:[[304,CAP],[594,BL]],w:0.94},
+  {t:"heng",p:[[112,LY(210)],[496,LY(210)]],w:0.86}]},
+"B":{u:0x42,aw:648,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[380,CAP]],w:0.90},
+  {t:"zhe",p:[[380,CAP],[556,LY(620)],[380,LY(410)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[112,LY(410)],[398,LY(410)]],w:0.90},
+  {t:"zhe",p:[[398,LY(410)],[588,LY(200)],[398,BL]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[112,BL],[398,BL]],w:0.90}]},
+"C":{u:0x43,aw:678,s:[
+  {t:"zhe",p:[[604,LY(600)],[336,LY(746)],[80,LY(370)],[336,LY(-13)],[608,LY(140)]],bend:-0.42,w:0.94,fr:2.6, cv:"smooth"}]},
+"D":{u:0x44,aw:712,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[356,CAP]],w:0.90},
+  {t:"zhe",p:[[356,CAP],[636,LY(370)],[356,BL]],bend:-0.48,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[112,BL],[356,BL]],w:0.90}]},
+"E":{u:0x45,aw:602,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[540,CAP]],w:0.90},
+  {t:"heng",p:[[112,LY(410)],[490,LY(410)]],w:0.88},
+  {t:"heng",p:[[112,BL],[548,BL]],w:0.90}]},
+"F":{u:0x46,aw:570,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[534,CAP]],w:0.90},
+  {t:"heng",p:[[112,LY(410)],[482,LY(410)]],w:0.88}]},
+"G":{u:0x47,aw:734,s:[
+  {t:"zhe",p:[[620,LY(600)],[348,LY(746)],[86,LY(370)],[348,LY(-13)],[634,LY(180)]],bend:-0.42,w:0.94,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[634,LY(180)],[634,LY(340)]],w:0.92},
+  {t:"heng",p:[[634,LY(340)],[420,LY(340)]],w:0.88}]},
+"H":{u:0x48,aw:728,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"shu",p:[[616,CAP],[616,BL]],w:0.96},
+  {t:"heng",p:[[112,LY(400)],[616,LY(400)]],w:0.88}]},
+"I":{u:0x49,aw:293,s:[{t:"shu",p:[[146,CAP],[146,BL]],w:0.96}]},
+"J":{u:0x4A,aw:520,s:[
+  {t:"shu",p:[[400,CAP],[400,LY(180)]],w:0.96},
+  {t:"zhe",p:[[400,LY(180)],[250,LY(-13)],[64,LY(150)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"}]},
+"K":{u:0x4B,aw:648,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"pie",p:[[622,CAP],[112,LY(300)]],w:0.92},
+  {t:"na",p:[[286,LY(468)],[634,BL]],w:0.94}]},
+"L":{u:0x4C,aw:546,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,BL],[520,BL]],w:0.90}]},
+"M":{u:0x4D,aw:812,s:[
+  {t:"shu",p:[[112,BL],[112,CAP]],w:0.96},
+  {t:"na",p:[[112,CAP],[406,LY(180)]],w:0.90},
+  {t:"pie",p:[[700,CAP],[406,LY(180)]],w:0.90},
+  {t:"shu",p:[[700,CAP],[700,BL]],w:0.96}]},
+"N":{u:0x4E,aw:730,s:[
+  {t:"shu",p:[[112,BL],[112,CAP]],w:0.96},
+  {t:"na",p:[[112,CAP],[618,LY(120)]],w:0.92},
+  {t:"shu",p:[[618,LY(120)],[618,CAP]],w:0.96}]},
+"O":{u:0x4F,aw:742,s:[...latRound(371, (BL+CAP)/2, 313, (CAP-BL)/2+OV, 0.94)]},
+"P":{u:0x50,aw:634,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[378,CAP]],w:0.90},
+  {t:"zhe",p:[[378,CAP],[576,LY(566)],[378,LY(400)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[112,LY(400)],[378,LY(400)]],w:0.90}]},
+"Q":{u:0x51,aw:742,s:[
+  ...latRound(371, (BL+CAP)/2, 313, (CAP-BL)/2+OV, 0.94),
+  {t:"na",p:[[420,LY(150)],[660,LY(-80)]],w:0.94}]},
+"R":{u:0x52,aw:658,s:[
+  {t:"shu",p:[[112,CAP],[112,BL]],w:0.96},
+  {t:"heng",p:[[112,CAP],[378,CAP]],w:0.90},
+  {t:"zhe",p:[[378,CAP],[566,LY(570)],[378,LY(410)]],bend:-0.45,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"heng",p:[[112,LY(410)],[378,LY(410)]],w:0.90},
+  {t:"na",p:[[330,LY(410)],[630,BL]],w:0.92}]},
+"S":{u:0x53,aw:626,s:[
+  {t:"zhe",p:[[566,LY(620)],[314,LY(746)],[82,LY(580)],[540,LY(300)],[556,LY(140)],[314,LY(-13)],[70,LY(130)]],
+   bend:-0.38,w:0.92,fr:2.6, cv:"smooth"}]},
+"T":{u:0x54,aw:598,s:[
+  {t:"heng",p:[[26,CAP],[572,CAP]],w:0.92},
+  {t:"shu",p:[[299,CAP],[299,BL]],w:0.96}]},
+"U":{u:0x55,aw:718,s:[
+  {t:"shu",p:[[106,CAP],[106,LY(200)]],w:0.96},
+  {t:"zhe",p:[[106,LY(200)],[359,LY(-13)],[612,LY(200)]],bend:-0.45,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[612,LY(200)],[612,CAP]],w:0.96}]},
+"V":{u:0x56,aw:575,s:[
+  {t:"na",p:[[2,CAP],[288,BL]],w:0.94},
+  {t:"pie",p:[[574,CAP],[288,BL]],w:0.94}]},
+"W":{u:0x57,aw:878,s:[
+  {t:"na",p:[[26,CAP],[228,BL]],w:0.90},
+  {t:"pie",p:[[438,CAP],[228,BL]],w:0.90},
+  {t:"na",p:[[438,CAP],[650,BL]],w:0.90},
+  {t:"pie",p:[[850,CAP],[650,BL]],w:0.90}]},
+"X":{u:0x58,aw:612,s:[
+  {t:"na",p:[[16,CAP],[596,BL]],w:0.94},
+  {t:"pie",p:[[596,CAP],[16,BL]],w:0.94}]},
+"Y":{u:0x59,aw:576,s:[
+  {t:"na",p:[[8,CAP],[288,LY(370)]],w:0.94},
+  {t:"pie",p:[[568,CAP],[288,LY(370)]],w:0.94},
+  {t:"shu",p:[[288,LY(370)],[288,BL]],w:0.96}]},
+"Z":{u:0x5A,aw:598,s:[
+  {t:"heng",p:[[46,CAP],[552,CAP]],w:0.92},
+  {t:"pie",p:[[552,CAP],[46,BL]],w:0.94},
+  {t:"heng",p:[[46,BL],[552,BL]],w:0.92}]},
+
+/* ---------- 小寫 ---------- */
+"a":{u:0x61,aw:588,s:[
+  ...latRound(268, LY(272), 196, 285, 0.90),
+  {t:"shu",p:[[464,LY(557)],[464,BL]],w:0.94}]},
+"b":{u:0x62,aw:620,s:[
+  {t:"shu",p:[[100,LY(796)],[100,BL]],w:0.96},
+  ...latRound(320, LY(272), 220, 285, 0.90)]},
+"c":{u:0x63,aw:558,s:[
+  {t:"zhe",p:[[502,LY(430)],[288,LY(557)],[70,LY(272)],[288,LY(-13)],[506,LY(112)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"}]},
+"d":{u:0x64,aw:620,s:[
+  {t:"shu",p:[[520,LY(796)],[520,BL]],w:0.96},
+  ...latRound(300, LY(272), 220, 285, 0.90)]},
+"e":{u:0x65,aw:588,s:[
+  {t:"heng",p:[[76,LY(280)],[516,LY(280)]],w:0.88},
+  {t:"zhe",p:[[516,LY(280)],[516,LY(470)],[294,LY(557)],[72,LY(272)],[294,LY(-13)],[512,LY(112)]],
+   bend:-0.40,w:0.92,fr:2.6, cv:"smooth"}]},
+"f":{u:0x66,aw:376,s:[
+  {t:"zhe",p:[[366,LY(796)],[226,LY(796)],[186,LY(650)],[186,BL]],bend:-0.35,w:0.94,fr:2.4, cv:"smooth"},
+  {t:"heng",p:[[46,LY(543)],[356,LY(543)]],w:0.86}]},
+"g":{u:0x67,aw:620,s:[
+  ...latRound(300, LY(272), 220, 285, 0.90),
+  {t:"shu",p:[[520,LY(557)],[520,LY(-60)]],w:0.94},
+  {t:"zhe",p:[[520,LY(-60)],[300,LY(-190)],[96,LY(-100)]],bend:-0.42,w:0.90,fr:2.6, cv:"smooth"}]},
+"h":{u:0x68,aw:610,s:[
+  {t:"shu",p:[[92,LY(796)],[92,BL]],w:0.96},
+  {t:"zhe",p:[[92,LY(390)],[300,LY(557)],[518,LY(390)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[518,LY(390)],[518,BL]],w:0.96}]},
+"i":{u:0x69,aw:274,s:[
+  {t:"shu",p:[[137,LY(543)],[137,BL]],w:0.96},
+  {t:"dot",p:[[137,LY(700)]],rk:0.60}]},
+"j":{u:0x6A,aw:274,s:[
+  {t:"shu",p:[[150,LY(543)],[150,LY(-60)]],w:0.96},
+  {t:"zhe",p:[[150,LY(-60)],[10,LY(-190)],[-80,LY(-120)]],bend:-0.40,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"dot",p:[[150,LY(700)]],rk:0.60}]},
+"k":{u:0x6B,aw:566,s:[
+  {t:"shu",p:[[92,LY(796)],[92,BL]],w:0.96},
+  {t:"pie",p:[[534,LY(543)],[92,LY(190)]],w:0.90},
+  {t:"na",p:[[252,LY(316)],[548,BL]],w:0.92}]},
+"l":{u:0x6C,aw:284,s:[{t:"shu",p:[[142,LY(796)],[142,BL]],w:0.96}]},
+"m":{u:0x6D,aw:922,s:[
+  {t:"shu",p:[[92,LY(543)],[92,BL]],w:0.96},
+  {t:"zhe",p:[[92,LY(390)],[286,LY(557)],[470,LY(390)]],bend:-0.42,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[470,LY(390)],[470,BL]],w:0.96},
+  {t:"zhe",p:[[470,LY(390)],[646,LY(557)],[830,LY(390)]],bend:-0.42,w:0.90,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[830,LY(390)],[830,BL]],w:0.96}]},
+"n":{u:0x6E,aw:610,s:[
+  {t:"shu",p:[[92,LY(543)],[92,BL]],w:0.96},
+  {t:"zhe",p:[[92,LY(390)],[300,LY(557)],[518,LY(390)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[518,LY(390)],[518,BL]],w:0.96}]},
+"o":{u:0x6F,aw:606,s:[...latRound(303, LY(272), 251, 285, 0.92)]},
+"p":{u:0x70,aw:620,s:[
+  {t:"shu",p:[[100,LY(557)],[100,LY(-190)]],w:0.96},
+  ...latRound(320, LY(272), 220, 285, 0.90)]},
+"q":{u:0x71,aw:620,s:[
+  {t:"shu",p:[[520,LY(557)],[520,LY(-190)]],w:0.96},
+  ...latRound(300, LY(272), 220, 285, 0.90)]},
+"r":{u:0x72,aw:420,s:[
+  {t:"shu",p:[[92,LY(543)],[92,BL]],w:0.96},
+  {t:"zhe",p:[[92,LY(380)],[272,LY(557)],[404,LY(520)]],bend:-0.40,w:0.90,fr:2.6, cv:"smooth"}]},
+"s":{u:0x73,aw:522,s:[
+  {t:"zhe",p:[[466,LY(452)],[262,LY(557)],[68,LY(430)],[452,LY(230)],[462,LY(110)],[262,LY(-13)],[58,LY(100)]],
+   bend:-0.36,w:0.90,fr:2.6, cv:"smooth"}]},
+"t":{u:0x74,aw:396,s:[
+  {t:"zhe",p:[[186,LY(700)],[186,LY(120)],[330,LY(-13)]],bend:-0.30,w:0.94,fr:2.4, cv:"smooth"},
+  {t:"heng",p:[[36,LY(543)],[356,LY(543)]],w:0.86}]},
+"u":{u:0x75,aw:610,s:[
+  {t:"shu",p:[[92,LY(543)],[92,LY(160)]],w:0.96},
+  {t:"zhe",p:[[92,LY(160)],[300,LY(-13)],[518,LY(160)]],bend:-0.42,w:0.92,fr:2.6, cv:"smooth"},
+  {t:"shu",p:[[518,LY(160)],[518,LY(543)]],w:0.96}]},
+"v":{u:0x76,aw:534,s:[
+  {t:"na",p:[[6,LY(543)],[267,BL]],w:0.92},
+  {t:"pie",p:[[528,LY(543)],[267,BL]],w:0.92}]},
+"w":{u:0x77,aw:816,s:[
+  {t:"na",p:[[18,LY(543)],[210,BL]],w:0.88},
+  {t:"pie",p:[[404,LY(543)],[210,BL]],w:0.88},
+  {t:"na",p:[[404,LY(543)],[600,BL]],w:0.88},
+  {t:"pie",p:[[796,LY(543)],[600,BL]],w:0.88}]},
+"x":{u:0x78,aw:498,s:[
+  {t:"na",p:[[16,LY(543)],[482,BL]],w:0.92},
+  {t:"pie",p:[[482,LY(543)],[16,BL]],w:0.92}]},
+"y":{u:0x79,aw:534,s:[
+  {t:"na",p:[[6,LY(543)],[290,LY(30)]],w:0.92},
+  {t:"pie",p:[[528,LY(543)],[196,LY(-190)]],w:0.92}]},
+"z":{u:0x7A,aw:498,s:[
+  {t:"heng",p:[[42,LY(543)],[456,LY(543)]],w:0.88},
+  {t:"pie",p:[[456,LY(543)],[42,BL]],w:0.92},
+  {t:"heng",p:[[42,BL],[456,BL]],w:0.88}]}
+};
+
+/* 註冊進 G —— advance 用 aw（拉丁是比例寬，不是全形） */
+for(const [ch,def] of Object.entries(LATGLY)) G[ch]={u:def.u, s:def.s, aw:def.aw, sp:1};
+
 const BASE=JSON.parse(JSON.stringify(G));
 
 /* ==========================================================================
@@ -1655,6 +1928,18 @@ function makeSegs(pts,bend,fillet,cv,kj){
   if(cv==="lineQuad"&&pts.length===4){
     const mc=lerp(pts[1],pts[3],0.5), c=lerp(pts[2],mc,0.12);
     return [{q:0,a:pts[0],b:pts[1]},{q:1,a:pts[1],c,b:pts[3]}];
+  }
+  /* cv==="smooth"：多點取樣的平滑曲線（拉丁字母的圓弧用）。
+     多點折線走一般路徑會逐點做圓角，而 fillet 有上限 —— 每個取樣點都會
+     留下一個小折角，圓看起來像多邊形。這裡改成標準的「中點串接」二次曲線：
+     每段以取樣點為控制點、相鄰中點為端點，接出來是 C1 連續的真曲線。 */
+  if(cv==="smooth"&&pts.length>=3){
+    const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    const out=[{q:0,a:pts[0],b:mid(pts[0],pts[1])}];
+    for(let i=1;i<pts.length-1;i++)
+      out.push({q:1,a:mid(pts[i-1],pts[i]),c:pts[i],b:mid(pts[i],pts[i+1])});
+    out.push({q:0,a:mid(pts[pts.length-2],pts[pts.length-1]),b:pts[pts.length-1]});
+    return out;
   }
   if(pts.length===2){
     const [A,B]=pts;
@@ -2015,7 +2300,9 @@ function strokeOutline(st,f,wScale,NS){
       SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
     }
   }
-  const sampleN=(NS||30)+(st.kage&&(st.cv||st.t==="zhe")?8:0);
+  /* smooth 曲線要多取樣：30 個點分給 9 段曲線，每段只有 3 點，
+     圓周會出現一圈刻面（看起來像小凸起）。拉丁字母的圓弧特別明顯。 */
+  const sampleN=(NS||30)+(st.cv==="smooth"?46:(st.kage&&(st.cv||st.t==="zhe")?8:0));
   const baseS=sampleSkeleton(SP,st.bend||0,fillet,sampleN,st.cv,st.kj);
   const tail=appendKageTail(baseS,st,f,wScale),S=tail.s,n=S.length-1;
   /* 頓：折角處把筆畫局部加粗。真的毛筆在轉折時會停頓下壓，
@@ -4487,9 +4774,12 @@ onmessage=function(e){
       }
       /* u<=0 代表無編碼字形（直排用），只給名字不給 unicode，
          這樣它不會進 cmap，只會被 GSUB 的 vert 叫出來。 */
+      /* ★ 拉丁字母是比例寬，不是全形。沒帶 aw 的（漢字、標點）才用 EM。
+         漏掉這個判斷的話，每個字母都佔一個全形格，字距會爆開。 */
+      var adv=(g.aw&&g.aw>0)?g.aw:EM;
       if(g.u>0) glyphs.push(new opentype.Glyph({name:"uni"+g.u.toString(16).toUpperCase(),
-        unicode:g.u,advanceWidth:EM,path:p}));
-      else glyphs.push(new opentype.Glyph({name:"v"+(-g.u),advanceWidth:EM,path:p}));
+        unicode:g.u,advanceWidth:adv,path:p}));
+      else glyphs.push(new opentype.Glyph({name:"v"+(-g.u),advanceWidth:adv,path:p}));
     }
     var font=new opentype.Font({familyName:d.lat,styleName:d.styleEN,
       unitsPerEm:EM,ascender:d.asc,descender:DESC,glyphs:glyphs});
@@ -4576,7 +4866,8 @@ async function buildFontBig(chars,NS,over){
   const pack=[]; const vertIdx=[];
   for(let i=0;i<chars.length;i++){
     const id=chars[i]; if(!G[id]||!G[id].u) continue;
-    pack.push({u:G[id].u,cmds:(over?cmdsOfF(id,NS,over.f):cmdsOf(id,NS))});
+    pack.push({u:G[id].u, aw:G[id].aw||0,
+               cmds:(over?cmdsOfF(id,NS,over.f):cmdsOf(id,NS))});
     vertIdx.push(vertMode(id) ? pack.length : 0);   /* 記下哪些字要直排字形 */
     if(i%150===0){ busy(true,undefined,"產生輪廓 "+i.toLocaleString()+" / "+chars.length.toLocaleString(),
                        i/chars.length*45); await yield_(); }
