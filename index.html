@@ -3115,7 +3115,7 @@ function vertXform(cmds, mode){
    不是靠筆畫剛好沒碰到。是後製，所以局部、可關、而且沿用既有的布林運算。
 
    1. 找近似平行（12°內）、重疊 ≥60、間距不足的兩筆
-   2. 兩筆中線造帶狀（寬 counterMin、長 = 重疊區間各縮 10）
+   2. 由基準字重的原始外框間距算非線性 target，再在兩筆中線間造帶狀
    3. ★帶子先扣掉所有「與這對筆不平行（25°外）」的筆畫 ——
       不做這步「事」中間那一豎會被切斷
    4. 字形聯集後減掉剩下的帶子
@@ -3227,14 +3227,59 @@ function protectCounters(ch, f, minGap, cs){
     const L0 = e0 ? g.lo+10 : -EXT;
     const L1 = e1 ? g.hi-10 :  EXT;
     if(L1-L0<40) continue;
-    const h=minGap/2;
+    const h=minGap/2;   /* 暫時值，稍後由等比縮放重算 */
     const P0=[cx+g.ux*L0, cy+g.uy*L0], P1=[cx+g.ux*L1, cy+g.uy*L1];
     bands.push({poly:[[
       [P0[0]+g.nx*h,P0[1]+g.ny*h],[P1[0]+g.nx*h,P1[1]+g.ny*h],
       [P1[0]-g.nx*h,P1[1]-g.ny*h],[P0[0]-g.nx*h,P0[1]-g.ny*h],
-      [P0[0]+g.nx*h,P0[1]+g.ny*h]]], i, j, ax:ax[i]});
+      [P0[0]+g.nx*h,P0[1]+g.ny*h]]], i, j, ax:ax[i],
+      /* 等比縮放要用的：骨架中心線距離、帶子的中線與方向 */
+      dist:Math.abs(g.dist), P0, P1, nx:g.nx, ny:g.ny});
   }
   if(!bands.length) return cs;
+
+  /* ★ v60：原始間距 → 非線性保護，不再用「全字最窄縫」做線性等比。
+
+     舊版 target = dist / dmin * minGap 有兩個問題：
+       1. 一道特別窄的縫會把全字其他縫一起放大；
+       2. 本來只差一點點的筆畫，也會被硬撐到 minGap，像「多」會被切太多。
+
+     新版先估算「基準字重時，兩筆外框真正留下多少白」 referenceGap：
+       referenceGap = 骨架中心距離 - 基準筆寬/2 - 基準筆寬/2
+
+     再用飽和曲線決定 target：
+       ・原本很近 → 只保很小的白，且絕不比原始白更大
+       ・原本較遠 → 保護快速增加
+       ・很遠之後 → 漸近 cmin，不會無限放大
+       ・原本已接觸 / 相交（referenceGap <= 0）→ 不人工切開
+
+     也就是 cmin 從「每道縫至少這麼寬」改成「最大保護寬度」。 */
+  {
+    const refWeight=Math.min(f.weight, (F_DEFAULT&&F_DEFAULT.weight)||80);
+    const rf={...f, weight:refWeight, cmin:0};
+    const rw=widths(rf);
+    const refBase=Math.max(rw.hw,rw.sw);
+    const tau=Math.max(28, Math.min(72, refBase*0.55));
+
+    for(const b of bands){
+      const wi=(marked[b.i].w||1), wj=(marked[b.j].w||1);
+      const referenceGap=Math.max(0, b.dist - refBase*(wi+wj)/2);
+
+      /* 20% 起步 + exponential saturation。
+         Math.min(referenceGap, ...) 是關鍵：窄縫最多恢復到原本的白，絕不把它撐大。 */
+      const sat=minGap*(0.20 + 0.80*(1-Math.exp(-referenceGap/tau)));
+      const target=Math.max(0, Math.min(referenceGap, sat, minGap));
+      b.target=target;
+      b.referenceGap=referenceGap;
+
+      if(target<1){ b.skip=true; continue; }
+      const h2=target/2;
+      b.poly=[[
+        [b.P0[0]+b.nx*h2, b.P0[1]+b.ny*h2],[b.P1[0]+b.nx*h2, b.P1[1]+b.ny*h2],
+        [b.P1[0]-b.nx*h2, b.P1[1]-b.ny*h2],[b.P0[0]-b.nx*h2, b.P0[1]-b.ny*h2],
+        [b.P0[0]+b.nx*h2, b.P0[1]+b.ny*h2]]];
+    }
+  }
 
   /* 每一筆自己的輪廓，用來保護橫過帶子的筆畫 */
   const per=marked.map(st=>{
@@ -3249,6 +3294,7 @@ function protectCounters(ch, f, minGap, cs){
 
   const cuts=[];
   for(const b of bands){
+    if(b.skip) continue;
     let region=b.poly;
     for(let k=0;k<marked.length && region.length;k++){
       if(k===b.i||k===b.j) continue;
