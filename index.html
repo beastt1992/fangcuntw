@@ -3316,23 +3316,28 @@ function strokeOutline(st,f,wScale,NS){
   };
   declip(L); declip(R);
   /* 第二道：兩側不得交錯。
-     出鋒拉到極端時筆寬會小到讓 L/R 直接對調位置（w 逼近 0 甚至反向），
-     光靠反折鉗制不夠 —— 實測出鋒 1.6 時「你」仍有 5 條自交。
-     這裡沿法線檢查：若 L 已經跑到 R 的另一側，就把兩者收到中點。 */
+     出鋒拉到極端時筆寬會小到讓 L/R 直接對調位置，光靠反折鉗制不夠。
+     沿法線檢查：L 若跑到 R 的另一側，就把兩者收到中點 ——
+     但要留一點點寬度（0.35 單位），完全疊合會產生零長度邊。
+     ★ 這段曾在移除「端點外擴」試作時被連帶砍掉，導致出鋒 1.6 的自交從 0/8 退回 5/8。
+       改動相鄰程式碼時要確認刪除範圍。 */
   for(let i=0;i<L.length&&i<R.length;i++){
     const j=Math.min(n,i);
     const tl=Math.hypot(S[j].t[0],S[j].t[1])||1;
     const nx=-S[j].t[1]/tl, ny=S[j].t[0]/tl;
     const dx=L[i][0]-R[i][0], dy=L[i][1]-R[i][1];
-    if(dx*nx+dy*ny < 0){              /* L 跑到 R 的另一側 → 交錯 */
-      /* 收到中點但留一點點寬度（0.35 單位），
-         完全疊在一起會產生零長度邊、在轉折處變成細縫。 */
-      const mx=(L[i][0]+R[i][0])/2, my=(L[i][1]+R[i][1])/2;
-      const e=0.35;
+    if(dx*nx+dy*ny < 0){
+      const mx=(L[i][0]+R[i][0])/2, my=(L[i][1]+R[i][1])/2, e=0.35;
       L[i][0]=mx+nx*e; L[i][1]=my+ny*e;
       R[i][0]=mx-nx*e; R[i][1]=my-ny*e;
     }
   }
+  /* 端點外擴：試作後移除。
+     假設是「端點沒延伸到鄰筆所以露縫」，但實測完全無效 ——
+     外擴 22% 時「你」33→34、加大到 120% 反而 33→46、「得」24→36。
+     方向是錯的，縫隙不是端點與鄰筆之間的距離造成的。
+     （細縫確實 100% 在端點附近：起筆 54%、收筆 46%、中段 0%，
+       但那代表「端點區域的幾何有問題」，不代表「端點該更長」。） */
   const C=caps(st,f);
   /* ★ KAGE 的鉤是「骨架延伸出去的曲線」，不是端點造型 ——
      尾端原本一律寫死成 flat（切平），所以鉤造型軸對這一萬三千字完全沒作用。
@@ -5377,6 +5382,57 @@ function protectWhite(strokes,f){
    ★ 先前「99% 過擠發生在端點附近」的結論方向對，但那些端點大多屬於
      「已相接」那一類 —— 讓它們擠的是筆畫粗細，所以收細才有效。
    留這段註解是為了避免以後有人再走同一條路。 */
+/* ==========================================================================
+   接點填充
+   實機回報「打勾那邊常常出現縫隙」，附圖是「好」左下角一個 V 形缺口。
+
+   成因：兩筆的端點完全重合（實測「好」的 pie×na 在同一點、夾角 89°），
+   但各自的輪廓是獨立的矩形帶 —— 外側夾角處留下一個楔形沒被填滿。
+   這不是「端點該不該延伸到鄰筆」的問題（使用者也指出那樣是對的），
+   而是「轉角本身要飽滿」。書法上這裡是連續的一筆，墨會填滿整個轉角。
+
+   ★★ 試過「在接點補圓盤」——**失敗，已停用**（函式留著供參考）。
+      實測填充量差異極大且不可控：
+        好 283 平方單位（太小，看不出來）
+        你 11,543（太多，會改變字形）
+        很／嗎 0（完全沒作用）
+      原因是「半徑取兩筆半寬的較小值」對不同的接法差太多，
+      而且圓盤是多邊形，邊緣鋸齒還會製造新的偵測誤報。
+      正確的作法應該是**沿兩筆的外側邊界求交點、只填那個楔形**，
+      而不是無差別補一個圓。這需要真正的幾何求交，尚未實作。
+   ========================================================================== */
+function jointFill(strokes,f){
+  const out=[];
+  const ends=[];
+  for(const st of strokes){
+    const p=st.p; if(!p||p.length<2) continue;
+    let hw;
+    try{ hw=widthAt(st,0.5,[p[1][0]-p[0][0],p[1][1]-p[0][1]],f)*(st.ws||1)/2; }
+    catch(e){ hw=Math.max(widths(f).hw,widths(f).sw)/2; }
+    hw=Math.max(1,hw);
+    ends.push({pt:p[0],           hw, dir:[p[1][0]-p[0][0], p[1][1]-p[0][1]]});
+    ends.push({pt:p[p.length-1],  hw, dir:[p[p.length-2][0]-p[p.length-1][0],
+                                          p[p.length-2][1]-p[p.length-1][1]]});
+  }
+  for(let i=0;i<ends.length;i++) for(let j=i+1;j<ends.length;j++){
+    const a=ends[i], b=ends[j];
+    const d=Math.hypot(a.pt[0]-b.pt[0], a.pt[1]-b.pt[1]);
+    const r=Math.min(a.hw,b.hw);
+    if(d > r) continue;                       /* 沒有真的相接 */
+    /* 同一筆的兩端（例如很短的筆）不補 */
+    if(Math.abs(i-j)===1 && (i%2===0)) continue;
+    const cx=(a.pt[0]+b.pt[0])/2, cy=(a.pt[1]+b.pt[1])/2;
+    const K=12, ring=[];
+    for(let k=0;k<K;k++){
+      const t=k/K*Math.PI*2;
+      ring.push([cx+Math.cos(t)*r, cy+Math.sin(t)*r]);
+    }
+    const cmds=[["M",ring[0][0],ring[0][1]]];
+    for(let k=1;k<K;k++) cmds.push(["L",ring[k][0],ring[k][1]]);
+    out.push(cmds);
+  }
+  return out;
+}
 function markCorners(strokes,f){
   const E=[];
   for(let i=0;i<strokes.length;i++){
@@ -7865,7 +7921,9 @@ $("scTxt").addEventListener("keydown",e=>{
    SVG 的實際尺寸與繪圖／匯出邏輯完全不動。
    有紙張尺寸之後，A4 那種長版面在畫面上會很小，需要放大看細節。 */
 let scZoomLv=1;
-const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4];
+/* 放大到 2000%：要看清楚轉角、接點、端點造型這些細節，400% 不夠。
+   高倍率的級距用約 1.4 倍等比，按一次的變化幅度才一致。 */
+const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4,5.5,7.5,10,14,20];
 function scApplyZoom(){
   const w=$("scZoomWrap"); if(!w) return;
   w.style.zoom = scZoomLv===1 ? "" : scZoomLv;
