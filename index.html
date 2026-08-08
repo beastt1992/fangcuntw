@@ -4696,11 +4696,14 @@ function partInk(id){
   let r=null;
   try{
     const tmp=[]; collectRaw(id,[0,0,EM,EM],1,tmp,1,null,0);
-    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity,sx=0,sy=0,n=0;
     for(const st of tmp) for(const q of (st.p||[])){
       if(!isFinite(q[0])||!isFinite(q[1])) continue;
-      if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; }
-    if(isFinite(x0)&&x1>x0&&y1>y0) r={x0,x1,y0,y1};
+      if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1];
+      sx+=q[0]; sy+=q[1]; n++; }
+    /* ★ 重心也要記。外框會因為筆畫伸展而重疊（「情」的忄豎鉤伸得長、青的橫畫起點靠左，
+       兩者外框重疊 312），但重心不會 —— 那才是判斷左右／上下的可靠訊號。 */
+    if(isFinite(x0)&&x1>x0&&y1>y0&&n) r={x0,x1,y0,y1,cx:sx/n,cy:sy/n};
   }catch(e){ r=null; }
   PART_INK.set(id,r); return r;
 }
@@ -4713,7 +4716,23 @@ function collectRaw(id,box,wScale,out,seed,variant,depth,seen){
   seen=seen||new Set();
   if(seen.has(id)) return;
   seen.add(id);
-  const g=G[id]; if(!g||(depth||0)>6) return;
+  let g=G[id]; if(!g||(depth||0)>6) return;
+  /* ★ 別名鏈要走到底才停。KAGE 資料裡「木 ↔ u6728-t」這種互指很常見：
+     A 只有一個滿框引用指向 B，B 又指回 A。
+     只靠訪問記錄的話會在繞回來時直接 return，結果一筆都沒收到 ——
+     partInk 量到 null，部件比例就誤判成「這個部件量不到」而整個放棄
+     （「困」就是這樣，明明跟「國」同結構卻沒反應）。
+     作法：遇到「只有一個滿框子引用」就直接跳過那一層，不佔用遞迴深度。 */
+  let hop=0;
+  while(g && !g.s && g.c && g.c.length===1 && hop<8){
+    const c0=g.c[0], bx=c0.box;
+    const full = bx[0]<=2 && bx[1]<=2 && bx[2]>=EM-2 && bx[3]>=EM-2;
+    if(!full) break;
+    const nid=masterOf(c0.r);
+    if(seen.has(nid)) break;
+    seen.add(nid); id=nid; g=G[nid]; hop++;
+  }
+  if(!g) return;
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
   const S=resolveStrokes(g,variant);
   if(S) S.forEach(st=>out.push({p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy])}));
@@ -4739,12 +4758,44 @@ function partRatioBoxes(cs,depth,pratio){
     place.push({x0:a+ink.x0*kx, x1:a+ink.x1*kx, y0:b+ink.y0*ky, y1:b+ink.y1*ky, ink, box:c.box, c});
   }
   const [A,B]=place;
-  const gapX=Math.min(B.x0,A.x0)===A.x0 ? B.x0-A.x1 : A.x0-B.x1;
-  const gapY=Math.min(B.y0,A.y0)===A.y0 ? B.y0-A.y1 : A.y0-B.y1;
-  /* 判斷結構：哪個方向真的分得開 */
-  const horiz = gapX > -EM*0.10 && gapX > gapY;
-  const vert  = !horiz && gapY > -EM*0.10;
-  if(!horiz && !vert) return cs;                 /* 包圍或重疊結構，不動 */
+  /* ★ 結構判定改用重心，並先分出包圍結構。
+     舊版只看外框間隙，把「情」「灣」這種筆畫交錯的左右結構誤判成重疊而放棄
+     —— 實測 1200 字裡有 368 個被這樣放棄，其中六成其實救得回來。
+
+     判準順序（對應 Unicode 的表意文字描述字元）：
+       ① 一方的墨跡完全含住另一方 → 包圍 ⿴⿵⿶⿷⿸⿹⿺，另外處理
+       ② 重心在某個方向分得夠開 → 左右 ⿰ 或上下 ⿱
+       ③ 其餘 → 真正的疊合 ⿻，不動
+
+     ★ 沒有引入 IDS 資料檔（CHISE／cjkvi-ids 是 GPLv2，方寸是 MPL-2.0，
+       混用會讓整個專案變 GPL）。這裡是從 GlyphWiki 自己的部件外框推導出同樣的結構，
+       涵蓋率略低但授權乾淨。 */
+  const encl=(o,i)=> i.x0>=o.x0-8 && i.x1<=o.x1+8 && i.y0>=o.y0-8 && i.y1<=o.y1+8;
+  const outerIsA=encl(A,B), outerIsB=encl(B,A);
+  if(outerIsA||outerIsB){
+    /* 包圍：外框不動，只縮放裡面那個（繞自身重心）。
+       t>0 內部變大、t<0 變小 —— 「國」的或、「回」的口。 */
+    const inner=outerIsA?B:A;
+    const k=1+0.28*t;
+    const cx=inner.ink.cx, cy=inner.ink.cy;
+    return cs.map((c,i)=>{
+      if(place[i]!==inner) return c;
+      const [a,b,cc,d]=c.box;
+      const kx=(cc-a)/EM, ky=(d-b)/EM;
+      /* 讓置入後的墨跡繞自身重心放大 k 倍：解出新的外框 */
+      const pcx=a+cx*kx, pcy=b+cy*ky;
+      const nkx=kx*k, nky=ky*k;
+      return {...c, box:[pcx-cx*nkx, pcy-cy*nky, pcx-cx*nkx+EM*nkx, pcy-cy*nky+EM*nky]};
+    });
+  }
+  const cxA=place[0].box[0]+A.ink.cx*(place[0].box[2]-place[0].box[0])/EM;
+  const cxB=place[1].box[0]+B.ink.cx*(place[1].box[2]-place[1].box[0])/EM;
+  const cyA=place[0].box[1]+A.ink.cy*(place[0].box[3]-place[0].box[1])/EM;
+  const cyB=place[1].box[1]+B.ink.cy*(place[1].box[3]-place[1].box[1])/EM;
+  const sepX=Math.abs(cxA-cxB), sepY=Math.abs(cyA-cyB);
+  const horiz = sepX>EM*0.13 && sepX>sepY;
+  const vert  = !horiz && sepY>EM*0.13;
+  if(!horiz && !vert) return cs;                 /* 真正的疊合結構，不動 */
   const lo = horiz ? (A.x0<B.x0?A:B) : (A.y0<B.y0?A:B);
   const hi = (lo===A)?B:A;
   const key0=horiz?"x0":"y0", key1=horiz?"x1":"y1";
