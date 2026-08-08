@@ -1719,6 +1719,8 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          pers:0,
          /* 端點造型（0＝依筆意，就是現狀）與內白圓度（0＝不作用） */
          term:0, head:0, hookst:0, cround:0,
+         /* 標準字用：橫線對齊網格、筆畫延伸切齊。兩者出廠都是 0（不作用） */
+         hgrid:0, bleed:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -1734,7 +1736,7 @@ const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','ha
                /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
                   漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
                   「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
-               'diag','cnaniso','term','head','hookst','cround','pers'];
+               'diag','cnaniso','term','head','hookst','cround','hgrid','bleed','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -4734,6 +4736,45 @@ function warpStroke(st,f){
     bend+=rnd(sdH+53)*f.hand*0.055;
     hp={a,c,j};
   }
+  /* ★ 橫線對齊網格（標準字用）
+     把橫畫吸附到一組共用的水平格線上。因為所有字共用同一個字身框，
+     吸附到「絕對 y 座標」的格線，跨字的橫畫自然就對齊了
+     （「三」和「建」的橫畫會連成一線）——
+     這是標準字很常見、但字型設計絕不會做的手法。
+     只動橫畫；折、豎、撇捺不碰，動了字會散。 */
+  if(f.hgrid>0 && st.t==="heng" && p.length>1){
+    const step=EM/12, t=Math.min(1,f.hgrid);
+    const ys=p.map(q=>q[1]);
+    const mid=ys.reduce((a,b)=>a+b,0)/ys.length;
+    const snapped=Math.round(mid/step)*step;
+    const dy=(snapped-mid)*t;
+    p=p.map(([x,y])=>[x,y+dy]);          /* 整筆平移，不改斜度 */
+  }
+  /* ★ 筆畫延伸切齊（招牌字用）
+     本來就已經接近字身框邊緣的筆畫，把它拉到齊邊。
+     只處理「開放端」且方向大致垂直於該邊的情況 ——
+     接續端拉了會跟別的筆脫開，斜筆拉了會歪掉。 */
+  if(f.bleed>0 && p.length>1 && (st.t==="heng"||st.t==="shu")){
+    const t=Math.min(1,f.bleed), near=EM*0.16;
+    const horiz=(st.t==="heng");
+    const i0=0, i1=p.length-1;
+    const open=(q)=>(!q||q==="open");
+    /* 目標是「墨跡齊邊」，不是「中心線齊邊」——
+       中心線拉到 0 的話輪廓會多出半個筆寬、溢出字身框，
+       字距小的時候相鄰的字會黏在一起。所以退半個筆寬。 */
+    const ww=widths(f), half=(horiz?ww.sw:ww.hw)*(st.w||1)/2;
+    const pull=(idx,edge,inward)=>{
+      const cur=horiz?p[idx][0]:p[idx][1];
+      const goal=edge+inward*half;
+      const d=goal-cur;
+      if(Math.abs(d)>near) return;
+      const q=p[idx].slice();
+      if(horiz) q[0]=cur+d*t; else q[1]=cur+d*t;
+      p=p.map((r,k)=>k===idx?q:r);
+    };
+    if(open(st.h)) pull(i0, 0,  +1);
+    if(open(st.e)) pull(i1, EM, -1);
+  }
   return {...st,p,bend,hp};
 }
 function unwarpPoint(w,st,f,pi){
@@ -5021,6 +5062,8 @@ const AXES=[
    f:v=>["依筆意","藏鋒","露鋒","方筆","蠶頭"][Math.round(v)]||String(v)},
   {k:"hookst",  n:"鉤的造型",en:"HOOK ST", min:0,max:4,   step:1,   lo:"依筆意",hi:"長挑",
    f:v=>["依筆意","尖鉤","圓鉤","平鉤","長挑"][Math.round(v)]||String(v)},
+  {k:"hgrid",   n:"橫線對齊",en:"H-GRID",min:0,   max:1,   step:0.02,lo:"不對齊",hi:"齊格線",f:v=>(+v).toFixed(2)},
+  {k:"bleed",   n:"筆畫切齊",en:"BLEED", min:0,   max:1,   step:0.02,lo:"不延伸",hi:"齊邊",  f:v=>(+v).toFixed(2)},
   {k:"cround",  n:"內白圓度",en:"CRND", min:0,   max:1,   step:0.02,lo:"方",  hi:"圓",  f:v=>(+v).toFixed(2)},
   {k:"pers",    n:"個性",    en:"PERS", min:0,   max:100, step:1,   lo:"正常",hi:"誇張",f:v=>String(v|0)},
   {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
@@ -5716,7 +5759,7 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 /* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
-  {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
+  {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise","hgrid","bleed"]},
   {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","hookst","dun","press","cap","diag","head","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
   {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
