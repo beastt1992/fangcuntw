@@ -1711,6 +1711,8 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          /* 個性：0 ＝ 完全不作用（出廠）。這一根不是幾何參數，
             它在 axesOf() 裡把其他軸整組往「更有個性」的方向推。 */
          pers:0,
+         /* 端點造型（0＝依筆意，就是現狀）與內白圓度（0＝不作用） */
+         term:0, cround:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -2699,19 +2701,34 @@ function caps(st,f){
      圓角 f.round 現在只管「折角的內外圓弧」，端點另外一根軸。
      出廠值 cap = round = 0.18，所以不改設定的話輸出跟以前一模一樣。
      拆開之後才做得到「折角很圓但端點切齊」這種標準字常見的組合。 */
-  const r=(f.cap==null?f.round:f.cap);
+  let r=(f.cap==null?f.round:f.cap);
+  /* ★ 端點造型：把原本寫死的幾種端點開放成一根軸。
+     只覆寫「開放端」—— 鉤、腳跟、接續、彎尾帶有結構語意，覆寫掉字會散。
+     0＝依筆意（完全等於舊行為）。 */
+  const TERM=["", "flat", 1, "uroko", "pt", "wedge"];
+  const tm=TERM[Math.round(f.term||0)] ?? "";
+  const OPEN=q=>(!q || q==="open");
+  if(tm!==""){
+    /* 三角（うろこ）本來就只在橫畫收筆才成立，套到豎畫會變成怪刺 */
+    if(!(tm==="uroko" && st.t!=="heng")) r=tm;
+  }
   if(st.h||st.e){
     /* 明體：橫畫開放的收筆長出三角（うろこ） */
     const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
     const ha = (st.h==="point" && f.finish<=0.3) ? r : (CAP_OF[st.h] || r);
     if(f.spike>0.02) return {a:"pt", b:"pt"};
     if(f.inflate>0.15) return {a:"round", b:"round"};   /* 膨脹一律圓頭 */
-    return {a: ha, b: uroko ? "uroko" : (CAP_OF[st.e] || r)};
+    /* 使用者指定造型時，開放端才換掉；有語意的端點維持原本的 CAP_OF */
+    const bb = uroko ? "uroko" : (CAP_OF[st.e] || r);
+    return {a: (tm!==""&&OPEN(st.h)) ? r : ha,
+            b: (tm!==""&&OPEN(st.e)) ? r : bb};
   }
   switch(st.t){
     case "pie": return {a:r,b:"pt"};
-    case "na":  return {a:"pt",b:Math.min(r,0.25)};
-    case "dian":return {a:"pt",b:Math.max(r,0.5)};
+    /* ★ r 現在可能是 "flat"/"wedge" 這種字串（端點造型軸），
+       Math.min("flat",0.25) 會得到 NaN 並一路流進座標。只有數值才夾限。 */
+    case "na":  return {a:"pt",b:(typeof r==="number"?Math.min(r,0.25):r)};
+    case "dian":return {a:"pt",b:(typeof r==="number"?Math.max(r,0.5):r)};
     case "ti":  return {a:r,b:"pt"};
     case "zhe": return {a:r,b:st.end==="hook"?"pt":r};
     default:    return {a:r,b:r};
@@ -2746,6 +2763,14 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
     const ex=tip[0]+T[0]*w*0.30*dir, ey=tip[1]+T[1]*w*0.30*dir;
     out.push(["L", ex-nx*w*1.15*g, ey-ny*w*1.15*g]);
     out.push(["L", ex+T[0]*w*1.05*g*dir, ey+T[1]*w*1.05*g*dir]);
+    out.push(["L", to[0], to[1]]); return;
+  }
+  if(kind==="wedge"){
+    /* 楔形：一側順著切線頂出去、另一側幾乎不動，形成斜切的尖。
+       跟 pt（兩側對稱收尖）不同，這個有方向性，像刻刀切出來的。 */
+    const nx=-T[1], ny=T[0];
+    out.push(["L", tip[0]+T[0]*w*0.95*dir-nx*w*0.30, tip[1]+T[1]*w*0.95*dir-ny*w*0.30]);
+    out.push(["L", tip[0]+T[0]*w*0.20*dir+nx*w*0.10, tip[1]+T[1]*w*0.20*dir+ny*w*0.10]);
     out.push(["L", to[0], to[1]]); return;
   }
   if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
@@ -4211,6 +4236,65 @@ function csSolidInk(PCL,u){
   if(!shells.length) return u||[];
   try{return PCL.union(shells[0],...shells.slice(1));}catch(e){return shells;}
 }
+/* 把一個內白環往「圓」的方向捏。
+   半徑一律往「內接圓」收（取離重心最近的那個頂點距離），
+   所以圓化後一定還在原本的內白裡面，不會反過來去啃筆畫。
+   t=0 完全不動；t=1 變成內接圓。中間值就是圓角化。 */
+/* 內白圓度的實際套用點。
+   ★ 圓化內白＝在內白的四個角「加墨」，是 union；
+     而 protectCounters 主流程是 difference（減墨）——方向相反，
+     所以不能塞在 cuts 裡（我第一版就是這樣，量出來完全沒作用）。
+     這裡改成對最終結果做後處理：算出「原內白 − 圓化後內白」那圈角料，
+     union 回墨色，內白就真的變圓了。 */
+function csRoundCountersPost(PCL,res,t){
+  if(!(t>0) || !res || !res.length) return res;
+  const fills=[];
+  for(const poly of res) for(let k=1;k<poly.length;k++){
+    const ring=poly[k];
+    const rounded=csRoundCounter(ring,t);
+    if(rounded===ring) continue;
+    try{ const d=PCL.difference([[ring]],[[rounded]]); for(const q of d) fills.push(q); }
+    catch(e){}
+  }
+  if(!fills.length) return res;
+  try{ return PCL.union(res,...fills); }catch(e){ return res; }
+}
+function csRoundCounter(ring,t){
+  /* 把內白的「角」修圓，而不是把它拉成圓。
+     第一版用內接圓當目標，細長的內白（「田」的四格、「日」的兩槽）
+     內接圓非常小，t=1 時內白只剩原本的 15% —— 等於把內白吃掉了。
+     改成：先加密頂點，再做幾次拉普拉斯平滑（強度隨 t）。
+     這是只削角、保留伸展範圍的做法，方形會變圓角方形，接近方的才會趨近圓。 */
+  if(!(t>0) || !ring || ring.length<4) return ring;
+  /* ① 加密：邊太長就補點，否則四邊形平滑會直接塌向重心 */
+  let P=[];
+  const n=ring.length;
+  let per=0;
+  for(let i=0;i<n;i++){ const a=ring[i],b=ring[(i+1)%n];
+    per+=Math.hypot(b[0]-a[0],b[1]-a[1]); }
+  if(!(per>0)) return ring;
+  const step=Math.max(2,per/48);
+  for(let i=0;i<n;i++){
+    const a=ring[i], b=ring[(i+1)%n];
+    const d=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    const k=Math.max(1,Math.round(d/step));
+    for(let m=0;m<k;m++) P.push([a[0]+(b[0]-a[0])*m/k, a[1]+(b[1]-a[1])*m/k]);
+  }
+  if(P.length<8) return ring;
+  /* ② 平滑：每次把頂點往「前後鄰居的中點」拉一點，角會變圓、直邊幾乎不動 */
+  /* 次數隨圓度加大：方形會變圓角方形→接近圓，
+     細長的內白則會變成兩端圓的長槽（不會被壓扁）。 */
+  const iters=2+Math.round(t*10), s2=0.5;
+  for(let it=0; it<iters; it++){
+    const Q=new Array(P.length);
+    for(let i=0;i<P.length;i++){
+      const a=P[(i-1+P.length)%P.length], b=P[i], c=P[(i+1)%P.length];
+      Q[i]=[b[0]+s2*((a[0]+c[0])/2-b[0]), b[1]+s2*((a[1]+c[1])/2-b[1])];
+    }
+    P=Q;
+  }
+  return P;
+}
 function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
   let refContours=[];
   try{ for(const st of marked) refContours.push(...strokeContours(st,rf,st.ws,30)); }
@@ -4229,7 +4313,9 @@ function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
   }
   const cuts=[];
   for(const R of refs){
-    const target=csCounterTarget(R.w,minGap,tau); if(target<1) continue;
+    /* minGap 是 0（只開圓度）時不做撐開，target 就是原寬 */
+    const target = minGap ? csCounterTarget(R.w,minGap,tau) : R.w;
+    if(minGap && target<1) continue;
     let best=null,bd=Infinity,bscore=Infinity;
     for(const C of curs){
       if(C.used) continue;
@@ -4258,7 +4344,8 @@ function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
 }
 
 function protectCounters(ch, f, minGap, cs){
-  const PCL=pcLib(); if(!PCL || !cs || !minGap) return cs;
+  const PCL=pcLib(); if(!PCL || !cs) return cs;
+  if(!minGap && !(f.cround>0)) return cs;
   let marked;
   try{
     const raw=[]; collect(ch,[0,0,1000,1000],1,raw,7,null,0,f.optic);
@@ -4306,7 +4393,7 @@ function protectCounters(ch, f, minGap, cs){
 
   /* enclosed counter 不是 medial ribbon：直接把 reference 內圈當白區 topology，
      必要時由 reference 白區重建 target，確保「多／目／田／豐」這種封閉內白不被粗筆吃掉。 */
-  const cuts=csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,uRaw);
+  const cuts=minGap ? csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,uRaw) : [];
 
   /* open ribbon 才需要逐筆輪廓；只有 enclosed cells 時不多做昂貴運算。 */
   const per=bands.length ? marked.map(st=>{
@@ -4332,7 +4419,13 @@ function protectCounters(ch, f, minGap, cs){
     }
     for(const poly of region) cuts.push(poly);
   }
-  if(!cuts.length) return cs;
+  if(!cuts.length){
+    /* 只開內白圓度、沒開內白保護：不做任何撐開，單純把內白捏圓。 */
+    if(!(f.cround>0)) return cs;
+    const r0=csRoundCountersPost(PCL,u,f.cround);
+    const o0=csToCmds(r0);
+    return o0.length? o0 : cs;
+  }
 
   /* v67：先把所有 cutter 做 union，再一次 difference。
      「豐」會同時產生很多 enclosed cell + open medial ribbon；若讓重疊 cutter
@@ -4343,6 +4436,7 @@ function protectCounters(ch, f, minGap, cs){
   if(!cutUnion||!cutUnion.length) return cs;
   let res;
   try{ res=PCL.difference(u,cutUnion); }catch(e){ return cs; }
+  res=csRoundCountersPost(PCL,res,f.cround||0);
   const out=csToCmds(res); if(!out.length) return cs;
 
   /* v66 Safety：跟 reference topology 比，不跟 current blob 比。
@@ -4649,7 +4743,9 @@ function glyphContours(id,f,variant,NS){
      工作台的大字原本 NS=undefined，而匯出/QA 常用 14~20；「豐」這種密集格狀字
      因此會出現同一組參數：QA 有內白、畫面卻整片黏住。
      cmin 開啟時統一至少使用 20 段建立 Boolean 母輪廓，讓畫面、預覽、OTF 共用同一拓樸。 */
-  const counterOn=f.cmin>0 && !VF_STABLE;
+  /* 內白圓度也走同一條管線（它要拿到 enclosed counter 的環才能改形狀），
+     所以 cmin 沒開、只開圓度時也要進來。 */
+  const counterOn=(f.cmin>0 || f.cround>0) && !VF_STABLE;
   const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
   for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
@@ -4839,6 +4935,9 @@ const AXES=[
   /* 內白保護：字很粗時，筆畫之間該留的白會被擠掉糊成一團。
      這根軸會在該留白的地方挖出保證寬度的縫。出廠 0（關），
      只有做極粗的標準字才需要開，36 是實測的甜蜜點。 */
+  {k:"term",    n:"端點造型",en:"TERM", min:0,   max:5,   step:1,   lo:"依筆意",hi:"楔形",
+   f:v=>["依筆意","平切","圓頭","三角","尖收","楔形"][Math.round(v)]||String(v)},
+  {k:"cround",  n:"內白圓度",en:"CRND", min:0,   max:1,   step:0.02,lo:"方",  hi:"圓",  f:v=>(+v).toFixed(2)},
   {k:"pers",    n:"個性",    en:"PERS", min:0,   max:100, step:1,   lo:"正常",hi:"誇張",f:v=>String(v|0)},
   {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
   {k:"cnaniso", n:"中宮橫縱",en:"CNAN", min:-1,  max:1,   step:0.02,lo:"縱鬆",hi:"橫鬆",f:v=>(+v).toFixed(2)},
@@ -5502,9 +5601,9 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
-  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag"]},
+  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
-  {t:"內白",en:"COUNTER", ks:["cnaniso","cmin"]}
+  {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
 ];
 function buildShowAxes(){
   const grid=$("scGrid"); if(!grid||grid.childElementCount) return;
@@ -6639,6 +6738,9 @@ function scRandomFace(){
     rise:   +rrRnd(0,0.14).toFixed(3),
     scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0,
     cmin:0,
+    /* 端點造型：六成機率維持「依筆意」，其餘隨機挑一種 —— 這根對外觀影響很大 */
+    term: rrChance(0.40)? (1+Math.floor(Math.random()*5)) : 0,
+    cround: rrChance(0.30)? +rrRnd(0.3,1.0).toFixed(2) : 0,
     pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
     seed:1+Math.floor(Math.random()*999)
   });
