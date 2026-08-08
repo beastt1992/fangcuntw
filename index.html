@@ -5641,7 +5641,18 @@ function restore(data){
   if(MODE==="show") scDraw();
 }
 function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(snapshot()));}catch(e){}}
-function loadLocal(){try{const s=localStorage.getItem(KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+function loadLocal(){
+  /* ★ 自救出口：網址加 ?reset 就清掉存檔並用出廠值開啟。
+     存檔裡如果有一組很慢或會出錯的設定，一開啟就重現，
+     手機上沒有開發者工具就等於整個 app 打不開 —— 一定要留一條路出來。 */
+  try{
+    if(/[?&]reset\b/.test(location.search)){
+      localStorage.removeItem(KEY);
+      return null;
+    }
+  }catch(e){}
+  try{const s=localStorage.getItem(KEY);return s?JSON.parse(s):null;}catch(e){return null;}
+}
 
 function resetGlyph(id){
   const src=pristine(id);
@@ -6847,7 +6858,10 @@ function scRandomFace(){
     term: rrChance(0.40)? (1+Math.floor(Math.random()*5)) : 0,
     head: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
     hookst: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
-    cround: rrChance(0.30)? +rrRnd(0.3,1.0).toFixed(2) : 0,
+    /* ★ 內白圓度不放進重骰。它會啟動布林運算，實測每次重畫慢 5.7 倍
+       （8 字 56ms → 317ms，手機再乘幾倍）—— 隨機抽到就等於整個 app 變頓，
+       而且設定會存進 localStorage，重開還是頓。要用請自己開。 */
+    cround: 0,
     pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
     seed:1+Math.floor(Math.random()*999)
   });
@@ -8304,8 +8318,9 @@ async function boot(){
       $("statCounts").textContent="字庫 "+r.mapped.toLocaleString()+" 字 · 台灣字形 "+r.usedT.toLocaleString();
     }catch(e){ console.warn("內嵌字庫載入失敗",e); }
   }
-  const saved=loadLocal();
-  if(saved) restore(saved);
+  let saved=loadLocal();
+  /* 還原失敗就當成沒有存檔 —— 寧可回到出廠值，也不要整個 app 打不開。 */
+  if(saved){ try{ restore(saved); }catch(e){ console.warn("還原存檔失敗，改用出廠值",e); saved=null; } }
   else {
     /* 第一次進來的開場畫面：「永春」兩個大字 ＋ 依筆順上色。
        這是整個工具最有代表性的一幕 —— 一眼看得出「每一筆都是分開的資料」，
