@@ -779,7 +779,16 @@
     #scPreset button.pth .pth-n{font-size:9px}
   }
   /* 風格座標面板：浮在畫布右上角 */
-  #smapBox{position:absolute;right:14px;top:14px;z-index:6;width:172px;height:172px;
+  /* 風格座標的小按鈕：畫布左下，跟右下的縮放 −／＋ 對稱。
+     左下原本是提示文字 .schint，按鈕放它上面一點。 */
+  #smapBtn{position:absolute;left:10px;bottom:34px;z-index:6;
+    border:1px solid var(--line-2,#cfc8b8);background:var(--paper);color:var(--ink);
+    border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.10)}
+  #smapBtn:hover{background:var(--line,#e8e3d6)}
+  #smapBtn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  @media(max-width:700px){ #smapBtn{left:8px;bottom:30px;padding:6px 10px;font-size:11px} }
+  #smapBox{position:absolute;left:10px;bottom:74px;z-index:6;width:172px;height:172px;
     background:var(--paper);border:1px solid var(--ink);border-radius:10px;
     box-shadow:0 6px 20px rgba(0,0,0,.16);touch-action:none;cursor:crosshair}
   #smapBox[hidden]{display:none}
@@ -789,7 +798,7 @@
   #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
   #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
     border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
-  @media(max-width:1099px){ #smapBox{width:132px;height:132px;right:8px;top:8px} }
+  @media(max-width:1099px){ #smapBox{width:132px;height:132px;left:8px;bottom:66px} }
   .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
   .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
@@ -1402,6 +1411,8 @@
          絕對定位的子元素會「跟著內容捲」——「100%」和選字提示才會浮到畫面中間。
          把它們移到這層不捲動的 wrapper 底下，就永遠釘在畫布區的角落。 -->
     <div class="scstagewrap">
+      <button id="smapBtn" type="button" aria-pressed="false"
+              title="風格座標：拖一顆點在四種字體之間連續移動">風格</button>
       <div id="smapBox" hidden>
         <span class="smap-l" style="top:4px">明體　圓體</span>
         <span class="smap-l" style="bottom:4px">楷書　黑體</span>
@@ -1451,9 +1462,7 @@
             ><button data-k="right">靠右</button></div></div>
         <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
           <div class="seg" id="scPreset"></div>
-          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button>
-          <button class="btn ghost sm" id="smapToggle" type="button" aria-pressed="false"
-                  title="拖一顆點在四種字體之間連續移動">風格座標</button></div>
+          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
         <div class="sclay-g"><label>單字</label>
           <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
           <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
@@ -8882,11 +8891,10 @@ if($("scShadowMode")) $("scShadowMode").addEventListener("click",e=>{
   document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x===b));
   scDraw(); saveLocal();
 });
-if($("smapToggle")) $("smapToggle").addEventListener("click",()=>{
+if($("smapBtn")) $("smapBtn").addEventListener("click",()=>{
   smapOn=!smapOn;
   $("smapBox").hidden=!smapOn;
-  $("smapToggle").setAttribute("aria-pressed",smapOn?"true":"false");
-  $("smapToggle").textContent=smapOn?"收起":"打開";
+  $("smapBtn").setAttribute("aria-pressed",smapOn?"true":"false");
   if(smapOn) scStyleMapDot();
 });
 if($("smapBox")){
