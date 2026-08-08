@@ -5642,6 +5642,18 @@ function applyPreset(k){
   for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) F[ax]=F_DEFAULT[ax];
   Object.assign(F,pre);
 }
+/* ★ 取「補齊過的預設」。
+   預設只列出它在意的軸 —— 18 個預設各缺 5~20 根（新加的軸只有五個書法預設有）。
+   任何「遍歷預設的鍵」的程式碼都會踩到同一個坑：
+   缺的鍵貢獻 0 而不是出廠值。座標盤的混合就是這樣讓 diag 歸零、撇捺變髮絲的（v155 修）。
+   以後要讀預設一律走這個函式，不要直接讀 PRESETS[k]。 */
+function presetFull(k){
+  const pre=PRESETS[k]||PRESETS.hei;
+  const out={};
+  for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) out[ax]=F_DEFAULT[ax];
+  for(const key in pre) if(typeof pre[key]==="number") out[key]=pre[key];
+  return out;
+}
 const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",zhuan:"篆書",li:"隸書",weibei:"魏碑",shoujin:"瘦金",xing:"行書",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={lgSharp:"Sharp",lgPlump:"Plump",lgWire:"Wire",lgBroken:"Broken",lgWave:"Wave",lgScatter:"Scatter",hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
 const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
@@ -8930,7 +8942,8 @@ let smapX=0.5, smapY=0.5, smapOn=false;
 function scStyleMapApply(x,y){
   smapX=Math.max(0,Math.min(1,x)); smapY=Math.max(0,Math.min(1,y));
   const S=SMAP_SETS[smapSet]||SMAP_SETS[0];
-  const P={lt:PRESETS[S.lt], rt:PRESETS[S.rt], lb:PRESETS[S.lb], rb:PRESETS[S.rb]};
+  /* 用補齊過的版本，缺鍵問題從源頭消失 */
+  const P={lt:presetFull(S.lt), rt:presetFull(S.rt), lb:presetFull(S.lb), rb:presetFull(S.rb)};
   const w={ lt:(1-smapX)*(1-smapY), rt:smapX*(1-smapY),
             lb:(1-smapX)*smapY,     rb:smapX*smapY };
   /* ★★ 缺的鍵必須用出廠值補，不能貢獻 0。
@@ -8942,19 +8955,12 @@ function scStyleMapApply(x,y){
      實機連續回報「斜線和弧線很細」就是這個，我前面猜過但用了鍵完整的樣本測、誤判為不存在。 */
   for(const k of AXKEYS) if(F_DEFAULT[k]!==undefined) F[k]=F_DEFAULT[k];
   const keys=new Set();
-  for(const corner of ["lt","rt","lb","rb"]){
-    const pre=P[corner]; if(!pre) continue;
-    for(const k in pre) if(typeof pre[k]==="number") keys.add(k);
-  }
+  for(const corner of ["lt","rt","lb","rb"])
+    for(const k in P[corner]) keys.add(k);
   for(const k of keys){
     if(k==="seed") continue;
     let v=0;
-    for(const corner of ["lt","rt","lb","rb"]){
-      const pre=P[corner]; if(!pre) continue;
-      const val = (typeof pre[k]==="number") ? pre[k]
-                : (typeof F_DEFAULT[k]==="number" ? F_DEFAULT[k] : 0);
-      v += val*w[corner];
-    }
+    for(const corner of ["lt","rt","lb","rb"]) v += (P[corner][k]||0)*w[corner];
     F[k]=v;
   }
   /* 離散軸取權重最大的角，不能內插 */
@@ -9103,9 +9109,7 @@ function smapBuildThumbs(){
     if(i>=btns.length) return;
     const b=btns[i++], k=b.dataset.p, g=b.querySelector(".t-g");
     if(g&&PRESETS[k]){
-      const f={};
-      for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) f[ax]=F_DEFAULT[ax];
-      Object.assign(f,PRESETS[k]);
+      const f=presetFull(k);
       let d="";
       try{ const cs=glyphContours(ch,f); if(cs&&cs.length) d=cs.map(svgD).join(" "); }catch(e){}
       g.innerHTML = d ? '<svg viewBox="0 0 1000 1000" width="100%" height="100%" aria-hidden="true">'+
@@ -9269,9 +9273,7 @@ function scPresetThumbs(){
     if(i>=btns.length) return;
     const b=btns[i++], k=b.dataset.p, holder=b.querySelector(".pth-g");
     if(holder && PRESETS[k]){
-      const f={};
-      for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) f[ax]=F_DEFAULT[ax];
-      Object.assign(f,PRESETS[k]);
+      const f=presetFull(k);
       let d="";
       try{ const cs=glyphContours(ch,f); if(cs&&cs.length) d=cs.map(svgD).join(" "); }catch(e){}
       holder.innerHTML = d
