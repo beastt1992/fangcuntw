@@ -1741,6 +1741,8 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          term:0, head:0, hookst:0, cround:0,
          /* 標準字用：橫線對齊網格、筆畫延伸切齊。兩者出廠都是 0（不作用） */
          hgrid:0, bleed:0,
+         /* 部件比例：左右／上下結構的分配。0 ＝ 原樣 */
+         pratio:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -1756,7 +1758,7 @@ const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','ha
                /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
                   漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
                   「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
-               'diag','cnaniso','term','head','hookst','cround','hgrid','bleed','pers'];
+               'diag','cnaniso','term','head','hookst','cround','hgrid','bleed','pratio','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -4437,7 +4439,7 @@ function protectCounters(ch, f, minGap, cs){
   if(!minGap && !(f.cround>0)) return cs;
   let marked;
   try{
-    const raw=[]; collect(ch,[0,0,1000,1000],1,raw,7,null,0,f.optic);
+    const raw=[]; collect(ch,[0,0,1000,1000],1,raw,7,null,0,f.optic,f.pratio);
     marked=markCorners(warp(raw,f),f);
   }catch(e){ return cs; }
   if(!marked || marked.length<2) return cs;
@@ -4660,7 +4662,91 @@ function masterOf(id){
   if(G[cur]) return cur;
   return resolveFallback(cur) || (G[id]?id:(resolveFallback(id)||id));
 }
-function collect(id,box,wScale,out,seed,variant,depth,optic){
+/* 部件在自己 0~EM 空間裡的墨跡外框。量一次就快取 —— 每次重畫都重量會很慢。 */
+const PART_INK=new Map();
+/* 一個字只在「最外面的雙部件層」調整一次；由 glyphContours 每次歸零。 */
+let PR_DONE=false;
+function prReset(){ PR_DONE=false; }
+function partInk(id){
+  if(PART_INK.has(id)) return PART_INK.get(id);
+  let r=null;
+  try{
+    const tmp=[]; collectRaw(id,[0,0,EM,EM],1,tmp,1,null,0);
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+    for(const st of tmp) for(const q of (st.p||[])){
+      if(!isFinite(q[0])||!isFinite(q[1])) continue;
+      if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; }
+    if(isFinite(x0)&&x1>x0&&y1>y0) r={x0,x1,y0,y1};
+  }catch(e){ r=null; }
+  PART_INK.set(id,r); return r;
+}
+/* 不含比例調整的收集（給 partInk 用，避免無限遞迴） */
+function collectRaw(id,box,wScale,out,seed,variant,depth,seen){
+  id=masterOf(id);
+  /* ★ 防循環引用。KAGE 資料裡「禾 ↔ u79be-t」這種互指是存在的，
+     只靠深度上限的話會繞滿次數卻一筆都沒收到，量出來是空的
+     —— 部件比例就會誤判成「這個部件量不到」而整個放棄。 */
+  seen=seen||new Set();
+  if(seen.has(id)) return;
+  seen.add(id);
+  const g=G[id]; if(!g||(depth||0)>6) return;
+  const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
+  const S=resolveStrokes(g,variant);
+  if(S) S.forEach(st=>out.push({p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy])}));
+  if(g.c) g.c.forEach((part,i)=>{
+    const [a,b,c,d]=part.box;
+    collectRaw(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],1,out,1,part.v,(depth||0)+1,seen);
+  });
+}
+/* 依 pratio 解出新的部件外框。回傳的陣列格式跟 g.c 一樣。 */
+function partRatioBoxes(cs,depth,pratio){
+  const t=pratio||0;
+  /* ★ 條件不能寫 depth===0 —— 字元本身通常只是一層別名
+     （語 → u8a9e-t → [言旁, 吾]），真正的兩個部件在下一層。
+     改成「第一個遇到的雙部件層」才作用，深層仍然不動。
+     depth<=3 是保險：再深就是部件內部的細節了。 */
+  if(!t || cs.length!==2 || (depth||0)>3) return cs;
+  /* 量兩個部件實際落在哪（自身墨跡 → 套外框變換） */
+  const place=[];
+  for(const c of cs){
+    const ink=partInk(c.r); if(!ink) return cs;
+    const [a,b,cc,d]=c.box;
+    const kx=(cc-a)/EM, ky=(d-b)/EM;
+    place.push({x0:a+ink.x0*kx, x1:a+ink.x1*kx, y0:b+ink.y0*ky, y1:b+ink.y1*ky, ink, box:c.box, c});
+  }
+  const [A,B]=place;
+  const gapX=Math.min(B.x0,A.x0)===A.x0 ? B.x0-A.x1 : A.x0-B.x1;
+  const gapY=Math.min(B.y0,A.y0)===A.y0 ? B.y0-A.y1 : A.y0-B.y1;
+  /* 判斷結構：哪個方向真的分得開 */
+  const horiz = gapX > -EM*0.10 && gapX > gapY;
+  const vert  = !horiz && gapY > -EM*0.10;
+  if(!horiz && !vert) return cs;                 /* 包圍或重疊結構，不動 */
+  const lo = horiz ? (A.x0<B.x0?A:B) : (A.y0<B.y0?A:B);
+  const hi = (lo===A)?B:A;
+  const key0=horiz?"x0":"y0", key1=horiz?"x1":"y1";
+  const span0=lo[key0], span1=hi[key1], total=span1-span0;
+  if(!(total>1)) return cs;
+  const wLo=lo[key1]-lo[key0], gap=hi[key0]-lo[key1];
+  /* t>0 → 前面那個部件變大；t<0 → 後面那個變大。最多改變三成 */
+  const shift=total*0.30*t;
+  const nLo=Math.max(total*0.12, wLo+shift);
+  const nHi=Math.max(total*0.12, (total-gap)-nLo);
+  const tgt=new Map();
+  tgt.set(lo, [span0, span0+nLo]);
+  tgt.set(hi, [span0+nLo+gap, span0+nLo+gap+nHi]);
+  /* 由「希望墨跡落在哪」反解外框：box0 + ink*k = target */
+  return cs.map((c,i)=>{
+    const P=place[i], [T0,T1]=tgt.get(P);
+    const i0=horiz?P.ink.x0:P.ink.y0, i1=horiz?P.ink.x1:P.ink.y1;
+    if(!(i1>i0)) return c;
+    const k=(T1-T0)/(i1-i0);
+    const b0=T0-i0*k, b1=b0+EM*k;
+    const nb=c.box.slice();
+    if(horiz){ nb[0]=b0; nb[2]=b1; } else { nb[1]=b0; nb[3]=b1; }
+    return {...c, box:nb};
+  });
+}
+function collect(id,box,wScale,out,seed,variant,depth,optic,pratio){
   id=masterOf(id);
   const g=G[id]; if(!g||(depth||0)>8) return;
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
@@ -4677,10 +4763,22 @@ function collect(id,box,wScale,out,seed,variant,depth,optic){
     src:id, sidx:i, sv:variant||null, bx:[x1,y1,sx,sy],
     p:st.p.map(([x,y])=>[x1+x*sx,y1+y*sy]),
     seed:seed*31+i*7+Math.round(x1/17)+Math.round(y1/23)}));
-  if(g.c) g.c.forEach((part,i)=>{
-    const [a,b,c,d]=part.box;
-    collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1,optic);
-  });
+  if(g.c){
+    /* ★ 部件比例：改變左右／上下結構裡兩個部件的分配。
+       KAGE 的部件外框大多是滿框（位置畫在部件自己的座標裡），
+       所以不能直接改外框 —— 要先量出部件「實際落在哪」，再解出新的外框。
+       只在最上層、恰好兩個部件、而且真的能分左右或上下時才動；
+       深層遞迴也改會把字拆散。 */
+    /* ★ pratio 一定要用傳進來的值，不能讀全域 F ——
+       展示頁每個字用的是 axesOf() 的副本（還可能疊上單字覆寫），
+       讀 F 的話永遠是 0，這根軸就完全沒作用。踩過一次。 */
+    const parts = PR_DONE ? g.c : partRatioBoxes(g.c,(depth||0),pratio);
+    if(parts!==g.c) PR_DONE=true;      /* 一個字只調整最外面那一層 */
+    parts.forEach((part,i)=>{
+      const [a,b,c,d]=part.box;
+      collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1,optic,pratio);
+    });
+  }
 }
 const powC=(v,g)=>{const u=(v-500)/500,s=u<0?-1:1;return 500+500*s*Math.pow(Math.abs(u),g);};
 const powG=(v,g)=>{const u=v/EM;return u<0?v:EM*Math.pow(u,g);};
@@ -4869,7 +4967,8 @@ let CS_T0=-1;
 const CS_BUDGET_MS=1200;
 function csBudgetReset(){ CS_T0=-1; }
 function glyphContours(id,f,variant,NS){
-  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
+  prReset();
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic,f.pratio);
   const out=[];
   /* v68：內白保護不能依賴「這次畫面剛好用了多少輪廓取樣」。
      工作台的大字原本 NS=undefined，而匯出/QA 常用 14~20；「豐」這種密集格狀字
@@ -4895,7 +4994,7 @@ function glyphContours(id,f,variant,NS){
   return out;
 }
 function glyphSkeleton(id,f,variant){
-  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
+  const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic,f.pratio);
   return warp(raw,f).filter(st=>st.p.length>1).map(st=>
     "M "+sampleSkeleton(st.p,st.bend||0,40,22,st.cv,st.kj).map(s=>fx(s.p[0])+" "+fx(EM-s.p[1])).join(" L "));
 }
@@ -5082,6 +5181,7 @@ const AXES=[
    f:v=>["依筆意","藏鋒","露鋒","方筆","蠶頭"][Math.round(v)]||String(v)},
   {k:"hookst",  n:"鉤的造型",en:"HOOK ST", min:0,max:4,   step:1,   lo:"依筆意",hi:"長挑",
    f:v=>["依筆意","尖鉤","圓鉤","平鉤","長挑"][Math.round(v)]||String(v)},
+  {k:"pratio",  n:"部件比例",en:"PART", min:-1,  max:1,   step:0.02,lo:"後大",hi:"前大",f:v=>(+v).toFixed(2)},
   {k:"hgrid",   n:"橫線對齊",en:"H-GRID",min:0,   max:1,   step:0.02,lo:"不對齊",hi:"齊格線",f:v=>(+v).toFixed(2)},
   {k:"bleed",   n:"筆畫切齊",en:"BLEED", min:0,   max:1,   step:0.02,lo:"不延伸",hi:"齊邊",  f:v=>(+v).toFixed(2)},
   {k:"cround",  n:"內白圓度",en:"CRND", min:0,   max:1,   step:0.02,lo:"方",  hi:"圓",  f:v=>(+v).toFixed(2)},
@@ -5342,7 +5442,7 @@ function drawBig(){
     if(!g.s){
       /* 組合字本身沒有筆畫，但它裡面的部件有。
          把那些筆畫的控制點也畫出來，可以直接在這裡調。 */
-      const raw=[]; collect(current,[0,0,EM,EM],1,raw,7,varSel,0,F.optic);
+      const raw=[]; collect(current,[0,0,EM,EM],1,raw,7,varSel,0,F.optic,F.pratio);
       raw.forEach((st,ri)=>{
         if(!st.src||st.sidx===undefined||!st.p) return;
         const w=warpStroke(st,F);
@@ -5790,7 +5890,7 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 /* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
-  {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise","hgrid","bleed"]},
+  {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise","pratio","hgrid","bleed"]},
   {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","hookst","dun","press","cap","diag","head","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
   {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
@@ -6727,13 +6827,37 @@ function scDraw(){
       lg.appendChild(el("stop",{offset:"100%","stop-color":ov!==undefined?scPal.c[(ov+2)%scPal.c.length]:scRamp(t1)}));
       defs.appendChild(lg); ref="url(#"+id+")";
     }
-    /* ★ 內白保護／圓度開啟時，輪廓會帶 grp 標記（外殼與它的洞同一組）。
+    /* ★ 內白保護／圓度開啟時，輪廓會帶 grp 標記（外殼與它的洞同一組），
        同一組必須畫進同一個 <path>，否則洞會被當成實心形狀填掉。
-       這時「依筆順上色」自然退化成一組一色 —— 布林運算後筆畫已經合併，
-       本來就不存在逐筆的對應關係了。 */
+       但那樣「依筆順上色」就只剩一色 —— 布林運算後筆畫已經合併。
+
+       ★ 兩者可以兼得：把「保護後的形狀」做成裁切遮罩，
+         裡面照樣畫「未經布林運算的逐筆輪廓」並各自上色。
+         顏色是逐筆的、形狀是修正過的，內白也還在。
+         只有真的需要逐筆顏色時才多算一次，其餘情況維持原本的路徑。 */
     const grouped=cs.length&&cs.some(c=>c.grp!==undefined);
+    const wantPerStroke = (scCol==="stroke"||scCol==="rand") && !cust && ov===undefined && !ref;
+    let clipId=null, rawCs=null;
+    if(grouped && wantPerStroke){
+      try{
+        const f0=scAxesFor(key0);
+        rawCs=glyphContours(ch,{...f0,cmin:0,cround:0});   /* 未經布林運算的逐筆輪廓 */
+      }catch(e){ rawCs=null; }
+      if(rawCs&&rawCs.length){
+        clipId="scclip"+(scSeq++);
+        const cp=el("clipPath",{id:clipId,clipPathUnits:"userSpaceOnUse"});
+        const byG0=new Map();
+        cs.forEach(c=>{ const k=c.grp===undefined?("s"+byG0.size):c.grp;
+          if(!byG0.has(k)) byG0.set(k,[]); byG0.get(k).push(c); });
+        for(const arr of byG0.values())
+          cp.appendChild(el("path",{d:arr.map(svgD).join(" "),"clip-rule":"nonzero"}));
+        defs.appendChild(cp);
+      }
+    }
     const units=[];
-    if(grouped){
+    if(clipId&&rawCs){
+      rawCs.forEach(c=>units.push([c]));            /* 逐筆上色 */
+    }else if(grouped){
       const byG=new Map();
       cs.forEach(c=>{ const k=c.grp===undefined?("s"+units.length):c.grp;
         if(!byG.has(k)) byG.set(k,[]); byG.get(k).push(c); });
@@ -6741,6 +6865,8 @@ function scDraw(){
     }else{
       cs.forEach(c=>units.push([c]));
     }
+    /* 逐筆輪廓要裝進裁切群組，才會被保護後的形狀切齊 */
+    const paintInto = clipId ? el("g",{"clip-path":"url(#"+clipId+")"}) : g;
     const n2=Math.max(1,units.length);
     /* ★ 陰影／立體：把整個字複製到偏移位置畫在下層。
        立體是連續畫 N 份填滿中間，形成擠出的塊體；陰影只畫最遠那一份。
@@ -6776,8 +6902,9 @@ function scDraw(){
          不會吃掉字本身的粗細。一個屬性就解決，不用做輪廓外擴的幾何運算。 */
       if(scEdge>0){ at.stroke=scEdgeColor; at["stroke-width"]=scEdge*2;
         at["stroke-linejoin"]="round"; at["paint-order"]="stroke"; }
-      g.appendChild(el("path",at));
+      paintInto.appendChild(el("path",at));
     });
+    if(paintInto!==g) g.appendChild(paintInto);
     if(scSelKey===key0) g.appendChild(el("rect",{x:8,y:8,width:984,height:984,class:"sc-selection"}));
     g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:"grab","data-key":key0}));
     svg.appendChild(g);
