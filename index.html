@@ -348,6 +348,10 @@
   .scstage{min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;
     padding:26px;position:relative}
   #scArt{display:block;max-width:100%;height:auto}
+  /* ★ 放大時要解除 max-width/max-height，否則 zoom 之後會被壓回容器大小
+     —— 那就是「放大到一定程度就不再變大」的原因。
+     .is-fit 只在 100% 時掛著（見 scApplyZoom），所以這條只在放大／縮小時生效。 */
+  .sczoomwrap.is-zoomin>#scArt{max-width:none;max-height:none;width:auto;height:auto}
   .schint{position:absolute;left:14px;bottom:10px;font-family:var(--mono);font-size:10px;
     letter-spacing:.1em;color:var(--sink,#2a2118);opacity:.45;pointer-events:none;
     max-width:calc(100% - 28px)}
@@ -486,6 +490,8 @@
      v162 把「大小」改成「字在畫布裡的大小」（乘進每個字的 transform），
      這條 transform 就不需要了。 */
   #scArt{max-width:100%;max-height:100%;width:auto;height:auto}
+  /* 手機同樣要解除，否則放大卡住 */
+  .sczoomwrap.is-zoomin>#scArt{max-width:none;max-height:none}
     .schint{left:8px;bottom:6px;font-size:9px}
     .scfoot{height:auto;min-height:104px;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px;
       align-items:center;box-sizing:border-box}
@@ -1202,6 +1208,8 @@
          （40vh 扣掉 .scstage 上下各 12px 的內距）。 */
     #showcase>.scstagewrap .scstage{height:100%}
     #showcase>.scstagewrap .sczoomwrap.is-fit>#scArt{max-height:calc(40vh - 24px)}
+  /* 放大時畫布區要能捲，不然放大了也看不到 */
+  #showcase>.scstagewrap .sczoomwrap.is-zoomin>#scArt{max-height:none}
     /* 面板回到正常流程：它現在只是捲軸裡的一段，不再需要高度上限與陰影 */
     #scTypeBox{max-height:none;overflow:visible;box-shadow:none}
     /* ★ 手機：字型預設列（13 顆＋重設）跟著收合一起收 ——
@@ -7923,13 +7931,17 @@ $("scTxt").addEventListener("keydown",e=>{
 let scZoomLv=1;
 /* 放大到 2000%：要看清楚轉角、接點、端點造型這些細節，400% 不夠。
    高倍率的級距用約 1.4 倍等比，按一次的變化幅度才一致。 */
-const SC_ZOOMS=[0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4,5.5,7.5,10,14,20];
+const SC_ZOOMS=[0.08,0.12,0.18,0.25,0.4,0.55,0.7,0.85,1,1.25,1.5,2,2.5,3,4,5.5,7.5,10,14,20];
 function scApplyZoom(){
   const w=$("scZoomWrap"); if(!w) return;
   w.style.zoom = scZoomLv===1 ? "" : scZoomLv;
   /* 縮放 1.0 ＝「符合視窗」，這時才讓畫布受舞台寬度限制（見 .sczoomwrap.is-fit）。
      放大時拿掉限制，才捲得到被放大的部分。 */
   w.classList.toggle("is-fit", scZoomLv===1);
+  /* ★ 只有「放大」才解除 max-width/max-height。
+     用 :not(.is-fit) 不夠精確 —— 縮小（<100%）時也會解除，
+     那會讓 25% 的畫布跑出容器。 */
+  w.classList.toggle("is-zoomin", scZoomLv>1);
   const b=document.querySelector('#scZoom button[data-z="fit"]');
   if(b) b.textContent=Math.round(scZoomLv*100)+"%";
   /* zoom 會佔實際空間，flex 的置中與捲動都會自己算對，不用另外改對齊。 */
