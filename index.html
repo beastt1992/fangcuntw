@@ -785,9 +785,14 @@
     justify-content:center;padding:10px 0 calc(14px + env(safe-area-inset-bottom));
     overflow:hidden}
   .smapmode[hidden]{display:none}
-  .smapthumbs{flex:1 1 auto;display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;
-    scrollbar-width:thin;min-width:0}
-  .smapthumbs::-webkit-scrollbar{height:5px}
+  /* Apple 相簿那種：當前的置中，左右各露出鄰居。
+     前後補一半寬度的留白，第一個和最後一個才也能捲到正中間。 */
+  .smapthumbs{flex:1 1 auto;display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;
+    scrollbar-width:none;min-width:0;scroll-snap-type:x mandatory;
+    scroll-padding-inline:50%}
+  .smapthumbs::before,.smapthumbs::after{content:"";flex:none;width:calc(50% - 40px)}
+  .smapthumbs>button{scroll-snap-align:center}
+  .smapthumbs::-webkit-scrollbar{display:none}
   .smapthumbs button{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;
     border:1px solid var(--line-2,#cfc8b8);background:var(--paper);color:var(--ink);
     border-radius:9px;padding:6px 8px 4px;cursor:pointer;font-family:inherit}
@@ -8865,12 +8870,20 @@ function scBalanceBy(measure,axis,rng,label){
      書法組的起筆／收筆造型不是 0（隸書 5/4、瘦金 4/2），一定會用到這條。
      造型組全是 0，純內插就夠。 */
 const SMAP_SETS=[
-  { n:"基本", lt:"ming",    rt:"yuan",   lb:"kai",    rb:"hei",
+  { n:"基本", lt:"ming",    rt:"yuan",    lb:"kai",     rb:"hei",
     L:["明體","圓體","楷書","黑體"] },
-  { n:"書法", lt:"zhuan",   rt:"li",     lb:"shoujin",rb:"weibei",
+  { n:"書法", lt:"zhuan",   rt:"li",      lb:"shoujin", rb:"weibei",
     L:["篆書","隸書","瘦金","魏碑"] },
-  { n:"造型", lt:"lgWire",  rt:"lgPlump",lb:"lgBroken",rb:"lgSharp",
+  { n:"手寫", lt:"hand",    rt:"xing",    lb:"kai",     rb:"kage",
+    L:["手寫","行書","楷書","原樣"] },
+  { n:"字重", lt:"shoujin", rt:"lgPlump", lb:"ming",    rb:"title",
+    L:["瘦金","膨潤","明體","標題黑"] },
+  { n:"造型", lt:"lgWire",  rt:"lgPlump", lb:"lgBroken",rb:"lgSharp",
     L:["線框","膨潤","破碎","銳利"] },
+  { n:"動態", lt:"lgWave",  rt:"lgScatter",lb:"lgBroken",rb:"lgSharp",
+    L:["波動","散排","破碎","銳利"] },
+  { n:"招牌", lt:"title",   rt:"yuan",    lb:"hei",     rb:"lgPlump",
+    L:["標題黑","圓體","黑體","膨潤"] },
 ];
 let smapSet=0;
 let smapX=0.5, smapY=0.5, smapOn=false;
@@ -8965,13 +8978,23 @@ function scStyleMode(on){
   document.body.classList.toggle("smap-on",smapOn);
   const m=$("smapMode"); if(m) m.hidden=!smapOn;
   const b=$("smapBtn"); if(b) b.setAttribute("aria-pressed",smapOn?"true":"false");
-  if(smapOn){ scStyleMapDot(); smapBuildThumbs(); }
+  if(smapOn){ scStyleMapDot(); smapBuildThumbs();
+    /* 進來時把目前選中的捲到正中間 */
+    requestAnimationFrame(()=>{ const on=$("smapThumbs")&&$("smapThumbs").querySelector("button.on");
+      if(on) smapCenter(on); }); }
 }
 if($("smapBtn")) $("smapBtn").addEventListener("click",()=>scStyleMode(!smapOn));
 if($("smapClose")) $("smapClose").addEventListener("click",()=>scStyleMode(false));
 /* 風格模式的大縮圖：直接就是 18 個預設，用使用者輸入的第一個字渲染。
    跟預設列共用 scPresetThumbs 的思路，但尺寸大、可橫向捲。 */
 let SMAP_TH_CH=null;
+/* 把某顆縮圖捲到可視區正中間（Apple 相簿的風格選擇器就是這個行為） */
+function smapCenter(b){
+  const box=$("smapThumbs"); if(!box||!b) return;
+  const target=b.offsetLeft-(box.clientWidth-b.offsetWidth)/2;
+  try{ box.scrollTo({left:target,behavior:"smooth"}); }
+  catch(e){ box.scrollLeft=target; }
+}
 function smapBuildThumbs(){
   const box=$("smapThumbs"); if(!box) return;
   const txt=($("scTxt")&&$("scTxt").value||"").replace(/\s/g,"");
@@ -8991,6 +9014,7 @@ function smapBuildThumbs(){
     b.addEventListener("click",()=>{
       scCommit(); applyPreset(k); presetKey=k;
       document.querySelectorAll("#smapThumbs button").forEach(x=>x.classList.toggle("on",x===b));
+      smapCenter(b);
       document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
       if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];
       syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
