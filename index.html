@@ -4802,6 +4802,10 @@ function markCorners(strokes,f){
   }
   return strokes;
 }
+/* 內白處理的時間預算（毫秒）。每次重畫開頭呼叫 csBudgetReset() 歸零。 */
+let CS_T0=-1;
+const CS_BUDGET_MS=1200;
+function csBudgetReset(){ CS_T0=-1; }
 function glyphContours(id,f,variant,NS){
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic);
   const out=[];
@@ -4811,7 +4815,16 @@ function glyphContours(id,f,variant,NS){
      cmin 開啟時統一至少使用 20 段建立 Boolean 母輪廓，讓畫面、預覽、OTF 共用同一拓樸。 */
   /* 內白圓度也走同一條管線（它要拿到 enclosed counter 的環才能改形狀），
      所以 cmin 沒開、只開圓度時也要進來。 */
-  const counterOn=(f.cmin>0 || f.cround>0) && !VF_STABLE;
+  /* ★ 時間預算：內白保護／圓度要跑布林運算，單字約慢 5–6 倍。
+     展示頁只有幾個大字沒問題，但工作台一頁有幾百格 ——
+     一次全開就是幾十秒起跳，手機上等於整個 app 凍住（實際發生過）。
+     所以給一個每輪的時間上限，超過就對「剩下的字」跳過內白處理：
+     畫面會逐步降級，但永遠不會卡死。時間由 csBudgetReset() 在每次重畫開頭歸零。 */
+  let counterOn=(f.cmin>0 || f.cround>0) && !VF_STABLE;
+  if(counterOn){
+    if(CS_T0<0) CS_T0=Date.now();
+    if(Date.now()-CS_T0 > CS_BUDGET_MS) counterOn=false;
+  }
   const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
   for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
@@ -5118,6 +5131,7 @@ function computeView(){
   return VIEW.slice(page*PAGE,(page+1)*PAGE);
 }
 function buildCells(){
+  csBudgetReset();
  const shown=computeView();
  $("cells").textContent=""; cellPaths.clear();
  shown.forEach(id=>{
@@ -5399,6 +5413,7 @@ bigSvg.addEventListener("pointercancel",endDrag);
 
 /* ---------- 重繪 ---------- */
 function drawAll(){
+  csBudgetReset();
   AXES.forEach(ax=>{ax.input.value=F[ax.k];ro[ax.k].textContent=ax.f(F[ax.k]);});
   cellPaths.forEach((paths,id)=>{
     const cs=glyphContours(id,FA(),null,14);
@@ -6530,6 +6545,7 @@ let scPickMode=false;
 let scCustom={};        /* key → 自訂色 */
 let scOff={};           /* key → [dx,dy] 個別位移，單位是「一個字面」 */
 function scDraw(){
+  csBudgetReset();          /* 每次重畫各自有完整的內白處理額度 */
   const svg=$("scArt"); svg.textContent=""; scSyncColors();
   const raw=$("scTxt").value.replace(/\r\n?/g,"\n");
   const sourceLines=raw.split("\n");
