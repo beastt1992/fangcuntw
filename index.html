@@ -1402,6 +1402,7 @@
         <div class="sclay-g"><label>單字</label>
           <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
           <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
+            <button class="btn ghost sm" id="scBalance" type="button" title="讓畫面上每個字看起來一樣重（標準字用）">視覺等重</button>
           <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
         <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
              跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
@@ -1712,7 +1713,7 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
             它在 axesOf() 裡把其他軸整組往「更有個性」的方向推。 */
          pers:0,
          /* 端點造型（0＝依筆意，就是現狀）與內白圓度（0＝不作用） */
-         term:0, head:0, cround:0,
+         term:0, head:0, hookst:0, cround:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -1728,7 +1729,7 @@ const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','ha
                /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
                   漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
                   「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
-               'diag','cnaniso','term','head','cround','pers'];
+               'diag','cnaniso','term','head','hookst','cround','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -2759,8 +2760,28 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
     out.push(["Q",tip[0]+T[0]*w*0.56*dir,tip[1]+T[1]*w*0.56*dir,to[0],to[1]]);return;
   }
   if(kind==="hook"){
-    /* 鉤尾做成短促的小喙狀，不再只是一般尖頭。 */
+    /* 鉤尾的造型。鉤長是 f.hook（那是長度），這裡是「形狀」——
+       在書法裡鉤的收法最能分辨書體：楷書小喙、瘦金長挑、隸書幾乎不鉤、圓體圓收。 */
     const nx=-T[1], ny=T[0];
+    const k=Math.round(f&&f.hookst||0);
+    if(k===1){                      /* 尖鉤：兩側收成一個銳角 */
+      out.push(["L",tip[0]+T[0]*w*0.85*dir,tip[1]+T[1]*w*0.85*dir]);
+      out.push(["L",to[0],to[1]]); return;
+    }
+    if(k===2){                      /* 圓鉤：飽滿的半圓收尾 */
+      out.push(["Q",tip[0]+T[0]*w*1.25*dir-nx*w*0.55,tip[1]+T[1]*w*1.25*dir-ny*w*0.55,
+                    tip[0]+T[0]*w*0.95*dir,          tip[1]+T[1]*w*0.95*dir]);
+      out.push(["Q",tip[0]+T[0]*w*1.25*dir+nx*w*0.55,tip[1]+T[1]*w*1.25*dir+ny*w*0.55,
+                    to[0],to[1]]); return;
+    }
+    if(k===3){                      /* 平鉤：切齊，隸書那種幾乎不出鋒的收法 */
+      out.push(["L",to[0],to[1]]); return;
+    }
+    if(k===4){                      /* 長挑：瘦金體那種細長往外挑出去的鉤 */
+      out.push(["L",tip[0]+T[0]*w*2.20*dir-nx*w*0.22,tip[1]+T[1]*w*2.20*dir-ny*w*0.22]);
+      out.push(["L",to[0],to[1]]); return;
+    }
+    /* 0 ＝ 依筆意：原本的短促小喙 */
     const cx=tip[0]+T[0]*w*0.42*dir-nx*w*0.18;
     const cy=tip[1]+T[1]*w*0.42*dir-ny*w*0.18;
     out.push(["Q",cx,cy,to[0],to[1]]);return;
@@ -2870,7 +2891,10 @@ function appendKageTail(S,st,f,wScale){
   /* 實測 Noto 黑體「打」的扌鉤：往左 156、往上 51、18°、長 164（em=1000）。
      舊的係數 hw*0.52 上限 58 —— 鉤只伸到 51，連拉滿都只有 105，
      所以看起來像「垂下去抖一下」不像鉤。改成以量到的長度為準。 */
-  const m=clamp(widths(f).hw*wScale*1.62,40,210)*(f.hook===undefined?1:f.hook);
+  /* 長挑（鉤造型 4）額外拉長 —— 瘦金體那種細長往外挑的鉤，
+     光換端點形狀不夠，鉤本身的長度也要加。 */
+  const hkLong = Math.round(f.hookst||0)===4 ? 1.55 : 1;
+  const m=clamp(widths(f).hw*wScale*1.62,40,210)*(f.hook===undefined?1:f.hook)*hkLong;
   let C,B;
   if(st.e==="hook"){
     /* 左上挑鉤。往左的量要遠大於往上，才是 18° 那種橫掃的鉤。
@@ -2972,7 +2996,14 @@ function strokeOutline(st,f,wScale,NS){
     R.push([s.p[0]+wx-nx*w,s.p[1]+wy-ny*w]);
   }
   const C=caps(st,f);
-  if(tail.kind==="hook") C.b="flat";
+  /* ★ KAGE 的鉤是「骨架延伸出去的曲線」，不是端點造型 ——
+     尾端原本一律寫死成 flat（切平），所以鉤造型軸對這一萬三千字完全沒作用。
+     現在讓軸接管：0 維持原本的切平，其餘套用選定的收法。 */
+  if(tail.kind==="hook"){
+    const HK=["flat","pt",1,"flat","pt"];      /* 依筆意／尖鉤／圓鉤／平鉤／長挑 */
+    const k=Math.round(f.hookst||0);
+    C.b=HK[k]!==undefined?HK[k]:"flat";
+  }
   else if(tail.kind==="bend") C.b=Math.min(f.round,0.22);
   const T0=unit(S[0].t),T1=unit(S[n].t);
   const w0=widthAt(st,0,S[0].t,f)*wScale/2,w1=widthAt(st,1,S[n].t,f)*wScale/2;
@@ -4970,6 +5001,8 @@ const AXES=[
    f:v=>["依筆意","平切","圓頭","三角","尖收","楔形"][Math.round(v)]||String(v)},
   {k:"head",    n:"起筆造型",en:"HEAD", min:0,   max:4,   step:1,   lo:"依筆意",hi:"蠶頭",
    f:v=>["依筆意","藏鋒","露鋒","方筆","蠶頭"][Math.round(v)]||String(v)},
+  {k:"hookst",  n:"鉤的造型",en:"HOOK ST", min:0,max:4,   step:1,   lo:"依筆意",hi:"長挑",
+   f:v=>["依筆意","尖鉤","圓鉤","平鉤","長挑"][Math.round(v)]||String(v)},
   {k:"cround",  n:"內白圓度",en:"CRND", min:0,   max:1,   step:0.02,lo:"方",  hi:"圓",  f:v=>(+v).toFixed(2)},
   {k:"pers",    n:"個性",    en:"PERS", min:0,   max:100, step:1,   lo:"正常",hi:"誇張",f:v=>String(v|0)},
   {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
@@ -5653,7 +5686,7 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
-  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag","head","term"]},
+  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","hookst","dun","press","cap","diag","head","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
   {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
 ];
@@ -6809,6 +6842,7 @@ function scRandomFace(){
     /* 端點造型：六成機率維持「依筆意」，其餘隨機挑一種 —— 這根對外觀影響很大 */
     term: rrChance(0.40)? (1+Math.floor(Math.random()*5)) : 0,
     head: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
+    hookst: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
     cround: rrChance(0.30)? +rrRnd(0.3,1.0).toFixed(2) : 0,
     pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
     seed:1+Math.floor(Math.random()*999)
@@ -7959,6 +7993,68 @@ function scAxesFor(key){
   const o=scAxOvr[key];
   return o? {...FA(), ...o} : FA();
 }
+/* ==========================================================================
+   視覺等重（標準字用）
+   「方寸建築」四個字擺在一起，繁的字會比簡的字黑 —— 實測筆畫數差三倍時
+   墨量仍差 1.5 倍。做字型時那是對的（繁字本來就該重一點），
+   但做標準字要的是四個字看起來一樣重，現在只能一個字一個字手調。
+
+   這裡自動解：量出每個字的實際墨量 → 二分搜尋各自的字重 → 收斂到共同目標。
+   ★ 墨量不能用「各筆面積相加」，筆畫重疊處會重複計算；要先做布林聯集。
+   ★ 只有參數化字型做得到 —— 一般字型是死輪廓，沒辦法把某個字調細 6%。
+   ========================================================================== */
+function scInkArea(ch,f){
+  let cs; try{ cs=glyphContours(ch,f); }catch(e){ return 0; }
+  if(!cs||!cs.length) return 0;
+  const PCL=pcLib();
+  const rings=cs.map(c=>[pcFlatten(c,6)]).filter(r=>r[0].length>=4);
+  if(!rings.length) return 0;
+  let u; try{ u=PCL? PCL.union(rings[0],...rings.slice(1)) : null; }catch(e){ u=null; }
+  if(!u){        /* 沒有布林函式庫時退而求其次：外環相加（會高估但仍單調） */
+    let a=0; for(const r of rings) a+=Math.abs(csRingArea(r[0])); return a;
+  }
+  let a=0;
+  for(const poly of u){ a+=Math.abs(csRingArea(poly[0]));
+    for(let k=1;k<poly.length;k++) a-=Math.abs(csRingArea(poly[k])); }
+  return a;
+}
+function scBalanceWeight(){
+  const keys=[...new Set(Array.from($("scArt").querySelectorAll("[data-key]"))
+    .map(n=>n.getAttribute("data-key")))];
+  if(keys.length<2){ $("scHint").textContent="至少要兩個字才能平衡"; return; }
+  scCommit();
+  const base=FA();
+  const items=[];
+  for(const k of keys){
+    const ch=k.split("|")[2]; if(!ch) continue;
+    const f={...base,...(scAxOvr[k]||{})};
+    const a=scInkArea(ch,f);
+    if(a>0) items.push({k,ch,a,w:f.weight});
+  }
+  if(items.length<2){ $("scHint").textContent="量不到墨量，無法平衡"; return; }
+  /* 目標取中位數 —— 用平均會被特別繁或特別簡的字拉走 */
+  const sorted=items.map(x=>x.a).sort((a,b)=>a-b);
+  const target=sorted[Math.floor(sorted.length/2)];
+  let moved=0;
+  for(const it of items){
+    if(Math.abs(it.a-target)/target < 0.02) continue;   /* 已經夠接近就不動 */
+    /* 二分搜尋字重。墨量對字重單調遞增，但筆畫合併後是非線性的，所以不用公式解 */
+    let lo=Math.max(8,it.w*0.45), hi=Math.min(150,it.w*1.9), best=it.w, bd=Infinity;
+    for(let i=0;i<9;i++){
+      const mid=(lo+hi)/2;
+      const a=scInkArea(it.ch,{...base,...(scAxOvr[it.k]||{}),weight:mid});
+      const d=Math.abs(a-target);
+      if(d<bd){ bd=d; best=mid; }
+      if(a<target) lo=mid; else hi=mid;
+    }
+    (scAxOvr[it.k]||(scAxOvr[it.k]={})).weight=Math.round(best*10)/10;
+    moved++;
+  }
+  scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+  $("scHint").textContent = moved
+    ? "已把 "+moved+" 個字的字重調成視覺等重 —— 不滿意可以再逐字微調，或按「清除」還原"
+    : "這幾個字本來就夠接近了";
+}
 function scAxLabel(){
   const n=Object.keys(scAxOvr).length;
   $("scAxWho").textContent = scAxMode
@@ -7976,6 +8072,7 @@ function scSetAxMode(on){
   scAxLabel(); syncShowAxes(); scDraw();
 }
 $("scAxOn").addEventListener("click",()=>scSetAxMode(!scAxMode));
+$("scBalance").addEventListener("click",scBalanceWeight);
 $("scAxClr").addEventListener("click",()=>{
   if(scAxMode&&scAxKey) delete scAxOvr[scAxKey]; else scAxOvr={};
   scAxLabel(); syncShowAxes(); scDraw(); saveLocal();
