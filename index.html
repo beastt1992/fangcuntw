@@ -9407,6 +9407,12 @@ $("svAnim").addEventListener("click",()=>{ try{ svAnimate(); }catch(e){ alert("�
 
 
 /* ---------- 展示頁的預設列與重設 ---------- */
+/* ★ 宣告必須在 scBuildPresets 之前 —— 它尾端會呼叫 scPresetThumbs()，
+   而那個函式一開頭就讀 PTHUMB_CH。宣告在後面的話會落在暫時性死區，
+   丟 ReferenceError 之後整個縮圖生成靜默失敗：按鈕上只剩 26px 的空白，
+   把那一排撐高、跟其他列的軸線對不齊（實機回報「按鈕軸線跑掉」）。
+   ★★ 這是這個檔案第四次踩暫時性死區，交接文件第五節有記。 */
+let PTHUMB_CH=null;
 function scBuildPresets(){
   const seg=$("scPreset"); if(!seg||seg.childElementCount) return;
   for(const k of Object.keys(PRESETS)){
@@ -9436,7 +9442,6 @@ function scBuildPresets(){
 /* 預設縮圖：拿使用者輸入的第一個字，用各預設的參數畫出來。
    ★ 用 requestAnimationFrame 分批，18 個字形一次算完會卡一下畫面。
    ★ 快取以「字＋預設」為鍵；換字才重畫。 */
-let PTHUMB_CH=null;
 function scPresetThumbs(){
   const seg=$("scPreset"); if(!seg) return;
   const txt=($("scTxt")&&$("scTxt").value||"").replace(/\s/g,"");
