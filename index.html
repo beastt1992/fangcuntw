@@ -576,7 +576,10 @@
   .sccheck input{accent-color:var(--ink)}
   .scselect{min-height:34px}
   #scUndo,#scRedo{font-size:17px;line-height:1;min-width:34px;padding-left:8px;padding-right:8px}
-  #scArt .sc-selection{fill:none;stroke:var(--grid);stroke-width:9;stroke-dasharray:24 16;vector-effect:non-scaling-stroke;pointer-events:none}
+  /* ★ 拿掉 non-scaling-stroke：那會讓線寬固定在 9 螢幕像素，
+     縮小時字變小、框不變，看起來就過粗（實機回報「選取邊框太粗」）。
+     改成跟著縮放，線寬用 EM 單位，比例才會一致。 */
+  #scArt .sc-selection{fill:none;stroke:var(--grid);stroke-width:9;stroke-dasharray:24 16;pointer-events:none}
   .scstage.transparent-bg{background-color:#fff;
     background-image:linear-gradient(45deg,#e6e2d8 25%,transparent 25%),linear-gradient(-45deg,#e6e2d8 25%,transparent 25%),
       linear-gradient(45deg,transparent 75%,#e6e2d8 75%),linear-gradient(-45deg,transparent 75%,#e6e2d8 75%);
@@ -9457,7 +9460,9 @@ function cqMark(row){
   if(!g) return;
   for(const h of row.hits){
     const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
-    c.setAttribute("cx",h.x); c.setAttribute("cy",h.y); c.setAttribute("r",26);
+    /* ★ svgD 畫路徑時做了 EM-y 的翻轉（輪廓 y 向上、SVG y 向下），
+       標記也要翻，否則上下顛倒（實機回報「檢核位置都不對」）。 */
+    c.setAttribute("cx",h.x); c.setAttribute("cy",EM-h.y); c.setAttribute("r",26);
     c.setAttribute("class","cq-dot");
     c.setAttribute("fill","none"); c.setAttribute("stroke","#b4432f");
     c.setAttribute("stroke-width",9); c.setAttribute("opacity",".85");
