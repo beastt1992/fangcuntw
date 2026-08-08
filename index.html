@@ -1335,6 +1335,12 @@
             ><button data-k="45">4:5</button><button data-k="34">3:4</button
             ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
           </div></div>
+      <div class="g"><label>底稿</label>
+        <input type="file" id="scRefIn" accept=".otf,.ttf,.OTF,.TTF" hidden>
+        <button class="btn ghost sm" id="scRefBtn" type="button" title="載入現有字型當描圖底稿（不會改變你的字，只是畫在下層參考）">選字型</button>
+        <span class="tip" id="scRefName" style="font-size:10px;flex:none;white-space:nowrap">未載入</span>
+        <input type="range" id="scRefOp" min="0" max="0.8" step="0.02" value="0.28" style="width:64px;flex:none" title="底稿濃度">
+        <button class="btn ghost sm" id="scRefClr" type="button">移除</button></div>
       <div class="g"><label>版式</label><div class="seg" id="scLayout">
             <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>    </div>
     <!-- ★ 顏色搬到畫布上方自成一列。跟範例海報那排併成一行會太擠（光上色就五顆），
@@ -6739,6 +6745,12 @@ function scDraw(){
     /* ★ 陰影／立體：把整個字複製到偏移位置畫在下層。
        立體是連續畫 N 份填滿中間，形成擠出的塊體；陰影只畫最遠那一份。
        份數有上限 —— 沒有上限的話深度一拉就是幾百個 path，畫面會頓。 */
+    /* 底稿畫在最底層（比陰影還下面） */
+    if(scRefFont && scRefOpacity>0){
+      const d=scRefPathFor(ch);
+      if(d) g.appendChild(el("path",{d,fill:"#000","fill-rule":"nonzero","data-ref":"1",
+        opacity:String(scRefOpacity),"pointer-events":"none"}));
+    }
     if(scShadow>0){
       const a=scShadowAngle*Math.PI/180;
       const dx=Math.cos(a)*scShadow, dy=Math.sin(a)*scShadow;
@@ -6931,6 +6943,47 @@ let scRandAmt=1;
 /* 外框／陰影／立體。這三個不改字形、只影響呈現，所以不是設計軸 —— 放在顏色那一區。
    都畫在同一個 <g> 裡，所以 SVG／PNG 匯出會一起帶出去。 */
 let scEdge=0, scEdgeColor="#ffffff";
+/* ==========================================================================
+   底稿圖層：載入現有字型檔，把它畫在字的下層當描圖參考。
+   ★ 這不是「匯入字型來改」—— 字型檔裡只有輪廓、沒有骨架，反推骨架在中文字上
+     是研究等級的題目。這裡只是把它當底圖，你用方寸的骨架去對齊它。
+   opentype.js 本來就內建（原本只用來寫出字型），parse 一直都在。
+   ========================================================================== */
+let scRefFont=null, scRefOpacity=0.28, scRefName="";
+function scLoadRefFont(buf,name){
+  try{
+    scRefFont=opentype.parse(buf);
+    scRefName=name||"";
+    $("scRefName").textContent=scRefName.replace(/\.[^.]+$/,"").slice(0,18)||"已載入";
+    scDraw();
+  }catch(e){
+    scRefFont=null; $("scRefName").textContent="讀不到";
+    alert("這個字型檔讀不出來。\n\n支援 .otf / .ttf；.woff2 要先轉成 ttf。");
+  }
+}
+/* 把某個字在底稿字型裡的輪廓，換算到方寸的 1000 字身框座標 */
+function scRefPathFor(ch){
+  if(!scRefFont) return null;
+  try{
+    const g=scRefFont.charToGlyph(ch);
+    if(!g||!g.path||!g.path.commands||!g.path.commands.length) return null;
+    const upm=scRefFont.unitsPerEm||1000;
+    const k=EM/upm;
+    /* 字型是 y 向上、基線在 0；方寸是 y 向下、字身框 0~1000。
+       用 ascender 當上緣對齊，跟渲染時的字身框一致。 */
+    const asc=(scRefFont.ascender!==undefined? scRefFont.ascender : upm*0.88);
+    let d="";
+    for(const c of g.path.commands){
+      const X=v=>(v*k).toFixed(1), Y=v=>((asc-v)*k).toFixed(1);
+      if(c.type==="M") d+="M"+X(c.x)+" "+Y(c.y);
+      else if(c.type==="L") d+="L"+X(c.x)+" "+Y(c.y);
+      else if(c.type==="C") d+="C"+X(c.x1)+" "+Y(c.y1)+" "+X(c.x2)+" "+Y(c.y2)+" "+X(c.x)+" "+Y(c.y);
+      else if(c.type==="Q") d+="Q"+X(c.x1)+" "+Y(c.y1)+" "+X(c.x)+" "+Y(c.y);
+      else if(c.type==="Z") d+="Z";
+    }
+    return d||null;
+  }catch(e){ return null; }
+}
 let scShadow=0, scShadowAngle=45, scShadowColor="#00000033", scShadowMode="drop";  /* drop=陰影 solid=立體 */
 function scRandomFace(){
   /* 先抽一組「完全隨機」的目標，再依變化程度往目前這套字內插。
@@ -7147,6 +7200,8 @@ function scSVG(){
   const svg=$("scArt").cloneNode(true);
   svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
   svg.querySelectorAll(".sc-selection").forEach(x=>x.remove());
+  /* 底稿只是描圖參考，不屬於作品，匯出時要拿掉 */
+  svg.querySelectorAll('path[data-ref="1"]').forEach(x=>x.remove());
   svg.querySelectorAll('rect[fill="transparent"][data-key]').forEach(x=>x.remove());
   const vb=svg.getAttribute("viewBox").split(/\s+/).map(Number);
   const cv=SC_CANVAS[scCanvas]||SC_CANVAS.free;
@@ -8271,6 +8326,19 @@ if($("scShadowMode")) $("scShadowMode").addEventListener("click",e=>{
   scShadowMode=b.dataset.k;
   document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x===b));
   scDraw(); saveLocal();
+});
+if($("scRefBtn")) $("scRefBtn").addEventListener("click",()=>$("scRefIn").click());
+if($("scRefIn")) $("scRefIn").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value="";
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>scLoadRefFont(r.result,f.name);
+  r.onerror=()=>alert("檔案讀取失敗");
+  r.readAsArrayBuffer(f);
+});
+if($("scRefOp")) $("scRefOp").addEventListener("input",e=>{ scRefOpacity=+e.target.value; scDraw(); });
+if($("scRefClr")) $("scRefClr").addEventListener("click",()=>{
+  scRefFont=null; scRefName=""; $("scRefName").textContent="未載入"; scDraw();
 });
 $("scBalance").addEventListener("click",scBalanceWeight);
 $("scBalanceW").addEventListener("click",scBalanceWidth);
