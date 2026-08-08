@@ -1353,6 +1353,17 @@
       <div class="g"><label>自訂色</label>
         <input type="color" id="scPick" value="#c2453a">
         <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
+      <div class="g"><label>外框</label>
+        <input type="range" id="scEdge" min="0" max="40" step="1" value="0" style="width:78px;flex:none">
+        <b id="scEdgeV" style="font-family:var(--mono);font-size:10px;width:22px;flex:none;text-align:right">0</b>
+        <input type="color" id="scEdgeC" value="#ffffff"></div>
+      <div class="g"><label>陰影</label>
+        <input type="range" id="scShadow" min="0" max="90" step="1" value="0" style="width:78px;flex:none">
+        <b id="scShadowV" style="font-family:var(--mono);font-size:10px;width:22px;flex:none;text-align:right">0</b>
+        <input type="range" id="scShadowA" min="0" max="359" step="1" value="45" style="width:60px;flex:none" title="角度">
+        <input type="color" id="scShadowC" value="#000000">
+        <div class="seg" id="scShadowMode">
+          <button data-k="drop" class="on">陰影</button><button data-k="solid">立體</button></div></div>
       <div class="g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
     </div>
     <!-- ★ 畫布外再包一層：.scstage 是 overflow:auto 的捲動容器，
@@ -5122,6 +5133,17 @@ const PRESETS={
   kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30,cmin:0},
   kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0,cap:0.02,cmin:0}
 };
+/* ★ 套用預設一律走這裡。
+   直接 Object.assign(F,PRESETS[k]) 只會覆蓋預設「有列出來」的鍵 ——
+   新加的軸沒補進舊預設，切預設或按重設時就會留在上一組字的值
+   （實測 hei/yuan/ming 等各缺 9 根）。
+   所以先把所有軸還原成出廠值，再套預設列出的那些。
+   simp 不是設計軸，不在 AXKEYS 裡，自然不受影響。 */
+function applyPreset(k){
+  const pre=PRESETS[k]||PRESETS.hei;
+  for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) F[ax]=F_DEFAULT[ax];
+  Object.assign(F,pre);
+}
 const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",zhuan:"篆書",li:"隸書",weibei:"魏碑",shoujin:"瘦金",xing:"行書",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={lgSharp:"Sharp",lgPlump:"Plump",lgWire:"Wire",lgBroken:"Broken",lgWave:"Wave",lgScatter:"Scatter",hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
 const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
@@ -5823,7 +5845,7 @@ function syncShowAxes(){
 document.querySelectorAll("#scPoster button").forEach(x=>x.classList.toggle("on",x.dataset.poster==="minimal"));
 $("presets").addEventListener("click",e=>{
   const b=e.target.closest("button[data-p]");if(!b)return;
-  Object.assign(F,PRESETS[b.dataset.p]); presetKey=b.dataset.p;   /* simp 不在預設裡，保持不變 */
+  applyPreset(b.dataset.p); presetKey=b.dataset.p;
   document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x===b));
   syncShowAxes();
   if(MODE==="show") scDraw();
@@ -6714,6 +6736,20 @@ function scDraw(){
       cs.forEach(c=>units.push([c]));
     }
     const n2=Math.max(1,units.length);
+    /* ★ 陰影／立體：把整個字複製到偏移位置畫在下層。
+       立體是連續畫 N 份填滿中間，形成擠出的塊體；陰影只畫最遠那一份。
+       份數有上限 —— 沒有上限的話深度一拉就是幾百個 path，畫面會頓。 */
+    if(scShadow>0){
+      const a=scShadowAngle*Math.PI/180;
+      const dx=Math.cos(a)*scShadow, dy=Math.sin(a)*scShadow;
+      const d=units.map(arr=>arr.map(svgD).join(" ")).join(" ");
+      const steps = scShadowMode==="solid" ? Math.min(14,Math.max(2,Math.round(scShadow/6))) : 1;
+      for(let k=steps;k>=1;k--){
+        const t=k/steps;
+        g.appendChild(el("path",{d,fill:scShadowColor,"fill-rule":"nonzero",
+          transform:"translate("+(dx*t).toFixed(2)+","+(dy*t).toFixed(2)+")"}));
+      }
+    }
     units.forEach((arr,si)=>{
       const n=n2;
       let fill;
@@ -6723,7 +6759,12 @@ function scDraw(){
       else if(scCol==="mono") fill=scMonoColor;
       else if(scCol==="stroke") fill=scRamp(n<2?0:si/(n-1));
       else fill=scPal.c[Math.floor(scHash(ch+"#"+si+"#"+i)*scPal.c.length)%scPal.c.length];
-      g.appendChild(el("path",{d:arr.map(svgD).join(" "),fill,"fill-rule":"nonzero"}));
+      const at={d:arr.map(svgD).join(" "),fill,"fill-rule":"nonzero"};
+      /* 外框：paint-order 讓描邊畫在填色「之前」，看起來就是往外長的邊框，
+         不會吃掉字本身的粗細。一個屬性就解決，不用做輪廓外擴的幾何運算。 */
+      if(scEdge>0){ at.stroke=scEdgeColor; at["stroke-width"]=scEdge*2;
+        at["stroke-linejoin"]="round"; at["paint-order"]="stroke"; }
+      g.appendChild(el("path",at));
     });
     if(scSelKey===key0) g.appendChild(el("rect",{x:8,y:8,width:984,height:984,class:"sc-selection"}));
     g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:"grab","data-key":key0}));
@@ -6887,6 +6928,10 @@ const rrChance=p=>Math.random()<p;
 /* 變化程度：0 ＝ 幾乎不動（在你現在這套字上微調），1 ＝ 完全隨機。
    這是工具設定不是字型參數，所以不放進 AXES，另外存。 */
 let scRandAmt=1;
+/* 外框／陰影／立體。這三個不改字形、只影響呈現，所以不是設計軸 —— 放在顏色那一區。
+   都畫在同一個 <g> 裡，所以 SVG／PNG 匯出會一起帶出去。 */
+let scEdge=0, scEdgeColor="#ffffff";
+let scShadow=0, scShadowAngle=45, scShadowColor="#00000033", scShadowMode="drop";  /* drop=陰影 solid=立體 */
 function scRandomFace(){
   /* 先抽一組「完全隨機」的目標，再依變化程度往目前這套字內插。
      所以低變化程度不是「小幅度的全新隨機」，而是「你這套字的變體」——
@@ -7321,6 +7366,8 @@ function scState(){
   return {txt:$("scTxt").value,axes,canvas:scCanvas,margin:scMargin,bg:scBgColor,transparent:scTransparentBg,mono:scMonoColor,
     dir:scDir,lay:scLay,pal:scPal.k,col:scCol,blend:scBlend,align:scAlignMode,scale:scScale,gx:scGxAdj,gy:scGyAdj,
     randAmt:scRandAmt,
+    edge:scEdge, edgeC:scEdgeColor,
+    shadow:scShadow, shadowA:scShadowAngle, shadowC:scShadowColor, shadowM:scShadowMode,
     ovr:{...scOvr},custom:{...scCustom},off:JSON.parse(JSON.stringify(scOff)),tr:JSON.parse(JSON.stringify(scTr)),axovr:JSON.parse(JSON.stringify(scAxOvr))};
 }
 function scCommit(){
@@ -7335,6 +7382,13 @@ function scApplyState(s){
     scCanvas=s.canvas||"free"; scMargin=typeof s.margin==="number"?s.margin:.08; scBgColor=s.bg||scPal.bg;
     scTransparentBg=!!s.transparent; scMonoColor=s.mono||scPal.ink; scDir=s.dir||"h"; scLay=s.lay||"huge";
     /* 變化程度是工具設定（不在 AXKEYS 裡），還原時要一併帶回並更新滑桿 */
+    if(typeof s.edge==="number"){ scEdge=s.edge; if($("scEdge")){$("scEdge").value=scEdge; $("scEdgeV").textContent=scEdge;} }
+    if(s.edgeC){ scEdgeColor=s.edgeC; if($("scEdgeC")) $("scEdgeC").value=s.edgeC; }
+    if(typeof s.shadow==="number"){ scShadow=s.shadow; if($("scShadow")){$("scShadow").value=scShadow; $("scShadowV").textContent=scShadow;} }
+    if(typeof s.shadowA==="number"){ scShadowAngle=s.shadowA; if($("scShadowA")) $("scShadowA").value=scShadowAngle; }
+    if(s.shadowC){ scShadowColor=s.shadowC; if($("scShadowC")) $("scShadowC").value=s.shadowC.slice(0,7); }
+    if(s.shadowM){ scShadowMode=s.shadowM;
+      document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x.dataset.k===scShadowMode)); }
     if(typeof s.randAmt==="number"){ scRandAmt=s.randAmt;
       if($("scRandAmt")){ $("scRandAmt").value=scRandAmt;
         $("scRandAmtV").textContent=Math.round(scRandAmt*100)+"%"; } }
@@ -8199,6 +8253,25 @@ function scSetAxMode(on){
   scAxLabel(); syncShowAxes(); scDraw();
 }
 $("scAxOn").addEventListener("click",()=>scSetAxMode(!scAxMode));
+/* 外框／陰影：都只是重畫，沒有幾何運算，所以 input 就直接畫 */
+(function(){
+  const bind=(id,fn,vid,fmt)=>{ const e=$(id); if(!e) return;
+    const show=()=>{ if(vid&&$(vid)) $(vid).textContent=(fmt||(v=>v))(e.value); };
+    e.addEventListener("input",()=>{ fn(e.value); show(); scDraw(); });
+    e.addEventListener("change",saveLocal); show(); };
+  bind("scEdge",   v=>scEdge=+v,   "scEdgeV");
+  bind("scEdgeC",  v=>scEdgeColor=v);
+  bind("scShadow", v=>scShadow=+v, "scShadowV");
+  bind("scShadowA",v=>scShadowAngle=+v);
+  bind("scShadowC",v=>{ /* 陰影預設半透明；使用者選色後保留他選的不透明度 */
+    scShadowColor=v.length===7? v+"55" : v; });
+})();
+if($("scShadowMode")) $("scShadowMode").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-k]"); if(!b) return;
+  scShadowMode=b.dataset.k;
+  document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x===b));
+  scDraw(); saveLocal();
+});
 $("scBalance").addEventListener("click",scBalanceWeight);
 $("scBalanceW").addEventListener("click",scBalanceWidth);
 $("scAxClr").addEventListener("click",()=>{
@@ -8283,7 +8356,7 @@ function scBuildPresets(){
     const b=document.createElement("button");
     b.type="button"; b.dataset.p=k; b.textContent=PNAME[k]||k;
     b.addEventListener("click",()=>{
-      Object.assign(F,PRESETS[k]); presetKey=k;
+      applyPreset(k); presetKey=k;
       document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
       document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
       if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];   /* 套預設＝回到全域，清掉這個字的單獨設定 */
@@ -8299,7 +8372,7 @@ $("scReset").addEventListener("click",()=>{
     delete scAxOvr[scAxKey];
     scAxLabel(); syncShowAxes(); scDraw(); saveLocal(); return;
   }
-  Object.assign(F, PRESETS[presetKey]||PRESETS.hei);
+  applyPreset(presetKey);
   scAxOvr={};                            /* 全域重設也把所有單字設定清掉 */
   document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
   scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
