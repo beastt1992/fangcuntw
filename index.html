@@ -481,13 +481,11 @@
     .scbar .seg button{min-height:34px;padding:4px 9px;font-size:11px}
     .pal{min-height:34px}.pal em{font-size:10px}.pal i{height:18px}
     .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
-    /* ★ 手機上 width:auto 會覆蓋掉 JS 算出來的 width 屬性，
-     「大小」滑桿（scScale）因此完全失效 —— 桌機正常、手機拉了沒反應。
-     改用 transform 縮放：不跟 width:auto 衝突，而且是合成層、不觸發重排。
-     ★★ 這條規則本身就在 @media(max-width:1099px) 內，所以桌機吃不到 ——
-        桌機的 scScale 已經算進 previewW，兩邊都套會變成雙重縮放。 */
-  #scArt{max-width:100%;max-height:100%;width:auto;height:auto;
-    transform:scale(var(--sc-scale,1));transform-origin:center center}
+    /* v159 曾在這裡加 transform:scale(var(--sc-scale)) 來救「大小」滑桿，
+     但那個做法是錯的方向 —— 它縮放整張預覽（畫布＋字），跟右下角的縮放鈕重複。
+     v162 把「大小」改成「字在畫布裡的大小」（乘進每個字的 transform），
+     這條 transform 就不需要了。 */
+  #scArt{max-width:100%;max-height:100%;width:auto;height:auto}
     .schint{left:8px;bottom:6px;font-size:9px}
     .scfoot{height:auto;min-height:104px;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px;
       align-items:center;box-sizing:border-box}
@@ -7338,14 +7336,15 @@ function scDraw(){
     else if(cur>r){ const nh=vw/r; vy-=(nh-vh)/2; vh=nh; }
   }
   svg.setAttribute("viewBox",[vx,vy,vw,vh].join(" "));
+  /* ★「大小」原本縮放整張預覽（畫布＋字一起），那跟右下角的 −／100％／＋ 重複。
+     手機上原本被 CSS 的 width:auto 擋住看不出來，v159 用 transform 修好後就露餡了。
+     改成「字在畫布裡的大小」——畫布尺寸不動，只有字變大變小，
+     那才是設計師期待的行為（要縮放整張用右下角的縮放鈕）。 */
   let previewW;
-  if(cv.r) previewW=Math.max(260,Math.min(1000,680*scScale));
-  else previewW=Math.max(200,Math.min(2600,vw*Math.min(460,1500/Math.max(1,cols))*scScale));
+  if(cv.r) previewW=Math.max(260,Math.min(1000,680));
+  else previewW=Math.max(200,Math.min(2600,vw*Math.min(460,1500/Math.max(1,cols))));
   svg.setAttribute("width",Math.round(previewW));
   svg.setAttribute("height",Math.round(previewW*vh/vw));
-  /* 手機的 CSS 有 width:auto 會蓋掉上面兩行，所以另外用 CSS 變數帶縮放。
-     桌機不受影響（那邊沒有 width:auto，scScale 已經算進 previewW）。 */
-  svg.style.setProperty("--sc-scale", String(scScale));
   const defs=el("defs",{}); svg.appendChild(defs);
 
   const rowLens=[];
@@ -7358,7 +7357,9 @@ function scDraw(){
     const key0=it.row+"|"+it.col+"|"+ch;
     const off=scOff[key0]||[0,0], tr=scTr[key0]||{s:1,r:0};
     const cx=it.col*stepX+alignDx+off[0], cy=it.row*stepY+off[1];
-    const tf="translate("+cx+","+cy+") translate(.5,.5) rotate("+(tr.r||0)+") scale("+(tr.s||1)+") translate(-.5,-.5) scale("+(1/EM)+")";
+    /* scScale 是全域字大小，tr.s 是這個字的單獨縮放，兩者相乘 */
+    const gs=(tr.s||1)*scScale;
+    const tf="translate("+cx+","+cy+") translate(.5,.5) rotate("+(tr.r||0)+") scale("+gs+") translate(-.5,-.5) scale("+(1/EM)+")";
     const g=el("g",{transform:tf,"data-key":key0});
     if(scBlend==="multiply") g.setAttribute("style","mix-blend-mode:multiply");
     let cs=[]; try{ cs=glyphContours(ch,scAxesFor(key0)); }catch(e){}
