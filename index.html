@@ -8892,8 +8892,11 @@ const SMAP_SETS=[
     L:["明體","圓體","楷書","黑體"] },
   { n:"書法", lt:"zhuan",   rt:"li",      lb:"shoujin", rb:"weibei",
     L:["篆書","隸書","瘦金","魏碑"] },
-  { n:"手寫", lt:"hand",    rt:"xing",    lb:"kai",     rb:"kage",
-    L:["手寫","行書","楷書","原樣"] },
+  /* ★「原樣」不當座標角：它是「關掉所有風格處理」的參考狀態、不是一種風格，
+     而且字重只有 50 —— 放進來會把整組拉細（實測手寫組平均只剩 57，出廠是 80）。
+     換成楷書／行書的粗細對照。 */
+  { n:"手寫", lt:"hand",    rt:"xing",    lb:"kai",     rb:"title",
+    L:["手寫","行書","楷書","標題黑"] },
   { n:"字重", lt:"shoujin", rt:"lgPlump", lb:"ming",    rb:"title",
     L:["瘦金","膨潤","明體","標題黑"] },
   { n:"造型", lt:"lgWire",  rt:"lgPlump", lb:"lgBroken",rb:"lgSharp",
