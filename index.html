@@ -1407,6 +1407,7 @@
           <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
           <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
             <button class="btn ghost sm" id="scBalance" type="button" title="讓畫面上每個字看起來一樣重（標準字用）">視覺等重</button>
+            <button class="btn ghost sm" id="scBalanceW" type="button" title="讓畫面上每個字看起來一樣寬（標準字用）">視覺等寬</button>
           <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
         <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
              跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
@@ -8052,42 +8053,59 @@ function scInkArea(ch,f){
     for(let k=1;k<poly.length;k++) a-=Math.abs(csRingArea(poly[k])); }
   return a;
 }
-function scBalanceWeight(){
+function scInkWidth(ch,f){
+  let cs; try{ cs=glyphContours(ch,f); }catch(e){ return 0; }
+  if(!cs||!cs.length) return 0;
+  let x0=Infinity,x1=-Infinity;
+  for(const c of cs) for(const p of pcFlatten(c,6)){
+    if(!isFinite(p[0])) continue;
+    if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0]; }
+  return isFinite(x0)? x1-x0 : 0;
+}
+/* 等重與等寬共用的解法：量 → 取中位數當目標 → 逐字二分搜尋某一根軸。
+   measure 回傳該字目前的量值，axis 是要調的軸，rng 是搜尋範圍。 */
+function scBalanceBy(measure,axis,rng,label){
   const keys=[...new Set(Array.from($("scArt").querySelectorAll("[data-key]"))
     .map(n=>n.getAttribute("data-key")))];
   if(keys.length<2){ $("scHint").textContent="至少要兩個字才能平衡"; return; }
   scCommit();
-  const base=FA();
-  const items=[];
+  const base=FA(), items=[];
   for(const k of keys){
     const ch=k.split("|")[2]; if(!ch) continue;
     const f={...base,...(scAxOvr[k]||{})};
-    const a=scInkArea(ch,f);
-    if(a>0) items.push({k,ch,a,w:f.weight});
+    const v=measure(ch,f);
+    if(v>0) items.push({k,ch,v});
   }
-  if(items.length<2){ $("scHint").textContent="量不到墨量，無法平衡"; return; }
-  /* 目標取中位數 —— 用平均會被特別繁或特別簡的字拉走 */
-  const sorted=items.map(x=>x.a).sort((a,b)=>a-b);
+  if(items.length<2){ $("scHint").textContent="量不到數值，無法平衡"; return; }
+  const sorted=items.map(x=>x.v).sort((a,b)=>a-b);
   const target=sorted[Math.floor(sorted.length/2)];
   let moved=0;
   for(const it of items){
-    if(Math.abs(it.a-target)/target < 0.02) continue;   /* 已經夠接近就不動 */
-    /* 二分搜尋字重。墨量對字重單調遞增，但筆畫合併後是非線性的，所以不用公式解 */
-    let lo=Math.max(8,it.w*0.45), hi=Math.min(150,it.w*1.9), best=it.w, bd=Infinity;
+    if(Math.abs(it.v-target)/target < 0.02) continue;
+    let lo=rng[0], hi=rng[1], best=(rng[0]+rng[1])/2, bd=Infinity;
     for(let i=0;i<9;i++){
       const mid=(lo+hi)/2;
-      const a=scInkArea(it.ch,{...base,...(scAxOvr[it.k]||{}),weight:mid});
-      const d=Math.abs(a-target);
+      const v=measure(it.ch,{...base,...(scAxOvr[it.k]||{}),[axis]:mid});
+      const d=Math.abs(v-target);
       if(d<bd){ bd=d; best=mid; }
-      if(a<target) lo=mid; else hi=mid;
+      if(v<target) lo=mid; else hi=mid;
     }
-    (scAxOvr[it.k]||(scAxOvr[it.k]={})).weight=Math.round(best*10)/10;
+    (scAxOvr[it.k]||(scAxOvr[it.k]={}))[axis]=Math.round(best*1000)/1000;
     moved++;
   }
   scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
   $("scHint").textContent = moved
-    ? "已把 "+moved+" 個字的字重調成視覺等重 —— 不滿意可以再逐字微調，或按「清除」還原"
+    ? "已把 "+moved+" 個字調成"+label+" —— 可以再逐字微調，或按「清除」還原"
     : "這幾個字本來就夠接近了";
+}
+function scBalanceWidth(){
+  /* 視覺等寬：中文字的字身框本來就等寬，但墨跡寬度差很多
+     （實測「方寸建築」四個字差 1.21 倍）。標準字要的是看起來一樣寬。 */
+  scBalanceBy(scInkWidth,"width",[0.72,1.24],"視覺等寬");
+}
+function scBalanceWeight(){
+  /* 視覺等重：繁的字會比簡的字黑（實測「方寸建築」差 2.28 倍）。 */
+  scBalanceBy(scInkArea,"weight",[20,150],"視覺等重");
 }
 function scAxLabel(){
   const n=Object.keys(scAxOvr).length;
@@ -8107,6 +8125,7 @@ function scSetAxMode(on){
 }
 $("scAxOn").addEventListener("click",()=>scSetAxMode(!scAxMode));
 $("scBalance").addEventListener("click",scBalanceWeight);
+$("scBalanceW").addEventListener("click",scBalanceWidth);
 $("scAxClr").addEventListener("click",()=>{
   if(scAxMode&&scAxKey) delete scAxOvr[scAxKey]; else scAxOvr={};
   scAxLabel(); syncShowAxes(); scDraw(); saveLocal();
