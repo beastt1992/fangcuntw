@@ -2915,6 +2915,68 @@ function circleContour(cx,cy,r){
    可變字型要求同一個字在所有軸值下節點結構完全一致，而
    RDP 化簡會依幾何刪點、取樣數會依段長比例分配（鉤長隨字重變）。 */
 let VF_STABLE=false;
+/* ==========================================================================
+   曲線擬合
+   量出來的問題：方寸的節點數是專業字型的 1.70 倍（「人」3.5 倍），
+   指令組成 92% 是直線、只有 8% 曲線；對照的日文黑體是 80/20。
+   原因是曲線被離散成很多短直線段（NS=30 取樣），而不是用少數曲線指令表達。
+   後果：字型檔變大、縮小時 hinting 效果差、可變字型的 gvar 也跟著放大。
+
+   作法：把一串點擬合成二次貝茲，誤差超過門檻就從中間切開遞迴。
+   ★ 轉角要保留 —— 只在「方向變化平緩」的區段擬合，否則會把折角磨圓。
+   ★ VF_STABLE 時不做：可變字型要求各主體節點數完全一致，
+     而擬合是自適應的、節點數會隨形狀改變。
+   ========================================================================== */
+function fitQuad(pts,i0,i1,tol,out){
+  /* 用起訖點的切線交點當控制點，是二次貝茲擬合的標準做法 */
+  const A=pts[i0], B=pts[i1];
+  if(i1-i0<2){ for(let i=i0+1;i<=i1;i++) out.push(["L",pts[i][0],pts[i][1]]); return; }
+  /* 以弦長參數化，最小平方解出控制點 */
+  const n=i1-i0;
+  let sx=0,sy=0,sw=0;
+  for(let i=i0+1;i<i1;i++){
+    const t=(i-i0)/n, w=2*t*(1-t);
+    if(w<1e-6) continue;
+    sx += w*(pts[i][0]-(1-t)*(1-t)*A[0]-t*t*B[0]);
+    sy += w*(pts[i][1]-(1-t)*(1-t)*A[1]-t*t*B[1]);
+    sw += w*w;
+  }
+  if(sw<1e-9){ for(let i=i0+1;i<=i1;i++) out.push(["L",pts[i][0],pts[i][1]]); return; }
+  const cx=sx/sw, cy=sy/sw;
+  /* 量最大誤差 */
+  let err=0, worst=i0+1;
+  for(let i=i0+1;i<i1;i++){
+    const t=(i-i0)/n, u=1-t;
+    const qx=u*u*A[0]+2*u*t*cx+t*t*B[0];
+    const qy=u*u*A[1]+2*u*t*cy+t*t*B[1];
+    const d=Math.hypot(pts[i][0]-qx,pts[i][1]-qy);
+    if(d>err){ err=d; worst=i; }
+  }
+  if(err<=tol){ out.push(["Q",cx,cy,B[0],B[1]]); return; }
+  if(worst<=i0+1||worst>=i1-1){       /* 切不動就退回直線 */
+    for(let i=i0+1;i<=i1;i++) out.push(["L",pts[i][0],pts[i][1]]);
+    return;
+  }
+  fitQuad(pts,i0,worst,tol,out);
+  fitQuad(pts,worst,i1,tol,out);
+}
+/* 把一串點轉成指令，平緩處用曲線、轉角處保留為節點 */
+function pathFromPts(pts,tol,out,skipFirst){
+  if(!skipFirst) out.push(["M",pts[0][0],pts[0][1]]);
+  if(pts.length<3){ for(let i=1;i<pts.length;i++) out.push(["L",pts[i][0],pts[i][1]]); return; }
+  /* 找轉角：相鄰兩段的夾角超過門檻就切斷，不跨過去擬合 */
+  const brk=[0];
+  for(let i=1;i<pts.length-1;i++){
+    const a=[pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]];
+    const b=[pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1]];
+    const la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]);
+    if(la<1e-6||lb<1e-6) continue;
+    const cos=(a[0]*b[0]+a[1]*b[1])/(la*lb);
+    if(cos<0.966) brk.push(i);        /* 夾角大於約 15 度＝轉角 */
+  }
+  brk.push(pts.length-1);
+  for(let k=0;k+1<brk.length;k++) fitQuad(pts,brk[k],brk[k+1],tol,out);
+}
 function rdp(pts,tol){
   if(VF_STABLE) return pts.slice();
   const n=pts.length; if(n<3||tol<=0) return pts;
@@ -3063,10 +3125,16 @@ function strokeOutline(st,f,wScale,NS){
   const tolBase=f.simp===undefined?1.5:f.simp;
   const tol=st.kage&&(/^(pie|na|dian|ti|zhe)$/.test(st.t)||st.cv)?Math.min(tolBase,0.95):tolBase;
   const La=rdp(L,tol), Ra=rdp(R,tol);
-  const cmds=[["M",La[0][0],La[0][1]]];
-  for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]);
+  /* 曲線擬合的容差。可變字型模式維持純直線（節點數必須跨主體一致）。 */
+  const fitTol = VF_STABLE ? 0 : (f.simp===undefined?1.5:f.simp)*1.6;
+  const cmds=[];
+  if(fitTol>0) pathFromPts(La,fitTol,cmds,false);
+  else { cmds.push(["M",La[0][0],La[0][1]]);
+         for(let i=1;i<La.length;i++) cmds.push(["L",La[i][0],La[i][1]]); }
   capCmds(C.b,S[n].p,T1,w1,+1,Ra[Ra.length-1],cmds,f);
-  for(let i=Ra.length-1;i>=0;i--) cmds.push(["L",Ra[i][0],Ra[i][1]]);
+  const Rrev=Ra.slice().reverse();
+  if(fitTol>0) pathFromPts(Rrev,fitTol,cmds,true);
+  else for(const q of Rrev) cmds.push(["L",q[0],q[1]]);
   capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds,f);
   return orient(cmds,-1);
 }
