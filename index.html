@@ -1762,6 +1762,8 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
          term:0, head:0, hookst:0, cround:0,
          /* 標準字用：橫線對齊網格、筆畫延伸切齊。兩者出廠都是 0（不作用） */
          hgrid:0, bleed:0,
+         /* 字懷保護：筆畫之間的白縫過窄時把那幾筆收細。0 ＝ 不作用 */
+         wspace:0,
          /* 部件比例：左右／上下結構的分配。0 ＝ 原樣 */
          pratio:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
@@ -1779,7 +1781,7 @@ const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','ha
                /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
                   漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
                   「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
-               'diag','cnaniso','term','head','hookst','cround','hgrid','bleed','pratio','pers'];
+               'diag','cnaniso','term','head','hookst','cround','hgrid','bleed','pratio','wspace','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -4461,7 +4463,7 @@ function protectCounters(ch, f, minGap, cs){
   let marked;
   try{
     const raw=[]; collect(ch,[0,0,1000,1000],1,raw,7,null,0,f.optic,f.pratio);
-    marked=markCorners(warp(raw,f),f);
+    marked=markCorners(protectWhite(warp(raw,f),f),f);
   }catch(e){ return cs; }
   if(!marked || marked.length<2) return cs;
 
@@ -4946,6 +4948,79 @@ const warp=(strokes,f)=>strokes.map(st=>warpStroke(st,f));
 const CORNER_TOL=30;
 /* 轉角要「斜接」：外緣延伸到兩筆的交點，長度 = 對方半寬 / |sin(夾角)|。
    延伸太少會缺角、太多會戳出去，這個長度剛好補滿。 */
+/* ==========================================================================
+   字懷保護
+   查過業界作法之後才確定要做這個（原本想做交接處的墨戳，但文獻說墨戳主要用在
+   細字重、粗字重反而要避免 —— 方寸的問題正好在粗字重，方向是錯的）。
+
+   中文字型設計裡「中宮」是骨架的鬆緊、不隨字重變；「字懷」才是筆畫之間的留白，
+   會隨字重崩塌。實測：字重 80 有 93% 的字出現看不見的白縫（<30 單位），
+   字重 140 升到 96%；「讀」的右半在字重 120 時整片熔成一塊。
+   而且純 KAGE 骨架（14.2%）比方寸出廠（11.2%）更差 —— 是資料本身的密度問題。
+
+   做法：量兩筆骨架之間的實際距離，扣掉各自的半筆寬就是白縫。
+   太窄就把那兩筆收細（只縮不放），縮到白縫達標或碰到下限為止。
+   這是既有 opticalWeightScale 的幾何版 —— 那個按筆畫數估算，這個直接量。
+   ========================================================================== */
+function segDist(a,b,c,d){
+  /* 兩線段最短距離。夠用就好，不用精確解析解。 */
+  const d1=[b[0]-a[0],b[1]-a[1]], d2=[d[0]-c[0],d[1]-c[1]];
+  const r=[a[0]-c[0],a[1]-c[1]];
+  const A=d1[0]*d1[0]+d1[1]*d1[1], E=d2[0]*d2[0]+d2[1]*d2[1], F2=d2[0]*r[0]+d2[1]*r[1];
+  let sN,tN, S=0,T=0;
+  if(A<1e-9&&E<1e-9) return Math.hypot(r[0],r[1]);
+  if(A<1e-9){ T=Math.max(0,Math.min(1,F2/E)); }
+  else{
+    const C=d1[0]*r[0]+d1[1]*r[1];
+    if(E<1e-9){ S=Math.max(0,Math.min(1,-C/A)); }
+    else{
+      const B=d1[0]*d2[0]+d1[1]*d2[1], den=A*E-B*B;
+      S = den>1e-9 ? Math.max(0,Math.min(1,(B*F2-C*E)/den)) : 0;
+      T = (B*S+F2)/E;
+      if(T<0){ T=0; S=Math.max(0,Math.min(1,-C/A)); }
+      else if(T>1){ T=1; S=Math.max(0,Math.min(1,(B-C)/A)); }
+    }
+  }
+  const px=a[0]+d1[0]*S-(c[0]+d2[0]*T), py=a[1]+d1[1]*S-(c[1]+d2[1]*T);
+  return Math.hypot(px,py);
+}
+function protectWhite(strokes,f){
+  const t=f.wspace||0;
+  if(!(t>0) || strokes.length<2) return strokes;
+  /* ★ 這兩個值試過三組才定下來：
+       target 40 / FLOOR 0.55 → 過擠少一半，但墨量掉到 75%（等於偷偷細了兩個字重）
+       target 22 / FLOOR 0.80 → 墨量守住 90%，但效果幾乎不見（21.5%→20.8%）
+       現在這組是取中，而且讓下限隨強度放寬 ——
+       低強度時安全（幾乎不動墨量），拉高才換取更大的改善，代價由使用者決定。 */
+  const target=32*t;
+  const FLOOR=0.80-0.14*t;
+  const half=[], scale=strokes.map(()=>1);
+  for(const st of strokes){
+    let w;
+    try{ w=widthAt(st,0.5,st.p.length>1?[st.p[1][0]-st.p[0][0],st.p[1][1]-st.p[0][1]]:[1,0],f)*(st.ws||1)/2; }
+    catch(e){ w=Math.max(widths(f).hw,widths(f).sw)/2; }
+    half.push(Math.max(1,w));
+  }
+  for(let i=0;i<strokes.length;i++){
+    for(let j=i+1;j<strokes.length;j++){
+      const A=strokes[i].p, B=strokes[j].p;
+      if(!A||!B||A.length<2||B.length<2) continue;
+      let dmin=Infinity;
+      for(let a=0;a+1<A.length;a++) for(let b=0;b+1<B.length;b++){
+        const d=segDist(A[a],A[a+1],B[b],B[b+1]);
+        if(d<dmin) dmin=d;
+      }
+      if(!isFinite(dmin)) continue;
+      const need=half[i]+half[j]+target;
+      /* 已經夠寬，或兩筆本來就相交（距離接近 0 ＝ 刻意相接），都不動 */
+      if(dmin>=need || dmin < (half[i]+half[j])*0.35) continue;
+      const k=Math.max(FLOOR, (dmin-target)/(half[i]+half[j]));
+      if(k<scale[i]) scale[i]=k;
+      if(k<scale[j]) scale[j]=k;
+    }
+  }
+  return strokes.map((st,i)=> scale[i]>=0.999 ? st : {...st, ws:(st.ws||1)*scale[i]});
+}
 function markCorners(strokes,f){
   const E=[];
   for(let i=0;i<strokes.length;i++){
@@ -5009,7 +5084,7 @@ function glyphContours(id,f,variant,NS){
     if(Date.now()-CS_T0 > CS_BUDGET_MS) counterOn=false;
   }
   const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
-  for(const st of markCorners(warp(raw,f),f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
+  for(const st of markCorners(protectWhite(warp(raw,f),f),f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
      出廠 cmin=0 直接跳過，所以不開就完全不影響（也不會呼叫布林運算）。 */
   if(counterOn) return protectCounters(id,f,f.cmin,out);
@@ -5203,6 +5278,7 @@ const AXES=[
    f:v=>["依筆意","藏鋒","露鋒","方筆","蠶頭"][Math.round(v)]||String(v)},
   {k:"hookst",  n:"鉤的造型",en:"HOOK ST", min:0,max:4,   step:1,   lo:"依筆意",hi:"長挑",
    f:v=>["依筆意","尖鉤","圓鉤","平鉤","長挑"][Math.round(v)]||String(v)},
+  {k:"wspace",  n:"字懷保護",en:"WSPACE",min:0,   max:1,   step:0.02,lo:"關",  hi:"強",  f:v=>(+v)?(+v).toFixed(2):"關"},
   {k:"pratio",  n:"部件比例",en:"PART", min:-1,  max:1,   step:0.02,lo:"後大",hi:"前大",f:v=>(+v).toFixed(2)},
   {k:"hgrid",   n:"橫線對齊",en:"H-GRID",min:0,   max:1,   step:0.02,lo:"不對齊",hi:"齊格線",f:v=>(+v).toFixed(2)},
   {k:"bleed",   n:"筆畫切齊",en:"BLEED", min:0,   max:1,   step:0.02,lo:"不延伸",hi:"齊邊",  f:v=>(+v).toFixed(2)},
@@ -5944,7 +6020,7 @@ const SCAX_GROUPS=[
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise","pratio","hgrid","bleed"]},
   {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","hookst","dun","press","cap","diag","head","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
-  {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
+  {t:"內白",en:"COUNTER", ks:["cnaniso","wspace","cmin","cround"]}
 ];
 function buildShowAxes(){
   const grid=$("scGrid"); if(!grid||grid.childElementCount) return;
