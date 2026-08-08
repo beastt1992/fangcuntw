@@ -1415,9 +1415,9 @@
         <div class="sclay-g"><label>隨機字形</label>
           <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
             <label style="font-size:10.5px;color:var(--muted)">變化</label>
-            <input type="range" id="scRandAmt" min="0" max="1" step="0.05" value="1" style="width:96px">
-            <b id="scRandAmtV" style="font-family:var(--mono);font-size:10px;width:34px">100%</b>
-          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
+            <input type="range" id="scRandAmt" min="0" max="1" step="0.05" value="1" style="width:96px;flex:none">
+            <b id="scRandAmtV" style="font-family:var(--mono);font-size:10px;width:36px;flex:none;text-align:right">100%</b>
+          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px;flex:none;white-space:nowrap">種子 7</span></div>
       </div>
       <button class="btn ghost sm" id="scTypeMore" type="button" aria-expanded="false">展開調整</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
@@ -6859,7 +6859,13 @@ function scSeedLabel(){
   const el2=$("scSeedV"); if(!el2) return;
   /* 種子只影響錯位／粗細不均／書寫感的亂數花樣；那三根都關著時它不會有任何效果，
      標出來才不會以為是壞的。 */
-  el2.textContent = rndOff() ? "種子 "+F.seed+"（未用到）" : "種子 "+F.seed;
+  /* ★ 寬度必須固定：這個標籤跟變化滑桿在同一組，文字一長一短會讓整組寬度跳動，
+     flex 換行時就把滑桿推來推去（實際發生過）。
+     所以種子補滿三位數，「用不到」改成一個灰點，長度永遠一樣。 */
+  const n=String(F.seed).padStart(3,"0");
+  /* 那個點永遠佔位（用不到時才顯示），長度才會恆定 —— 差兩個字元也會讓 flex 重排 */
+  el2.textContent = "種子 "+n+(rndOff()?" ·":"  ");
+  el2.title = rndOff() ? "錯位／粗細不均／書寫感都是關的，所以種子目前沒有作用" : "";
 }
 
 /* ==========================================================================
