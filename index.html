@@ -9444,14 +9444,21 @@ function scBuildPresets(){
    ★ 快取以「字＋預設」為鍵；換字才重畫。 */
 function scPresetThumbs(){
   const seg=$("scPreset"); if(!seg) return;
+  const btns=[...seg.querySelectorAll("button")];
+  if(!btns.length) return;                       /* 按鈕還沒建好，等下次 */
   const txt=($("scTxt")&&$("scTxt").value||"").replace(/\s/g,"");
   const ch=[...txt][0]||"永";
-  if(ch===PTHUMB_CH) return;
-  PTHUMB_CH=ch;
-  const btns=[...seg.querySelectorAll("button")];
+  /* ★ 快取旗標不能在畫之前就設。
+     舊版一進來就 PTHUMB_CH=ch，只要那一輪沒畫成功（按鈕還沒 append 完、
+     rAF 排程時序不對…），之後每次呼叫都在第一行 return，縮圖永遠是空的
+     —— 按鈕上只剩 26px 空白，把那排撐高（實機回報「按鈕軸線跑掉」「沒看到縮圖」）。
+     改成：畫完最後一顆才設旗標；而且已經有內容的話才算數。 */
+  const done = ch===PTHUMB_CH &&
+    btns.every(b=>{ const h=b.querySelector(".pth-g"); return h && h.innerHTML; });
+  if(done) return;
   let i=0;
   const step=()=>{
-    if(i>=btns.length) return;
+    if(i>=btns.length){ PTHUMB_CH=ch; return; }   /* 全部畫完才設旗標 */
     const b=btns[i++], k=b.dataset.p, holder=b.querySelector(".pth-g");
     if(holder && PRESETS[k]){
       const f=presetFull(k);
