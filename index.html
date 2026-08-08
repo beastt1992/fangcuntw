@@ -7768,13 +7768,22 @@ if($("scRerollEach")) $("scRerollEach").addEventListener("click",()=>{
   $("scHint").textContent="每字重骰："+n+" 個字各自換了一套設計 —— 再按一次全部重來，按「重設選取字」清掉";
 });
 $("scReroll").addEventListener("click",()=>{
+  /* ★ 一定要先清掉每字覆寫。
+     「每字重骰」會給每個字一整套完整的設計（scRandomFace 回傳所有軸），
+     而渲染是 {...全域, ...這個字} —— 覆寫在後，每根軸都贏過全域。
+     不清的話按了整版重骰畫面完全不動（實機回報「一般重骰沒反應」）。
+     「重設設計軸」本來就有做這件事，這裡漏了。 */
+  const hadOvr=Object.keys(scAxOvr).length>0;
+  scAxOvr={}; scSelKey=null;
   scRandomFace();
   presetKey=null;
   document.querySelectorAll("#presets button").forEach(x=>x.classList.remove("on"));
   document.querySelectorAll("#scPreset button").forEach(x=>x.classList.remove("on"));
   scSeedLabel();
   syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
-  $("scHint").textContent="重骰：整組設計軸都換了一套 —— 不喜歡就再按一次，或按上面的預設回到標準字體";
+  $("scHint").textContent = hadOvr
+    ? "重骰：整版換了一套設計，每字的單獨設定已清除 —— 想讓每個字都不一樣請按「每字重骰」"
+    : "重骰：整組設計軸都換了一套 —— 不喜歡就再按一次，或按上面的預設回到標準字體";
 });
 function scSeg(id,fn){
   $(id).addEventListener("click",e=>{
@@ -9100,6 +9109,8 @@ function scStyleMapApply(x,y){
      結果混合時缺鍵的角貢獻 0，diag 被算成 0 而不是出廠的 1.00 ——
      斜筆粗細歸零，撇捺變成 26 而橫豎是 128。
      實機連續回報「斜線和弧線很細」就是這個，我前面猜過但用了鍵完整的樣本測、誤判為不存在。 */
+  /* ★ 跟整版重骰同一個道理：每字覆寫會蓋過全域，不清的話拖座標盤畫面不動。 */
+  if(!scAxMode) scAxOvr={};
   for(const k of AXKEYS) if(F_DEFAULT[k]!==undefined) F[k]=F_DEFAULT[k];
   const keys=new Set();
   for(const corner of ["lt","rt","lb","rb"])
@@ -9408,6 +9419,8 @@ function scBuildPresets(){
     b.innerHTML='<span class="pth-g"></span><span class="pth-n" data-pname="'+k+'">'+pn+'</span>';
     b.addEventListener("click",()=>{
       applyPreset(k); presetKey=k;
+      /* 套預設＝整版換一套，每字的單獨設定要清掉，否則畫面不動 */
+      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey]; else scAxOvr={};
       document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
       document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
       if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];   /* 套預設＝回到全域，清掉這個字的單獨設定 */
