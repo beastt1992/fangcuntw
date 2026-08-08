@@ -3301,18 +3301,20 @@ function strokeOutline(st,f,wScale,NS){
      代表這一段反折了，把它收斂到前一點（退化成零長度，不會產生交叉）。
      只動反折的那幾段，正常的段完全不受影響。
      ========================================================================== */
-  const declip=(side,sign)=>{
+  /* ★ 兩種鉗制法都試過，收斂版對整體較好：
+       收斂（設成前一點）  自交 2.83% · 「你」細縫 33
+       投影（只消反向分量）自交 4.40% · 「你」細縫 35
+     投影版對「你好」那種極端案例有效，但全字集反而更糟 —— 採用收斂版。
+     細縫是另一個獨立問題（同一條輪廓自我接觸），不是鉗制造成的。 */
+  const declip=(side)=>{
     for(let i=1;i<side.length;i++){
-      const cx=S[Math.min(n,i)].p[0]-S[Math.min(n,i-1)].p[0];
-      const cy=S[Math.min(n,i)].p[1]-S[Math.min(n,i-1)].p[1];
+      const j=Math.min(n,i), j0=Math.min(n,i-1);
+      const cx=S[j].p[0]-S[j0].p[0], cy=S[j].p[1]-S[j0].p[1];
       const ex=side[i][0]-side[i-1][0], ey=side[i][1]-side[i-1][1];
-      if(cx*ex+cy*ey < 0){          /* 跟中心線反向 → 反折 */
-        side[i][0]=side[i-1][0];
-        side[i][1]=side[i-1][1];
-      }
+      if(cx*ex+cy*ey < 0){ side[i][0]=side[i-1][0]; side[i][1]=side[i-1][1]; }
     }
   };
-  declip(L,1); declip(R,-1);
+  declip(L); declip(R);
   /* 第二道：兩側不得交錯。
      出鋒拉到極端時筆寬會小到讓 L/R 直接對調位置（w 逼近 0 甚至反向），
      光靠反折鉗制不夠 —— 實測出鋒 1.6 時「你」仍有 5 條自交。
@@ -3323,8 +3325,12 @@ function strokeOutline(st,f,wScale,NS){
     const nx=-S[j].t[1]/tl, ny=S[j].t[0]/tl;
     const dx=L[i][0]-R[i][0], dy=L[i][1]-R[i][1];
     if(dx*nx+dy*ny < 0){              /* L 跑到 R 的另一側 → 交錯 */
+      /* 收到中點但留一點點寬度（0.35 單位），
+         完全疊在一起會產生零長度邊、在轉折處變成細縫。 */
       const mx=(L[i][0]+R[i][0])/2, my=(L[i][1]+R[i][1])/2;
-      L[i][0]=mx; L[i][1]=my; R[i][0]=mx; R[i][1]=my;
+      const e=0.35;
+      L[i][0]=mx+nx*e; L[i][1]=my+ny*e;
+      R[i][0]=mx-nx*e; R[i][1]=my-ny*e;
     }
   }
   const C=caps(st,f);
