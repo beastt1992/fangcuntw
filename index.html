@@ -796,6 +796,10 @@
     font-size:10px;color:var(--muted);white-space:nowrap;pointer-events:none}
   #smapBox .smap-v{position:absolute;left:50%;top:9%;bottom:9%;width:1px;background:var(--box);opacity:.5}
   #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
+  #smapNext{position:absolute;left:5px;top:3px;z-index:2;border:0;background:transparent;
+    color:var(--muted);font-size:9.5px;padding:2px 4px;cursor:pointer;border-radius:5px;
+    font-family:inherit;letter-spacing:.02em}
+  #smapNext:hover{background:var(--line,#e8e3d6);color:var(--ink)}
   #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
     border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
   @media(max-width:1099px){ #smapBox{width:132px;height:132px;left:8px;bottom:66px} }
@@ -1414,8 +1418,10 @@
       <button id="smapBtn" type="button" aria-pressed="false"
               title="風格座標：拖一顆點在四種字體之間連續移動">風格</button>
       <div id="smapBox" hidden>
-        <span class="smap-l" style="top:4px">明體　圓體</span>
-        <span class="smap-l" style="bottom:4px">楷書　黑體</span>
+        <span class="smap-l" id="smapTop" style="top:4px">明體　圓體</span>
+        <span class="smap-l" id="smapBot" style="bottom:4px">楷書　黑體</span>
+        <button id="smapNext" type="button" title="換一組座標">
+          <span id="smapName">基本</span> ⇄</button>
         <i class="smap-v"></i><i class="smap-h"></i>
         <div id="smapDot"></div>
       </div>
@@ -8814,12 +8820,24 @@ function scBalanceBy(measure,axis,rng,label){
      這五個預設的離散軸（term/head/hookst）剛好都是 0，所以純數值內插就夠。
      ——加新角時要重新確認這一點，否則造型軸會被內插成 2.7 這種無意義的值。
    ========================================================================== */
-const SMAP_CORNERS={ lt:"ming", rt:"yuan", lb:"kai", rb:"hei" };
+/* 三組座標。切換時四個角換成不同的預設。
+   ★ 離散軸（term/head/hookst）不能內插，靠「取權重最大的角」處理 ——
+     書法組的起筆／收筆造型不是 0（隸書 5/4、瘦金 4/2），一定會用到這條。
+     造型組全是 0，純內插就夠。 */
+const SMAP_SETS=[
+  { n:"基本", lt:"ming",    rt:"yuan",   lb:"kai",    rb:"hei",
+    L:["明體","圓體","楷書","黑體"] },
+  { n:"書法", lt:"zhuan",   rt:"li",     lb:"shoujin",rb:"weibei",
+    L:["篆書","隸書","瘦金","魏碑"] },
+  { n:"造型", lt:"lgWire",  rt:"lgPlump",lb:"lgBroken",rb:"lgSharp",
+    L:["線框","膨潤","破碎","銳利"] },
+];
+let smapSet=0;
 let smapX=0.5, smapY=0.5, smapOn=false;
 function scStyleMapApply(x,y){
   smapX=Math.max(0,Math.min(1,x)); smapY=Math.max(0,Math.min(1,y));
-  const P={lt:PRESETS[SMAP_CORNERS.lt], rt:PRESETS[SMAP_CORNERS.rt],
-           lb:PRESETS[SMAP_CORNERS.lb], rb:PRESETS[SMAP_CORNERS.rb]};
+  const S=SMAP_SETS[smapSet]||SMAP_SETS[0];
+  const P={lt:PRESETS[S.lt], rt:PRESETS[S.rt], lb:PRESETS[S.lb], rb:PRESETS[S.rb]};
   const w={ lt:(1-smapX)*(1-smapY), rt:smapX*(1-smapY),
             lb:(1-smapX)*smapY,     rb:smapX*smapY };
   /* 先回到出廠值再疊 —— 跟 applyPreset 同樣的道理：
@@ -8845,6 +8863,15 @@ function scStyleMapApply(x,y){
 function scStyleMapDot(){
   const d=$("smapDot"); if(!d) return;
   d.style.left=(smapX*100)+"%"; d.style.top=(smapY*100)+"%";
+  const S=SMAP_SETS[smapSet]||SMAP_SETS[0];
+  const t=$("smapTop"), b=$("smapBot"), n=$("smapName");
+  if(t) t.textContent=S.L[0]+"　"+S.L[1];
+  if(b) b.textContent=S.L[2]+"　"+S.L[3];
+  if(n) n.textContent=S.n;
+}
+function scStyleMapCycle(){
+  smapSet=(smapSet+1)%SMAP_SETS.length;
+  scStyleMapApply(smapX,smapY);
 }
 function scBalanceWidth(){
   /* 視覺等寬：中文字的字身框本來就等寬，但墨跡寬度差很多
@@ -8901,7 +8928,9 @@ if($("smapBox")){
   const box=$("smapBox"); let drag=false;
   const at=e=>{ const r=box.getBoundingClientRect();
     return [(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]; };
-  box.addEventListener("pointerdown",e=>{ drag=true;
+  box.addEventListener("pointerdown",e=>{
+    if(e.target.closest("#smapNext")) return;      /* 切換鈕不觸發拖曳 */
+    drag=true;
     try{ box.setPointerCapture(e.pointerId); }catch(err){}
     scCommit(); const [x,y]=at(e); scStyleMapApply(x,y); e.preventDefault(); });
   box.addEventListener("pointermove",e=>{ if(!drag) return;
@@ -8910,6 +8939,7 @@ if($("smapBox")){
   box.addEventListener("pointerup",end);
   box.addEventListener("pointercancel",end);
 }
+if($("smapNext")) $("smapNext").addEventListener("click",e=>{ e.stopPropagation(); scStyleMapCycle(); });
 if($("scRefBtn")) $("scRefBtn").addEventListener("click",()=>$("scRefIn").click());
 if($("scRefIn")) $("scRefIn").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value="";
