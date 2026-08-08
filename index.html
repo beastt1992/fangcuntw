@@ -780,8 +780,10 @@
   }
   /* 風格座標面板：浮在畫布右上角 */
   /* 風格模式：底部整區換成風格介面 */
-  .smapmode{order:2;width:100%;display:flex;gap:12px;align-items:center;
-    padding:6px 0 2px;overflow:hidden}
+  /* 整區置中；底部留安全距離（手機還要加瀏海／home bar 的內距）。 */
+  .smapmode{order:2;width:100%;display:flex;gap:14px;align-items:center;
+    justify-content:center;padding:10px 0 calc(14px + env(safe-area-inset-bottom));
+    overflow:hidden}
   .smapmode[hidden]{display:none}
   .smapthumbs{flex:1 1 auto;display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;
     scrollbar-width:thin;min-width:0}
@@ -791,7 +793,7 @@
     border-radius:9px;padding:6px 8px 4px;cursor:pointer;font-family:inherit}
   .smapthumbs button:hover{background:var(--line,#e8e3d6)}
   .smapthumbs button.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
-  .smapthumbs .t-g{display:block;width:40px;height:40px}
+  .smapthumbs .t-g{display:block;width:46px;height:46px}
   .smapthumbs .t-g svg{display:block}
   .smapthumbs .t-n{font-size:10.5px;white-space:nowrap}
   /* 風格模式下 .scfoot 只留輸入框與風格區。
@@ -804,7 +806,7 @@
   body.smap-on #scTypeBox{display:none !important}
   @media(max-width:1099px){
     .smapmode{gap:8px}
-    .smapthumbs .t-g{width:32px;height:32px}
+    .smapthumbs .t-g{width:40px;height:40px}
     .smapthumbs .t-n{font-size:9.5px}
   }
   /* 風格座標的小按鈕：畫布左下，跟右下的縮放 −／＋ 對稱。
@@ -816,7 +818,7 @@
   #smapBtn:hover{background:var(--line,#e8e3d6)}
   #smapBtn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   @media(max-width:700px){ #smapBtn{left:8px;bottom:30px;padding:6px 10px;font-size:11px} }
-  #smapBox{position:relative;flex:none;width:128px;height:128px;
+  #smapBox{position:relative;flex:none;width:150px;height:150px;
     background:var(--paper);border:1px solid var(--ink);border-radius:10px;
     touch-action:none;cursor:crosshair}
   #smapBox .smap-l{position:absolute;left:50%;top:4px;transform:translateX(-50%);
@@ -824,13 +826,15 @@
   #smapBox .smap-b{top:auto;bottom:4px}
   #smapBox .smap-v{position:absolute;left:50%;top:9%;bottom:9%;width:1px;background:var(--box);opacity:.5}
   #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
-  #smapNext{position:absolute;left:5px;top:3px;z-index:2;border:0;background:transparent;
-    color:var(--muted);font-size:9.5px;padding:2px 4px;cursor:pointer;border-radius:5px;
-    font-family:inherit;letter-spacing:.02em}
+  .smappad{flex:none;display:flex;flex-direction:column;align-items:center;gap:5px}
+  /* 組名放盤子下方 —— 原本絕對定位塞在盤內左上角，會壓在「明體」那行標籤上。 */
+  #smapNext{border:1px solid var(--line-2,#cfc8b8);background:var(--paper);color:var(--muted);
+    font-size:10.5px;padding:3px 9px;cursor:pointer;border-radius:7px;
+    font-family:inherit;letter-spacing:.02em;white-space:nowrap}
   #smapNext:hover{background:var(--line,#e8e3d6);color:var(--ink)}
   #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
     border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
-  @media(max-width:1099px){ #smapBox{width:104px;height:104px} }
+  @media(max-width:1099px){ #smapBox{width:132px;height:132px} }
   .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
   .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
@@ -1466,13 +1470,15 @@
       <!-- 風格模式：點畫布左下的「風格」進來，底部整區換成風格介面。
            左邊是座標盤（拖一顆點在四種字體之間連續移動），右邊是可捲的縮圖。 -->
       <div class="smapmode" id="smapMode" hidden>
-        <div id="smapBox">
-          <span class="smap-l" id="smapTop">明體　圓體</span>
-          <span class="smap-l smap-b" id="smapBot">楷書　黑體</span>
+        <div class="smappad">
+          <div id="smapBox">
+            <span class="smap-l" id="smapTop">明體　圓體</span>
+            <span class="smap-l smap-b" id="smapBot">楷書　黑體</span>
+            <i class="smap-v"></i><i class="smap-h"></i>
+            <div id="smapDot"></div>
+          </div>
           <button id="smapNext" type="button" title="換一組座標">
             <span id="smapName">基本</span> ⇄</button>
-          <i class="smap-v"></i><i class="smap-h"></i>
-          <div id="smapDot"></div>
         </div>
         <div class="smapthumbs" id="smapThumbs"></div>
         <button class="btn ghost sm" id="smapClose" type="button">完成</button>
@@ -9015,7 +9021,6 @@ if($("smapBox")){
   const at=e=>{ const r=box.getBoundingClientRect();
     return [(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]; };
   box.addEventListener("pointerdown",e=>{
-    if(e.target.closest("#smapNext")) return;      /* 切換鈕不觸發拖曳 */
     drag=true;
     try{ box.setPointerCapture(e.pointerId); }catch(err){}
     scCommit(); const [x,y]=at(e); scStyleMapApply(x,y); e.preventDefault(); });
