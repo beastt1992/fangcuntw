@@ -481,7 +481,13 @@
     .scbar .seg button{min-height:34px;padding:4px 9px;font-size:11px}
     .pal{min-height:34px}.pal em{font-size:10px}.pal i{height:18px}
     .scstage{min-height:0;height:auto;padding:12px;overflow:auto;align-items:center;justify-content:center}
-    #scArt{max-width:100%;max-height:100%;width:auto;height:auto}
+    /* ★ 手機上 width:auto 會覆蓋掉 JS 算出來的 width 屬性，
+     「大小」滑桿（scScale）因此完全失效 —— 桌機正常、手機拉了沒反應。
+     改用 transform 縮放：不跟 width:auto 衝突，而且是合成層、不觸發重排。
+     ★★ 這條規則本身就在 @media(max-width:1099px) 內，所以桌機吃不到 ——
+        桌機的 scScale 已經算進 previewW，兩邊都套會變成雙重縮放。 */
+  #scArt{max-width:100%;max-height:100%;width:auto;height:auto;
+    transform:scale(var(--sc-scale,1));transform-origin:center center}
     .schint{left:8px;bottom:6px;font-size:9px}
     .scfoot{height:auto;min-height:104px;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px;
       align-items:center;box-sizing:border-box}
@@ -7335,6 +7341,9 @@ function scDraw(){
   else previewW=Math.max(200,Math.min(2600,vw*Math.min(460,1500/Math.max(1,cols))*scScale));
   svg.setAttribute("width",Math.round(previewW));
   svg.setAttribute("height",Math.round(previewW*vh/vw));
+  /* 手機的 CSS 有 width:auto 會蓋掉上面兩行，所以另外用 CSS 變數帶縮放。
+     桌機不受影響（那邊沒有 width:auto，scScale 已經算進 previewW）。 */
+  svg.style.setProperty("--sc-scale", String(scScale));
   const defs=el("defs",{}); svg.appendChild(defs);
 
   const rowLens=[];
@@ -7812,10 +7821,16 @@ $("scWt").addEventListener("input",e=>{const val=+e.target.value;
     scAxLabel(); scDraw(); saveLocal(); return; }               /* 單字模式：只改這個字 */
   F.weight=val;scDraw();});
 $("scWt").addEventListener("change",()=>{scheduleSlow();saveLocal();});
+/* ★ 常駐的「圓角」滑桿同時帶動 round 與 cap。
+   拆開 cap 之後這根只剩「折角的內外圓弧」——
+   實測 round 0→1 墨量完全不變（1.000），變化全部來自 cap，
+   所以使用者拉了看不出任何反應。
+   常駐列要的是「直覺的圓潤程度」，端點想單獨控制可以到展開盒調 cap。 */
 $("scRd").addEventListener("input",e=>{const val=+e.target.value;
-  if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).round=val;
+  if(scAxMode&&scAxKey){ const o=(scAxOvr[scAxKey]||(scAxOvr[scAxKey]={}));
+    o.round=val; o.cap=val;
     scAxLabel(); scDraw(); saveLocal(); return; }
-  F.round=val;scDraw();});
+  F.round=val; F.cap=val; scDraw();});
 $("scRd").addEventListener("change",()=>{scheduleSlow();saveLocal();});
 
 /* 底部常駐字型軸：其餘四根接上引擎，並把數字同步顯示。
