@@ -779,6 +779,11 @@
     #scPreset button.pth .pth-n{font-size:9px}
   }
   /* 風格座標面板：浮在畫布右上角 */
+  /* 語言切換：擠在品牌名旁邊，小而不搶戲 */
+  #langBtn{margin-left:8px;border:1px solid var(--line-2,#cfc8b8);background:transparent;
+    color:var(--muted);font-size:10px;letter-spacing:.06em;padding:2px 7px;border-radius:6px;
+    cursor:pointer;font-family:var(--mono,inherit);vertical-align:middle}
+  #langBtn:hover{background:var(--line,#e8e3d6);color:var(--ink)}
   /* 風格模式：底部整區換成風格介面 */
   /* 整區置中；底部留安全距離（手機還要加瀏海／home bar 的內距）。 */
   /* 上下兩列：座標盤在上（置中），縮圖獨佔一整列。
@@ -1270,7 +1275,7 @@
 
   <div class="menuback" id="menuBack" hidden></div>
   <div class="bar">
-    <div class="brand"><b>方寸</b><span>FANGCUN</span></div>
+    <div class="brand"><b>方寸</b><span>FANGCUN</span><button id="langBtn" type="button" title="Switch to English">EN</button></div>
     <div class="tabs" id="tabs">
       <button data-m="work" class="on">工作台</button><button data-m="show">展示</button>
     </div>
@@ -1421,59 +1426,59 @@
 
   <section id="showcase">
     <div class="scbar scbar-studio" id="scPosterBar">
-      <div class="g scposter-wrap is-off"><label>範例模板</label>
+      <div class="g scposter-wrap is-off"><label data-zh="範例模板">範例模板</label>
         <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
              純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
         <div class="posterthumbs" id="scPoster"></div>
-        <label class="postertxt"><input type="checkbox" id="scPosterText"><span>含範例文字</span></label></div>
-      <div class="g"><label>畫布</label><div class="seg wrapseg" id="scCanvas">
-            <button data-k="free" class="on">自由</button><button data-k="square">1:1</button
+        <label class="postertxt"><input type="checkbox" id="scPosterText"><span data-zh="含範例文字">含範例文字</span></label></div>
+      <div class="g"><label data-zh="畫布">畫布</label><div class="seg wrapseg" id="scCanvas">
+            <button data-k="free" class="on" data-zh="自由">自由</button><button data-k="square">1:1</button
             ><button data-k="45">4:5</button><button data-k="34">3:4</button
             ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
           </div></div>
-      <div class="g"><label>底稿</label>
+      <div class="g"><label data-zh="底稿">底稿</label>
         <input type="file" id="scRefIn" accept=".otf,.ttf,.OTF,.TTF" hidden>
-        <button class="btn ghost sm" id="scRefBtn" type="button" title="載入現有字型當描圖底稿（不會改變你的字，只是畫在下層參考）">選字型</button>
-        <span class="tip" id="scRefName" style="font-size:10px;flex:none;white-space:nowrap">未載入</span>
+        <button class="btn ghost sm" id="scRefBtn" type="button" title="載入現有字型當描圖底稿（不會改變你的字，只是畫在下層參考）" data-zh="選字型">選字型</button>
+        <span class="tip" id="scRefName" style="font-size:10px;flex:none;white-space:nowrap" data-zh="未載入">未載入</span>
         <input type="range" id="scRefOp" min="0" max="0.8" step="0.02" value="0.28" style="width:64px;flex:none" title="底稿濃度">
-        <button class="btn ghost sm" id="scRefClr" type="button">移除</button></div>
-      <div class="g"><label>版式</label><div class="seg" id="scLayout">
-            <button data-k="huge" class="on">巨字</button><button data-k="grid">字陣</button></div></div>    </div>
+        <button class="btn ghost sm" id="scRefClr" type="button" data-zh="移除">移除</button></div>
+      <div class="g"><label data-zh="版式">版式</label><div class="seg" id="scLayout">
+            <button data-k="huge" class="on" data-zh="巨字">巨字</button><button data-k="grid" data-zh="字陣">字陣</button></div></div>    </div>
     <!-- ★ 顏色搬到畫布上方自成一列。跟範例海報那排併成一行會太擠（光上色就五顆），
          所以放在它下面 —— 一樣在「工具列」這一區，手到眼到，不用開側欄。 -->
     <div class="scbar scbar-color" id="scColorBar">
-      <div class="g"><label>上色</label><div class="seg wrapseg" id="scColor">
-        <button data-k="mono">單色</button><button data-k="stroke" class="on">依筆順</button
-        ><button data-k="charGrad">字內漸層</button><button data-k="pageGrad">整版漸層</button
-        ><button data-k="rand">隨機</button></div></div>
-      <div class="g"><label>疊色</label><div class="seg" id="scBlend">
-        <button data-k="normal" class="on">覆蓋</button><button data-k="multiply">相乘</button></div></div>
-      <div class="g"><label>單色</label><input type="color" id="scInk" value="#2a2118"></div>
-      <div class="g"><label>背景</label>
+      <div class="g"><label data-zh="上色">上色</label><div class="seg wrapseg" id="scColor">
+        <button data-k="mono" data-zh="單色">單色</button><button data-k="stroke" class="on">依筆順</button
+        ><button data-k="charGrad" data-zh="字內漸層">字內漸層</button><button data-k="pageGrad">整版漸層</button
+        ><button data-k="rand" data-zh="隨機">隨機</button></div></div>
+      <div class="g"><label data-zh="疊色">疊色</label><div class="seg" id="scBlend">
+        <button data-k="normal" class="on" data-zh="覆蓋">覆蓋</button><button data-k="multiply" data-zh="相乘">相乘</button></div></div>
+      <div class="g"><label data-zh="單色">單色</label><input type="color" id="scInk" value="#2a2118"></div>
+      <div class="g"><label data-zh="背景">背景</label>
             <input type="color" id="scBg" value="#f1ece1"><label class="sccheck"><input type="checkbox" id="scTransparent">透明</label></div>
-      <div class="g"><label>調色盤</label><div class="pals" id="scPals"></div></div>
-      <div class="g"><label>自訂色</label>
+      <div class="g"><label data-zh="調色盤">調色盤</label><div class="pals" id="scPals"></div></div>
+      <div class="g"><label data-zh="自訂色">自訂色</label>
         <input type="color" id="scPick" value="#c2453a">
-        <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false">點字上色</button></div>
-      <div class="g"><label>外框</label>
+        <button class="btn ghost sm" id="scPickOn" type="button" aria-pressed="false" data-zh="點字上色">點字上色</button></div>
+      <div class="g"><label data-zh="外框">外框</label>
         <input type="range" id="scEdge" min="0" max="40" step="1" value="0" style="width:78px;flex:none">
         <b id="scEdgeV" style="font-family:var(--mono);font-size:10px;width:22px;flex:none;text-align:right">0</b>
         <input type="color" id="scEdgeC" value="#ffffff"></div>
-      <div class="g"><label>陰影</label>
+      <div class="g"><label data-zh="陰影">陰影</label>
         <input type="range" id="scShadow" min="0" max="90" step="1" value="0" style="width:78px;flex:none">
         <b id="scShadowV" style="font-family:var(--mono);font-size:10px;width:22px;flex:none;text-align:right">0</b>
         <input type="range" id="scShadowA" min="0" max="359" step="1" value="45" style="width:60px;flex:none" title="角度">
         <input type="color" id="scShadowC" value="#000000">
         <div class="seg" id="scShadowMode">
-          <button data-k="drop" class="on">陰影</button><button data-k="solid">立體</button></div></div>
-      <div class="g"><label>個別顏色</label><button class="btn ghost sm" id="scClear" type="button">全部清除</button></div>
+          <button data-k="drop" class="on" data-zh="陰影">陰影</button><button data-k="solid" data-zh="立體">立體</button></div></div>
+      <div class="g"><label data-zh="個別顏色">個別顏色</label><button class="btn ghost sm" id="scClear" type="button" data-zh="全部清除">全部清除</button></div>
     </div>
     <!-- ★ 畫布外再包一層：.scstage 是 overflow:auto 的捲動容器，
          絕對定位的子元素會「跟著內容捲」——「100%」和選字提示才會浮到畫面中間。
          把它們移到這層不捲動的 wrapper 底下，就永遠釘在畫布區的角落。 -->
     <div class="scstagewrap">
       <button id="smapBtn" type="button" aria-pressed="false"
-              title="風格模式：底部換成風格選擇">風格</button>
+              title="風格模式：底部換成風格選擇" data-zh="風格">風格</button>
     <div class="scstage" id="scStage">
       <!-- 縮放只作用在顯示層：包一層做 CSS transform，
            不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
@@ -1498,68 +1503,68 @@
         <div class="smapthumbs" id="smapThumbs"></div>
         <div class="smapbar">
           <button class="btn ghost sm" id="smapPadOn" type="button" aria-pressed="false"
-                  title="座標盤：在四種字體之間連續混合">混合盤</button>
-          <button class="btn ghost sm" id="smapClose" type="button">完成</button>
+                  title="座標盤：在四種字體之間連續混合" data-zh="混合盤">混合盤</button>
+          <button class="btn ghost sm" id="smapClose" type="button" data-zh="完成">完成</button>
         </div>
         <div class="smappad" id="smapPad" hidden>
           <div id="smapBox">
-            <span class="smap-l" id="smapTop">明體　圓體</span>
-            <span class="smap-l smap-b" id="smapBot">楷書　黑體</span>
+            <span class="smap-l" id="smapTop" data-zh="明體　圓體">明體　圓體</span>
+            <span class="smap-l smap-b" id="smapBot" data-zh="楷書　黑體">楷書　黑體</span>
             <i class="smap-v"></i><i class="smap-h"></i>
             <div id="smapDot"></div>
           </div>
           <button id="smapNext" type="button" title="換一組座標">
-            <span id="smapName">基本</span> ⇄</button>
+            <span id="smapName" data-zh="基本">基本</span> ⇄</button>
         </div>
         <div class="smapwt">
-          <label for="smapWt">字重</label>
+          <label for="smapWt" data-zh="字重">字重</label>
           <input type="range" id="smapWt" min="34" max="150" step="1" value="80">
           <b id="smapWtB">80</b>
         </div>
       </div>
       <div class="scaxes" id="scAxes">
-        <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"><b id="scWtB">88</b></div>
-        <div class="g"><label>對比</label><input type="range" id="scCt" min="0.62" max="1.90" step="0.02" value="1.02"><b id="scCtB">1.02</b></div>
-        <div class="g"><label>圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"><b id="scRdB">0.20</b></div>
-        <div class="g"><label>字面率</label><input type="range" id="scFa" min="0.84" max="1.10" step="0.01" value="1.05"><b id="scFaB">1.05</b></div>
-        <div class="g"><label>中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
-        <div class="g"><label>出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
+        <div class="g"><label data-zh="字重">字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"><b id="scWtB">88</b></div>
+        <div class="g"><label data-zh="對比">對比</label><input type="range" id="scCt" min="0.62" max="1.90" step="0.02" value="1.02"><b id="scCtB">1.02</b></div>
+        <div class="g"><label data-zh="圓角">圓角</label><input type="range" id="scRd" min="0" max="1" step="0.02" value="0.2"><b id="scRdB">0.20</b></div>
+        <div class="g"><label data-zh="字面率">字面率</label><input type="range" id="scFa" min="0.84" max="1.10" step="0.01" value="1.05"><b id="scFaB">1.05</b></div>
+        <div class="g"><label data-zh="中宮">中宮</label><input type="range" id="scCo" min="0.78" max="1.30" step="0.01" value="1.00"><b id="scCoB">1.00</b></div>
+        <div class="g"><label data-zh="出鋒">出鋒</label><input type="range" id="scTa" min="0" max="1.6" step="0.02" value="1.00"><b id="scTaB">1.00</b></div>
         <!-- 分隔線之後是版面層的滑桿。收合狀態下這一列還空著大半，
              把最常調的四根滑桿提上來 —— 只提滑桿不提按鈕，
              這一列的版型是「標籤＋滑桿＋數值」，混按鈕進來會亂。 -->
         <div class="scaxes-sep" aria-hidden="true"></div>
-        <div class="g"><label>大小</label><input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
-        <div class="g"><label>字距</label><input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV">預設</b></div>
-        <div class="g"><label>行距</label><input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV">預設</b></div>
-        <div class="g"><label>留白</label><input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
+        <div class="g"><label data-zh="大小">大小</label><input type="range" id="scSize" min="0.4" max="2.4" step="0.02" value="1"><b id="scSizeV">1.00</b></div>
+        <div class="g"><label data-zh="字距">字距</label><input type="range" id="scGx" min="-0.30" max="0.90" step="0.01" value="0"><b id="scGxV" data-zh="預設">預設</b></div>
+        <div class="g"><label data-zh="行距">行距</label><input type="range" id="scGy" min="-0.30" max="1.20" step="0.01" value="0"><b id="scGyV" data-zh="預設">預設</b></div>
+        <div class="g"><label data-zh="留白">留白</label><input type="range" id="scMargin" min="0" max="0.60" step="0.01" value="0.08"><b id="scMarginV">8%</b></div>
       </div>
         <div class="sclay scfoot-type">
         <!-- 小標拿掉：這一列現在是方向／對齊／預設／單字混排，叫「字型」不準，各控制項本來就有自己的標籤 -->
-          <div class="sclay-g"><label>方向</label><div class="seg" id="scDirection">
-            <button data-k="h" class="on">橫排</button><button data-k="v">直排</button></div></div>
-          <div class="sclay-g"><label>對齊</label><div class="seg" id="scAlign">
-            <button data-k="left">靠左</button><button data-k="center" class="on">置中</button
-            ><button data-k="right">靠右</button></div></div>
-        <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
+          <div class="sclay-g"><label data-zh="方向">方向</label><div class="seg" id="scDirection">
+            <button data-k="h" class="on" data-zh="橫排">橫排</button><button data-k="v" data-zh="直排">直排</button></div></div>
+          <div class="sclay-g"><label data-zh="對齊">對齊</label><div class="seg" id="scAlign">
+            <button data-k="left" data-zh="靠左">靠左</button><button data-k="center" class="on">置中</button
+            ><button data-k="right" data-zh="靠右">靠右</button></div></div>
+        <div class="sclay-g" style="grid-column:1/-1"><label data-zh="預設">預設</label>
           <div class="seg" id="scPreset"></div>
-          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
-        <div class="sclay-g"><label>單字</label>
-          <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
-          <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
-            <button class="btn ghost sm" id="scBalance" type="button" title="讓畫面上每個字看起來一樣重（標準字用）">視覺等重</button>
-            <button class="btn ghost sm" id="scBalanceW" type="button" title="讓畫面上每個字看起來一樣寬（標準字用）">視覺等寬</button>
+          <button class="btn ghost sm" id="scReset" type="button" data-zh="重設設計軸">重設設計軸</button></div>
+        <div class="sclay-g"><label data-zh="單字">單字</label>
+          <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false" data-zh="只調這個字">只調這個字</button>
+          <button class="btn ghost sm" id="scAxClr" type="button" data-zh="清除">清除</button>
+            <button class="btn ghost sm" id="scBalance" type="button" title="讓畫面上每個字看起來一樣重（標準字用）" data-zh="視覺等重">視覺等重</button>
+            <button class="btn ghost sm" id="scBalanceW" type="button" title="讓畫面上每個字看起來一樣寬（標準字用）" data-zh="視覺等寬">視覺等寬</button>
           <span class="tip" id="scAxWho" style="font-family:var(--mono);font-size:10px">—</span></div>
         <!-- ★ 從「顏色」搬過來的。重骰改的是錯位／粗細不均／種子，三根都是字形軸，
              跟顏色毫無關係；而且顏色那邊的「上色」本來就有一顆叫「隨機」的按鈕（那顆才是隨機配色），
              同一塊面板兩個「隨機」意思不同，按下去只會嚇到人。 -->
-        <div class="sclay-g"><label>隨機字形</label>
-          <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
-            <label style="font-size:10.5px;color:var(--muted)">變化</label>
+        <div class="sclay-g"><label data-zh="隨機字形">隨機字形</label>
+          <button class="btn ghost sm" id="scReroll" type="button" data-zh="重骰">重骰</button>
+            <label style="font-size:10.5px;color:var(--muted)" data-zh="變化">變化</label>
             <input type="range" id="scRandAmt" min="0" max="1" step="0.05" value="1" style="width:96px;flex:none">
             <b id="scRandAmtV" style="font-family:var(--mono);font-size:10px;width:36px;flex:none;text-align:right">100%</b>
-          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px;flex:none;white-space:nowrap">種子 7</span></div>
+          <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px;flex:none;white-space:nowrap" data-zh="種子 7">種子 7</span></div>
       </div>
-      <button class="btn ghost sm" id="scTypeMore" type="button" aria-expanded="false">展開調整</button>
+      <button class="btn ghost sm" id="scTypeMore" type="button" aria-expanded="false" data-zh="展開調整">展開調整</button>
       <span class="tag" id="scStat" style="font-family:var(--mono);font-size:9.5px;color:var(--muted);white-space:nowrap">—</span>
     </div>
     <!-- 字型軸整組：從左側搬下來收在底部，按「更多字型軸」展開。
@@ -3114,12 +3119,19 @@ function fitQuad(pts,i0,i1,tol,out){
     if(d>err){ err=d; worst=i; }
   }
   if(err<=tol){ addQuadWithExtrema(A,[cx,cy],B,out); return; }
-  if(worst<=i0+1||worst>=i1-1){       /* 切不動就退回直線 */
+  /* ★ 誤差太大時要切開再試，切點取「最差點」——
+     但最差點若落在頭尾第二個位置，舊版就直接退回一整串直線。
+     那正好是「長而平緩的曲線」最常見的情況：實測 7137 次退回、只有 3043 次成功，
+     87% 的直線節點就是這樣來的（最長一段 42 個節點）。
+     改成退而求其次從中點切，只有真的短到切不動（<4 段）才畫直線。 */
+  let cut=worst;
+  if(cut<=i0+1||cut>=i1-1) cut=(i0+i1)>>1;
+  if(cut<=i0||cut>=i1||i1-i0<4){
     for(let i=i0+1;i<=i1;i++) out.push(["L",pts[i][0],pts[i][1]]);
     return;
   }
-  fitQuad(pts,i0,worst,tol,out);
-  fitQuad(pts,worst,i1,tol,out);
+  fitQuad(pts,i0,cut,tol,out);
+  fitQuad(pts,cut,i1,tol,out);
 }
 /* 把一串點轉成指令，平緩處用曲線、轉角處保留為節點 */
 function pathFromPts(pts,tol,out,skipFirst){
@@ -3286,8 +3298,12 @@ function strokeOutline(st,f,wScale,NS){
   const tolBase=f.simp===undefined?1.5:f.simp;
   const tol=st.kage&&(/^(pie|na|dian|ti|zhe)$/.test(st.t)||st.cv)?Math.min(tolBase,0.95):tolBase;
   const La=rdp(L,tol), Ra=rdp(R,tol);
-  /* 曲線擬合的容差。可變字型模式維持純直線（節點數必須跨主體一致）。 */
-  const fitTol = VF_STABLE ? 0 : (f.simp===undefined?1.5:f.simp)*1.6;
+  /* 曲線擬合的容差。
+     ★ 倍率 1.6 → 3.7 是掃描出來的：節點數 1.32→1.20 倍（對照日文黑體），
+       形狀 IoU 仍有 0.9899。再放大到 5 倍 IoU 掉到 0.988、7 倍就明顯失真。
+       這裡不動 f.simp 本身（那是使用者可見的軸），只放大擬合用的倍率。
+     可變字型模式維持純直線（節點數必須跨主體一致）。 */
+  const fitTol = VF_STABLE ? 0 : (f.simp===undefined?1.5:f.simp)*3.7;
   const cmds=[];
   if(fitTol>0) pathFromPts(La,fitTol,cmds,false);
   else { cmds.push(["M",La[0][0],La[0][1]]);
@@ -6321,6 +6337,86 @@ function drawSpec(){
    跟工作台共用同一張 AXES 表，以後加軸不用改兩個地方（沒歸組的會自動落到「其他」）。 */
 const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]);
 /* 分組照作用性質，不照 AXES 的宣告順序；小標沿用全站「中文＋英文小字」的圖紙式樣 */
+/* ==========================================================================
+   英文介面
+   目的不是給不懂中文的人「使用」——要排中文本來就得懂中文。
+   是給國際的字型設計同行「看懂這是什麼」。r/typography 唯一回文的人
+   就是卡在介面看不懂，靠 Google 翻譯硬讀才問出問題。
+
+   ★ CJK 專有的術語保留原詞加註解（Zhonggong、Zimianlu），不硬翻成
+     Counter / Literal Rate —— 那會誤導，因為拉丁字型的 counter
+     跟中宮不是同一回事。「有專門術語」本身就是這個領域的內容。
+   ========================================================================== */
+const I18N={
+  /* 頂列與模式 */
+  "工作台":"Workbench","展示":"Showcase","方寸":"Fangcun","原樣":"Raw skeleton",
+  "匯出":"Export","進階":"Advanced","檔案":"File","樣式":"Style",
+  /* 畫布與版式 */
+  "畫布":"Canvas","自由":"Free","留白":"Margin","版式":"Layout","底稿":"Tracing",
+  "選字型":"Choose font","未載入":"None","移除":"Remove","範例模板":"Templates",
+  "巨字":"Display","字陣":"Grid","長文自動換行":"Wrap text",
+  /* 上色 */
+  "上色":"Colour","單色":"Solid","依筆順":"By stroke order","字內漸層":"Gradient (glyph)",
+  "整版漸層":"Gradient (page)","隨機":"Random","疊色":"Blend","覆蓋":"Normal","相乘":"Multiply",
+  "背景":"Background","透明":"Transparent","調色盤":"Palette","自訂色":"Custom",
+  "個別顏色":"Per-glyph colour","點字上色":"Tap to colour","清除":"Clear","全部清除":"Clear all",
+  "外框":"Outline","陰影":"Shadow","立體":"Extrude","關閉":"Off",
+  /* 文字與排列 */
+  "方向":"Direction","橫排":"Horizontal","直排":"Vertical","對齊":"Align",
+  "靠左":"Left","置中":"Centre","靠右":"Right","大小":"Size","字距":"Letter-spacing",
+  "行距":"Line-height","字高":"Glyph height",
+  /* 軸（CJK 術語保留原詞） */
+  /* 38 根軸。CJK 專有的保留原詞加註解，其餘用字型設計的通用說法。 */
+  "字重":"Weight","對比":"Contrast","圓角":"Rounding",
+  "中宮":"Zhonggong (central density)","字面率":"Zimianlu (face ratio)",
+  "出鋒":"Taper","視覺補償":"Optical compensation","重心":"Centre of gravity",
+  "書寫感":"Handwriting","收筆":"Terminal finish","字寬":"Width","傾斜":"Slant",
+  "鉤長":"Hook length","頓":"Dun (entry stress)","提按":"Pressure modulation",
+  "斜勢":"Rise (horizontal slope)","隨機種子":"Seed","錯位":"Scatter",
+  "粗細不均":"Width jitter","尖角":"Spike","中空":"Inline","弧形":"Arch",
+  "膨脹":"Inflate","波浪":"Wave","斷裂":"Chop","端點":"Cap",
+  "收筆造型":"Terminal shape","起筆造型":"Entry shape","鉤的造型":"Hook shape",
+  "字懷保護":"Zihuai protection (inter-stroke white)","部件比例":"Component ratio",
+  "橫線對齊":"Horizontal grid","筆畫切齊":"Bleed to edge","內白圓度":"Counter rounding",
+  "個性":"Personality","斜筆粗細":"Diagonal weight","中宮橫縱":"Zhonggong anisotropy",
+  "內白保護":"Counter protection",
+  /* 單字 */
+  "單字":"Single glyph","只調這個字":"This glyph only","選取":"Select","尚未選字":"None selected",
+  "重設選取字":"Reset glyph","單字位置":"Position","單字大小":"Scale","旋轉":"Rotate",
+  "搬字":"Move","全部歸位":"Reset positions","拆法":"Decomposition",
+  "視覺等重":"Equalise weight","視覺等寬":"Equalise width",
+  /* 預設與風格 */
+  "預設":"Presets","重設設計軸":"Reset axes","風格":"Style","混合盤":"Blend pad",
+  "完成":"Done","基本":"Basic","展開調整":"More axes",
+  "隨機字形":"Randomise","重骰":"Reroll","變化":"Amount","種子 7":"Seed 007",
+  /* 匯出 */
+  "向量匯出":"Vector export","每字一個路徑":"One path per glyph",
+  "每筆一個路徑":"One path per stroke","含範例文字":"Include sample text",
+  /* 座標盤角落 */
+  "明體　圓體":"Ming　Round","楷書　黑體":"Kai　Gothic",
+  "永春":"永春"
+};
+let LANG="zh";
+function T(t){ return LANG==="en" ? (I18N[t]||t) : t; }
+/* 切換語言：把標記過的元素換掉文字。
+   ★ 不重建 DOM —— 只改 textContent，事件監聽全部保留。 */
+function applyLang(){
+  document.querySelectorAll("[data-zh]").forEach(el=>{
+    const zh=el.getAttribute("data-zh");
+    el.textContent = LANG==="en" ? (I18N[zh]||zh) : zh;
+  });
+  /* 軸名：AXES 裡本來就有 en 欄位 */
+  for(const a of AXES)
+    document.querySelectorAll('[data-axlabel="'+a.k+'"]').forEach(lab=>{
+      lab.textContent = LANG==="en" ? (I18N[a.n]||a.n) : a.n; });
+  document.querySelectorAll("[data-pname]").forEach(el=>{
+    const k=el.getAttribute("data-pname");
+    el.textContent = LANG==="en" ? (PNAME_EN[k]||k) : (PNAME[k]||k); });
+  document.documentElement.setAttribute("lang", LANG==="en"?"en":"zh-Hant");
+  const b=$("langBtn"); if(b) b.textContent = LANG==="en" ? "中文" : "EN";
+  try{ localStorage.setItem("fangcun-lang",LANG); }catch(e){}
+}
+
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise","pratio","hgrid","bleed"]},
@@ -6342,7 +6438,13 @@ function buildShowAxes(){
     grid.appendChild(h);
     for(const a of rows){
     const row=document.createElement("div"); row.className="scmore-ax";
-    const lb=document.createElement("label"); lb.textContent=a.n; row.appendChild(lb);
+    const lb=document.createElement("label");
+    /* 標記軸名，切語言時 applyLang 才抓得到。
+       ★ 英文用 I18N 的譯法（中宮 → Zhonggong…），不是 a.en 的大寫代碼
+         —— 那個是給可變字型的 tag 用的。 */
+    lb.setAttribute("data-axlabel",a.k);
+    lb.textContent = (typeof LANG!=="undefined"&&LANG==="en") ? (I18N[a.n]||a.n) : a.n;
+    row.appendChild(lb);
     const r=document.createElement("input");
     r.type="range"; r.min=a.min; r.max=a.max; r.step=a.step; r.value=F[a.k]; r.id="scax_"+a.k;
     row.appendChild(r);
@@ -9057,6 +9159,19 @@ function scStyleMode(on){
 }
 if($("smapBtn")) $("smapBtn").addEventListener("click",()=>scStyleMode(!smapOn));
 if($("smapClose")) $("smapClose").addEventListener("click",()=>scStyleMode(false));
+/* 語言切換。★ 不重建 DOM —— 只改 textContent，事件監聽全部保留。 */
+if($("langBtn")) $("langBtn").addEventListener("click",()=>{
+  LANG = LANG==="en" ? "zh" : "en";
+  applyLang();
+  if(typeof buildShowAxes==="function"){          /* 軸列是動態產生的，要重畫標籤 */
+    const g=$("scGrid"); if(g){ g.textContent=""; buildShowAxes(); }
+  }
+  if(typeof syncShowAxes==="function") syncShowAxes();
+  if(typeof scAxLabel==="function") scAxLabel();
+});
+/* 載入時還原上次選的語言 */
+try{ const sv=localStorage.getItem("fangcun-lang");
+  if(sv==="en"){ LANG="en"; applyLang(); } }catch(e){}
 /* 混合盤：預設收著，按了才展開（並把手機畫布縮小讓出空間） */
 if($("smapPadOn")) $("smapPadOn").addEventListener("click",()=>{
   smapPadOn=!smapPadOn;
@@ -9090,7 +9205,8 @@ function smapBuildThumbs(){
   for(const k of list){
     const b=document.createElement("button");
     b.type="button"; b.dataset.p=k;
-    b.innerHTML='<span class="t-g"></span><span class="t-n">'+(PNAME[k]||k)+'</span>';
+    const pn2=(typeof LANG!=="undefined"&&LANG==="en")?(PNAME_EN[k]||k):(PNAME[k]||k);
+    b.innerHTML='<span class="t-g"></span><span class="t-n" data-pname="'+k+'">'+pn2+'</span>';
     b.classList.toggle("on",k===presetKey);
     b.addEventListener("click",()=>{
       scCommit(); applyPreset(k); presetKey=k;
@@ -9243,7 +9359,8 @@ function scBuildPresets(){
        用使用者自己輸入的第一個字去渲染，看得到才選得下去。
        只畫一個字、而且有快取，成本很低。 */
     b.className="pth";
-    b.innerHTML='<span class="pth-g"></span><span class="pth-n">'+(PNAME[k]||k)+'</span>';
+    const pn=(typeof LANG!=="undefined"&&LANG==="en")?(PNAME_EN[k]||k):(PNAME[k]||k);
+    b.innerHTML='<span class="pth-g"></span><span class="pth-n" data-pname="'+k+'">'+pn+'</span>';
     b.addEventListener("click",()=>{
       applyPreset(k); presetKey=k;
       document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
