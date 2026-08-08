@@ -4664,9 +4664,10 @@ function masterOf(id){
 }
 /* 部件在自己 0~EM 空間裡的墨跡外框。量一次就快取 —— 每次重畫都重量會很慢。 */
 const PART_INK=new Map();
-/* 一個字只在「最外面的雙部件層」調整一次；由 glyphContours 每次歸零。 */
-let PR_DONE=false;
-function prReset(){ PR_DONE=false; }
+/* 「一個字只調整最外面那一層」以前用全域旗標，但 collect 有七個呼叫點，
+   只有 glyphContours 會歸零 —— protectCounters 在它內部被呼叫時旗標已經是 true，
+   於是內白保護一開，部件比例就被還原；glyphSkeleton／drawBig 也各自拿到髒狀態。
+   改成沿著遞迴傳的參數（done），不同呼叫點天生互不干擾。 */
 function partInk(id){
   if(PART_INK.has(id)) return PART_INK.get(id);
   let r=null;
@@ -4746,7 +4747,7 @@ function partRatioBoxes(cs,depth,pratio){
     return {...c, box:nb};
   });
 }
-function collect(id,box,wScale,out,seed,variant,depth,optic,pratio){
+function collect(id,box,wScale,out,seed,variant,depth,optic,pratio,done){
   id=masterOf(id);
   const g=G[id]; if(!g||(depth||0)>8) return;
   const [x1,y1,x2,y2]=box,sx=(x2-x1)/EM,sy=(y2-y1)/EM;
@@ -4772,11 +4773,12 @@ function collect(id,box,wScale,out,seed,variant,depth,optic,pratio){
     /* ★ pratio 一定要用傳進來的值，不能讀全域 F ——
        展示頁每個字用的是 axesOf() 的副本（還可能疊上單字覆寫），
        讀 F 的話永遠是 0，這根軸就完全沒作用。踩過一次。 */
-    const parts = PR_DONE ? g.c : partRatioBoxes(g.c,(depth||0),pratio);
-    if(parts!==g.c) PR_DONE=true;      /* 一個字只調整最外面那一層 */
+    const st0=done||{hit:false};
+    const parts = st0.hit ? g.c : partRatioBoxes(g.c,(depth||0),pratio);
+    if(parts!==g.c) st0.hit=true;      /* 一個字只調整最外面那一層 */
     parts.forEach((part,i)=>{
       const [a,b,c,d]=part.box;
-      collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1,optic,pratio);
+      collect(part.r,[x1+a*sx,y1+b*sy,x1+c*sx,y1+d*sy],ws,out,seed*13+i*101,part.v,(depth||0)+1,optic,pratio,st0);
     });
   }
 }
@@ -4967,7 +4969,6 @@ let CS_T0=-1;
 const CS_BUDGET_MS=1200;
 function csBudgetReset(){ CS_T0=-1; }
 function glyphContours(id,f,variant,NS){
-  prReset();
   const raw=[];collect(id,[0,0,EM,EM],1,raw,7,variant,0,f.optic,f.pratio);
   const out=[];
   /* v68：內白保護不能依賴「這次畫面剛好用了多少輪廓取樣」。
@@ -5405,6 +5406,7 @@ function markEdited(){
 /* ---------- 檢視 / 編輯 ---------- */
 const bigSvg=$("bigSvg");
 function drawBig(){
+  csBudgetReset();   /* 每個重畫入口各自有完整的內白處理額度 */
   const g=G[current];
   if(varSel&&!(g.v&&g.v[varSel])) varSel=null;
   bigSvg.textContent="";
@@ -5875,6 +5877,7 @@ $("btnResetAll").addEventListener("click",async ()=>{
 });
 
 function drawSpec(){
+  csBudgetReset();   /* 每個重畫入口各自有完整的內白處理額度 */
   const ok=[...$("specIn").value].filter(ch=>G[ch]).join("")||"這是好天";
   const s=$("spec");
   s.children[0].textContent=ok;
