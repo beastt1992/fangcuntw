@@ -900,7 +900,11 @@
   /* 左側的筆記號：不用多一個標籤佔位置，也看得出這裡是打字的 */
   .scfoot::before{
     content:"✎";
-    position:absolute;left:23px;top:50%;transform:translateY(-50%);
+    /* ★ top 不能用 50% —— 那是「整條 .scfoot」的垂直中央。
+       這一區以前只有一列（輸入框），50% 剛好對；現在是縱向排列
+       （輸入框＋兩行滑桿＋預設列＋收合鈕），50% 會掉到滑桿中間。
+       改成對齊輸入框：上內距 8px ＋ 輸入框高 34px 的一半。 */
+    position:absolute;left:23px;top:25px;transform:none;
     font:400 15px/1 system-ui,sans-serif;color:var(--ink);
     pointer-events:none;z-index:2;opacity:.75;
   }
