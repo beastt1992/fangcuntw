@@ -1424,7 +1424,7 @@
         <div class="sclay">
           <div class="sctypegroup">單字 <em>PER-CHAR</em></div>
           <div class="sclay-g"><label>搬字</label>
-            <button class="btn ghost sm" id="scMoveOn" type="button" aria-pressed="false">拖曳個別字</button>
+            <span class="tip" style="font-size:10.5px">直接拖曳畫布上的字</span>
             <button class="btn ghost sm" id="scMoveClr" type="button">全部歸位</button></div>
           <div class="sclay-g scselect"><label>選取</label><span class="tip" id="scSelected">尚未選字</span></div>
           <div class="sclay-g"><label>單字大小</label>
@@ -6327,7 +6327,7 @@ const scHash=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i)
 
 /* ---------- 展示頁排版狀態（全部新增，不動既有變數） ---------- */
 let scAlignMode="center", scScale=1, scGxAdj=0, scGyAdj=0;
-let scPickMode=false, scMoveMode=false;
+let scPickMode=false;
 let scCustom={};        /* key → 自訂色 */
 let scOff={};           /* key → [dx,dy] 個別位移，單位是「一個字面」 */
 function scDraw(){
@@ -6448,13 +6448,15 @@ function scDraw(){
       g.appendChild(el("path",{d:svgD(c),fill,"fill-rule":"nonzero"}));
     });
     if(scSelKey===key0) g.appendChild(el("rect",{x:8,y:8,width:984,height:984,class:"sc-selection"}));
-    g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:scMoveMode?"grab":"pointer","data-key":key0}));
+    g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:"grab","data-key":key0}));
     svg.appendChild(g);
   });
   scUpdateInspector();
 }
 $("scArt").addEventListener("click",e=>{
-  if(scMoveMode||scDragging) return;
+  /* 拖曳結束後瀏覽器還會補一次 click，要吃掉，否則放手就會多選一次 */
+  if(scSuppressClick){ scSuppressClick=false; return; }
+  if(scDragging) return;
   const hit=e.target.closest&&e.target.closest("[data-key]");
   const k=hit&&hit.getAttribute("data-key"); if(!k) return;
   scSelKey=k;
@@ -6479,28 +6481,58 @@ document.addEventListener("keydown",e=>{
   scSelKey=null; scUpdateInspector(); scDraw();
 });
 
-/* ---------- 拖曳個別字 ---------- */
-let scDragging=null;
+/* ---------- 拖曳個別字 ----------
+   以前這是一個模式：要先按「拖曳個別字」才能拖。現在不用了 ——
+   點一下＝選字、拖一下＝搬字，靠「有沒有移動」區分。
+
+   ★ 觸控要另外處理：手機上手指拖曳同時也是捲頁面的手勢。
+     一碰到字就開始搬的話，想捲畫面會變成把字拖走。
+     所以觸控改成「長按 260 毫秒才拿起來」——
+     快速滑動＝捲頁面，按住不動再拖＝搬字（清單重新排序常見的作法）。
+   ---------------------------------- */
+let scDragging=null, scDragPend=null, scDragTimer=null, scSuppressClick=false;
+const SC_DRAG_SLOP=4;             /* 滑鼠：移動超過這個距離才算拖曳 */
+const SC_TOUCH_HOLD=260;          /* 觸控：按住這麼久才拿起來 */
+function scDragArm(){
+  if(!scDragPend) return;
+  scDragging=scDragPend; scDragPend=null;
+  clearTimeout(scDragTimer); scDragTimer=null;
+  scCommit(); scSelKey=scDragging.k; scUpdateInspector();
+  try{ $("scArt").setPointerCapture(scDragging.pid); }catch(e){}
+  $("scHint").textContent="拖到想要的位置 · 按「全部歸位」可還原";
+  scDraw();
+}
+function scDragEnd(){
+  clearTimeout(scDragTimer); scDragTimer=null; scDragPend=null;
+  if(scDragging){ scSuppressClick=true; saveLocal(); }
+  scDragging=null;
+}
 $("scArt").addEventListener("pointerdown",e=>{
-  if(!scMoveMode) return;
   const hit=e.target.closest&&e.target.closest("[data-key]");
   const k=hit&&hit.getAttribute("data-key"); if(!k) return;
-  scCommit(); scSelKey=k; scUpdateInspector();
+  if(scPickMode||scAxMode) return;      /* 上色／單字調軸有各自的點擊語意，不搶 */
   const svg=$("scArt"), box=svg.getBoundingClientRect();
-  const vb=svg.getAttribute("viewBox").split(/\s+/).map(Number);
-  const unitX=vb[2]/box.width, unitY=vb[3]/box.height;   /* 螢幕 px → 字面單位 */
-  scDragging={k,x:e.clientX,y:e.clientY,unitX,unitY,base:(scOff[k]||[0,0]).slice()};
-  svg.setPointerCapture(e.pointerId);
-  e.preventDefault();
+  const vb=(svg.getAttribute("viewBox")||"0 0 1000 1000").split(/\s+/).map(Number);
+  scDragPend={k,x:e.clientX,y:e.clientY,pid:e.pointerId,
+              unitX:vb[2]/box.width, unitY:vb[3]/box.height,
+              base:(scOff[k]||[0,0]).slice(), touch:e.pointerType==="touch"};
+  if(scDragPend.touch){ clearTimeout(scDragTimer); scDragTimer=setTimeout(scDragArm,SC_TOUCH_HOLD); }
 });
 $("scArt").addEventListener("pointermove",e=>{
+  if(scDragPend){
+    const moved=Math.hypot(e.clientX-scDragPend.x, e.clientY-scDragPend.y);
+    if(!scDragPend.touch){ if(moved>SC_DRAG_SLOP) scDragArm(); }
+    /* 觸控還沒長按滿就滑走 → 使用者要捲頁面，取消這次拿起 */
+    else if(moved>10){ clearTimeout(scDragTimer); scDragTimer=null; scDragPend=null; }
+  }
   if(!scDragging) return;
   const d=scDragging;
   scOff[d.k]=[d.base[0]+(e.clientX-d.x)*d.unitX, d.base[1]+(e.clientY-d.y)*d.unitY];
+  e.preventDefault();
   scDraw();
 });
-$("scArt").addEventListener("pointerup",()=>{ if(scDragging) saveLocal(); scDragging=null; });
-$("scArt").addEventListener("pointercancel",()=>{ scDragging=null; });
+$("scArt").addEventListener("pointerup",scDragEnd);
+$("scArt").addEventListener("pointercancel",scDragEnd);
 
 /* ---------- 排版控制 ---------- */
 $("scAlign").addEventListener("click",e=>{
@@ -6536,19 +6568,9 @@ $("scPickOn").addEventListener("click",()=>{
   scPickMode=!scPickMode;
   $("scPickOn").setAttribute("aria-pressed",scPickMode?"true":"false");
   $("scPickOn").textContent=scPickMode?"點字上色中":"點字上色";
-  if(scPickMode&&scMoveMode) scSetMove(false);
   $("scHint").textContent=scPickMode?"點任何一個字，套用左邊選的顏色":"點任何一個字可單獨換色";
 });
-function scSetMove(on){
-  scMoveMode=on;
-  $("scMoveOn").setAttribute("aria-pressed",on?"true":"false");
-  $("scMoveOn").textContent=on?"拖曳中":"拖曳個別字";
-  if(on&&scPickMode){ scPickMode=false;
-    $("scPickOn").setAttribute("aria-pressed","false"); $("scPickOn").textContent="點字上色"; }
-  $("scHint").textContent=on?"直接把字拖到想要的位置 · 按「歸位」還原":"點任何一個字可單獨換色";
-  scDraw();
-}
-$("scMoveOn").addEventListener("click",()=>scSetMove(!scMoveMode));
+/* scSetMove 已移除：搬字不再是一個模式，改成點/拖自動區分。 */
 $("scMoveClr").addEventListener("click",()=>{ scOff={}; scTr={}; scSelKey=null; scUpdateInspector(); scDraw(); saveLocal(); });
 /* 種子只有「錯位 / 粗細不均 / 書寫感」三根軸會吃。三根都是 0 的話，
    重骰在數學上完全沒有作用 —— 按了畫面不會有任何變化，看起來就像壞掉。
@@ -7773,8 +7795,7 @@ function scSetAxMode(on){
   scAxMode=on;
   $("scAxOn").setAttribute("aria-pressed",on?"true":"false");
   $("scAxOn").textContent=on?"單字模式中":"只調這個字";
-  if(on){ if(scMoveMode) scSetMove(false);
-          if(scPickMode){ scPickMode=false;
+  if(on){ if(scPickMode){ scPickMode=false;
             $("scPickOn").setAttribute("aria-pressed","false"); $("scPickOn").textContent="點字上色"; } }
   else scAxKey=null;
   scAxLabel(); syncShowAxes(); scDraw();
