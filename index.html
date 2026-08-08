@@ -2775,20 +2775,26 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
     out.push(["L", to[0], to[1]]); return;
   }
   if(kind==="silk"){
-    /* 蠶頭：隸書橫畫的起筆，比筆身更飽滿的圓頭 —— 控制點推得比一般圓頭遠並往兩側撐。 */
+    /* 蠶頭：隸書橫畫的起筆，比筆身更飽滿的圓頭。
+       要「比筆身寬」，控制點的側向量就必須超過半筆寬 w（第一版只給 0.34w，
+       反而比筆身窄，看起來是收尖不是蠶頭）。 */
     const nx=-T[1], ny=T[0];
-    out.push(["Q", tip[0]+T[0]*w*0.95*dir-nx*w*0.34, tip[1]+T[1]*w*0.95*dir-ny*w*0.34,
-                   tip[0]+T[0]*w*1.05*dir,           tip[1]+T[1]*w*1.05*dir]);
-    out.push(["Q", tip[0]+T[0]*w*0.95*dir+nx*w*0.34, tip[1]+T[1]*w*0.95*dir+ny*w*0.34,
-                   to[0], to[1]]);
+    /* ★ 二次貝茲只會走到控制點的一半左右，所以要「比筆身寬」，
+       控制點的側向量得遠大於半筆寬（±1.25w 實測只撐出 1.03 倍，等於沒有）。 */
+    const mx=tip[0]+T[0]*w*0.70*dir, my=tip[1]+T[1]*w*0.70*dir;   /* 頂點 */
+    out.push(["Q", mx-nx*w*2.10, my-ny*w*2.10, mx, my]);
+    out.push(["Q", mx+nx*w*2.10, my+ny*w*2.10, to[0], to[1]]);
     return;
   }
   if(kind==="wedge"){
-    /* 楔形：一側順著切線頂出去、另一側幾乎不動，形成斜切的尖。
-       跟 pt（兩側對稱收尖）不同，這個有方向性，像刻刀切出來的。 */
-    const nx=-T[1], ny=T[0];
-    out.push(["L", tip[0]+T[0]*w*0.95*dir-nx*w*0.30, tip[1]+T[1]*w*0.95*dir-ny*w*0.30]);
-    out.push(["L", tip[0]+T[0]*w*0.20*dir+nx*w*0.10, tip[1]+T[1]*w*0.20*dir+ny*w*0.10]);
+    /* 楔形（刀切）：把「目前這一側」順著切線頂出去，再直接斜切到另一側。
+       ★ 第一版是「先往外 0.95w、再縮回 0.2w 並跨到另一側、才連終點」——
+         那條路徑會自我交叉，末端刺出一個缺口（實機看得很明顯）。
+         端點的路徑是從一側繞到另一側，中間點必須單調前進，不能折返。
+       作法跟 kakato 一樣：從 out 的最後一點取得「這一側」的實際位置。 */
+    const last=out[out.length-1];
+    const from=last[0]==="Q"?[last[3],last[4]]:[last[1],last[2]];
+    out.push(["L", from[0]+T[0]*w*0.85*dir, from[1]+T[1]*w*0.85*dir]);
     out.push(["L", to[0], to[1]]); return;
   }
   if(kind==="pt"){out.push(["L",tip[0]+T[0]*w*0.55*dir,tip[1]+T[1]*w*0.55*dir]);
@@ -6896,7 +6902,11 @@ if($("scStage")) $("scStage").addEventListener("wheel",e=>{
   e.preventDefault();
   scZoomStep(e.deltaY<0?1:-1);
 },{passive:false});
-$("scTxt").addEventListener("input",()=>{scOvr={};scSelKey=null;scFitInput();scDraw();saveLocal();});
+/* ★ scCustom 也要一起清。它是「點字上色」存的逐字自訂色，鍵是 列|欄|字。
+   原本改文字時只清了 scOvr，scCustom 留著 —— 只要同一個字又回到同一個位置，
+   舊的自訂色就冒出來，而且 fill 的判斷順序是 cust 最優先，
+   於是那幾個字對調色盤完全沒反應。這就是「有些字卡住、調不動」。 */
+$("scTxt").addEventListener("input",()=>{scOvr={};scCustom={};scSelKey=null;scFitInput();scDraw();saveLocal();});
 $("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
 $("scWt").addEventListener("input",e=>{const val=+e.target.value;
   if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).weight=val;
