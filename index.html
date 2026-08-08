@@ -8933,16 +8933,30 @@ function scStyleMapApply(x,y){
   const P={lt:PRESETS[S.lt], rt:PRESETS[S.rt], lb:PRESETS[S.lb], rb:PRESETS[S.rb]};
   const w={ lt:(1-smapX)*(1-smapY), rt:smapX*(1-smapY),
             lb:(1-smapX)*smapY,     rb:smapX*smapY };
-  /* 先回到出廠值再疊 —— 跟 applyPreset 同樣的道理：
-     只混合「預設有列出來的鍵」的話，沒列到的軸會留在上一組的值。 */
+  /* ★★ 缺的鍵必須用出廠值補，不能貢獻 0。
+     舊版是「只累加預設有列出來的鍵」——
+     但那 11 根新軸（diag/cnaniso/term/head/hookst/cround/hgrid/bleed/pers/wspace/pratio）
+     只有五個書法預設有，其餘 13 個都沒有。
+     結果混合時缺鍵的角貢獻 0，diag 被算成 0 而不是出廠的 1.00 ——
+     斜筆粗細歸零，撇捺變成 26 而橫豎是 128。
+     實機連續回報「斜線和弧線很細」就是這個，我前面猜過但用了鍵完整的樣本測、誤判為不存在。 */
   for(const k of AXKEYS) if(F_DEFAULT[k]!==undefined) F[k]=F_DEFAULT[k];
-  const acc={};
+  const keys=new Set();
   for(const corner of ["lt","rt","lb","rb"]){
     const pre=P[corner]; if(!pre) continue;
-    for(const k in pre){ if(typeof pre[k]!=="number") continue;
-      acc[k]=(acc[k]||0)+pre[k]*w[corner]; }
+    for(const k in pre) if(typeof pre[k]==="number") keys.add(k);
   }
-  for(const k in acc){ if(k==="seed") continue; F[k]=acc[k]; }
+  for(const k of keys){
+    if(k==="seed") continue;
+    let v=0;
+    for(const corner of ["lt","rt","lb","rb"]){
+      const pre=P[corner]; if(!pre) continue;
+      const val = (typeof pre[k]==="number") ? pre[k]
+                : (typeof F_DEFAULT[k]==="number" ? F_DEFAULT[k] : 0);
+      v += val*w[corner];
+    }
+    F[k]=v;
+  }
   /* 離散軸取權重最大的角，不能內插 */
   const domin=["lt","rt","lb","rb"].reduce((a,b)=>w[a]>=w[b]?a:b);
   for(const k of ["term","head","hookst"]){
