@@ -1552,6 +1552,24 @@
               上面勾的字重會變成軸的端點與中繼點。節點會多一點，換掉多個檔案划算。</span>
           </span>
         </label>
+        <div id="famVarAxes" style="margin:6px 0 0 26px;display:none">
+          <div class="tip" style="margin:0 0 4px">除了字重，還要開放哪些軸？每多一根，檔案會大一些。</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+            <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="vfx_counter" checked>中宮</label>
+            <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="vfx_face">字面率</label>
+            <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="vfx_contrast">對比</label>
+            <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="vfx_round">圓角</label>
+            <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="vfx_width">字寬</label>
+          </div>
+          <div class="tip" style="margin:4px 0 0">
+            端點造型、鉤的造型、中空、尖角、斷裂這幾根做不了 ——
+            它們會改變輪廓的節點數，可變字型要求各主體節點完全一致。</div>
+        </div>
         <p class="tip" id="famStat">—</p>
       </div>
       <footer>
@@ -8217,6 +8235,9 @@ function famStat(){
     : "至少選一個字重";
   $("famGo").disabled = n===0;
 }
+if($("famVar")) $("famVar").addEventListener("change",()=>{
+  const b=$("famVarAxes"); if(b) b.style.display=$("famVar").checked?"block":"none";
+});
 $("famN")&&$("famN").addEventListener("input",famStat);
 $("famNS")&&$("famNS").addEventListener("input",e=>{ $("famNSV").textContent=e.target.value; });
 
@@ -8225,6 +8246,21 @@ $("fammodal").addEventListener("click",e=>{ if(e.target===$("fammodal")) $("famm
 
 
 /* 依字重把主體排序、換算成 wght 值與正規化座標，再交給寫表器 */
+/* ==========================================================================
+   多軸可變字型
+   ★ 可變字型要求「每個主體的節點數與順序完全一致」，所以不是每根軸都能當可變軸。
+     實測（VF_STABLE 模式下，200 字 × 兩端）：37 根裡有 28 根節點數穩定；
+     不行的 8 根都是會改變輪廓拓樸的 —— 端點造型／起筆造型／鉤的造型會換形狀、
+     中空會多一圈、尖角與斷裂會切開輪廓、收筆會多出三角。
+   這裡挑其中最有設計意義的幾根開放出去。現有的中文可變字型幾乎清一色只有粗細。
+   ========================================================================== */
+const VF_EXTRA_AXES=[
+  {k:"counter", tag:"CNTR", name:"Counter",  min:0.82, max:1.24, label:"中宮"},
+  {k:"face",    tag:"FACE", name:"FaceSize", min:0.88, max:1.10, label:"字面率"},
+  {k:"contrast",tag:"CTRS", name:"Contrast", min:0.70, max:1.90, label:"對比"},
+  {k:"round",   tag:"ROND", name:"Round",    min:0,    max:1,    label:"圓角"},
+  {k:"width",   tag:"wdth", name:"Width",    min:0.78, max:1.22, label:"字寬"}
+];
 async function famExportVar(picked, ids, fam, lat){
   const N=8;                       /* 實測：節點 2.07 倍、形狀 IoU 0.9867，是甜蜜點 */
   const sorted=picked.slice().sort((a,b)=>a.w-b.w);
@@ -8268,9 +8304,50 @@ async function famExportVar(picked, ids, fam, lat){
       statValues.push({axisIndex:0, nameID:nid, value:st.w,
                        flags: st.w===400 ? 2 : 0});   /* 2 = ELIDABLE，標準不重複顯示 */
     });
+    /* 額外的軸：各做一組「只有這根推到端點」的主體。
+       每根軸兩個主體（最小、最大），其餘軸維持出廠值 —— 這是可變字型的標準作法：
+       每根軸各自一個 gvar tuple，中間值由字型引擎內插。 */
+    const useExtra=VF_EXTRA_AXES.filter(a=>$("vfx_"+a.k)&&$("vfx_"+a.k).checked);
+    const nAx=1+useExtra.length;
+    /* 已經算好的字重主體只有第一軸的座標，其餘補 0 */
+    for(const m of masters) while(m.coords.length<nAx) m.coords.push(0);
+    for(let ai=0; ai<useExtra.length; ai++){
+      const a=useExtra[ai];
+      for(const side of [-1,1]){
+        const v = side<0 ? a.min : a.max;
+        if(Math.abs(v-F_DEFAULT[a.k])<1e-9) continue;      /* 端點就是出廠值，不用多一個主體 */
+        busy(true,"可變字型","計算 "+a.label+(side<0?"（最小）":"（最大）")+"…",80);
+        await yield_();
+        const f={...F, weight:Math.max(8,Math.round(F.weight*sorted[defIdx].mul)), [a.k]:v};
+        const glyphs={};
+        for(let i=0;i<ids.length;i++){
+          glyphs[ids[i]]=glyphContours(ids[i],f,null,N);
+          if((i&1023)===0) await yield_();
+        }
+        const coords=new Array(nAx).fill(0);
+        coords[1+ai]=side;                                  /* 正規化座標：-1 或 +1 */
+        masters.push({name:a.name+(side<0?"Min":"Max"), coords, glyphs});
+      }
+    }
+    const axesOut=[{tag:"wght",name:"Weight",min:minW,def:defW,max:maxW,nameID:256}];
+    let nid=257+sorted.length;
+    for(const a of useExtra){
+      extraNames.push([nid,a.name]);
+      axesOut.push({tag:a.tag,name:a.name,min:a.min,def:F_DEFAULT[a.k],max:a.max,nameID:nid});
+      nid++;
+    }
+    /* 命名實例（細體／標準／粗體…）的座標要補足軸數，否則字型檔會壞。
+       ★ 索引要用「已經補了幾根」來算：coords 一開始只有 wght 一個元素，
+         所以第 j 根額外軸對應 useExtra[j]，而 j = coords.length-1。
+         寫成 useExtra[ins.coords.length-1] 看起來一樣，但 push 之後長度會變，
+         下一圈就取到錯的軸 —— 要先算好再 push。 */
+    for(const ins of instances){
+      for(let j=ins.coords.length-1; j<useExtra.length; j++)
+        ins.coords.push(F_DEFAULT[useExtra[j].k]);
+    }
     const buf=vf_buildVariableFont({
       masters,
-      axes:[{tag:"wght",name:"Weight",min:minW,def:defW,max:maxW,nameID:256}],
+      axes:axesOut,
       chars:ids.map(id=>({ch:id,unicode:G[id].u})),
       family:fam, psName:(lat||"Fangcun")+"-VF",
       EM:EM, ASC:ASC, DESC:DESC,
