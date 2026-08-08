@@ -767,6 +767,29 @@
   }
   /* 畫布外層：自己不捲動，只當「100%」與提示的定位基準。
      真正在捲的是裡面的 .scstage。 */
+  /* 預設縮圖按鈕：上面一個字、下面一行名稱 */
+  #scPreset button.pth{display:flex;flex-direction:column;align-items:center;gap:1px;
+    padding:3px 5px 2px;line-height:1.15}
+  #scPreset button.pth .pth-g{display:block;height:26px;width:26px;opacity:.9}
+  #scPreset button.pth .pth-g svg{display:block}
+  #scPreset button.pth .pth-n{font-size:10px;white-space:nowrap}
+  #scPreset button.pth.on .pth-g{opacity:1}
+  @media(max-width:1099px){
+    #scPreset button.pth .pth-g{height:22px;width:22px}
+    #scPreset button.pth .pth-n{font-size:9px}
+  }
+  /* 風格座標面板：浮在畫布右上角 */
+  #smapBox{position:absolute;right:14px;top:14px;z-index:6;width:172px;height:172px;
+    background:var(--paper);border:1px solid var(--ink);border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.16);touch-action:none;cursor:crosshair}
+  #smapBox[hidden]{display:none}
+  #smapBox .smap-l{position:absolute;left:50%;transform:translateX(-50%);
+    font-size:10px;color:var(--muted);white-space:nowrap;pointer-events:none}
+  #smapBox .smap-v{position:absolute;left:50%;top:9%;bottom:9%;width:1px;background:var(--box);opacity:.5}
+  #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
+  #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
+    border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
+  @media(max-width:1099px){ #smapBox{width:132px;height:132px;right:8px;top:8px} }
   .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
   .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
@@ -1379,6 +1402,12 @@
          絕對定位的子元素會「跟著內容捲」——「100%」和選字提示才會浮到畫面中間。
          把它們移到這層不捲動的 wrapper 底下，就永遠釘在畫布區的角落。 -->
     <div class="scstagewrap">
+      <div id="smapBox" hidden>
+        <span class="smap-l" style="top:4px">明體　圓體</span>
+        <span class="smap-l" style="bottom:4px">楷書　黑體</span>
+        <i class="smap-v"></i><i class="smap-h"></i>
+        <div id="smapDot"></div>
+      </div>
     <div class="scstage" id="scStage">
       <!-- 縮放只作用在顯示層：包一層做 CSS transform，
            不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
@@ -1422,7 +1451,9 @@
             ><button data-k="right">靠右</button></div></div>
         <div class="sclay-g" style="grid-column:1/-1"><label>預設</label>
           <div class="seg" id="scPreset"></div>
-          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button></div>
+          <button class="btn ghost sm" id="scReset" type="button">重設設計軸</button>
+          <button class="btn ghost sm" id="smapToggle" type="button" aria-pressed="false"
+                  title="拖一顆點在四種字體之間連續移動">風格座標</button></div>
         <div class="sclay-g"><label>單字</label>
           <button class="btn ghost sm" id="scAxOn" type="button" aria-pressed="false">只調這個字</button>
           <button class="btn ghost sm" id="scAxClr" type="button">清除</button>
@@ -7566,7 +7597,7 @@ if($("scStage")) $("scStage").addEventListener("wheel",e=>{
    原本改文字時只清了 scOvr，scCustom 留著 —— 只要同一個字又回到同一個位置，
    舊的自訂色就冒出來，而且 fill 的判斷順序是 cust 最優先，
    於是那幾個字對調色盤完全沒反應。這就是「有些字卡住、調不動」。 */
-$("scTxt").addEventListener("input",()=>{scOvr={};scCustom={};scSelKey=null;scFitInput();scDraw();saveLocal();});
+$("scTxt").addEventListener("input",()=>{scOvr={};scCustom={};scSelKey=null;scFitInput();scDraw();scPresetThumbs();saveLocal();});
 $("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
 $("scWt").addEventListener("input",e=>{const val=+e.target.value;
   if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).weight=val;
@@ -8764,6 +8795,48 @@ function scBalanceBy(measure,axis,rng,label){
     ? "已把 "+moved+" 個字調成"+label+" —— 可以再逐字微調，或按「清除」還原"
     : "這幾個字本來就夠接近了";
 }
+/* ==========================================================================
+   風格座標（Style Map）
+   38 根滑桿對第一次用的人太多。這是一塊二維面板，拖一顆點就能在
+   四種字體之間連續移動 —— 每個位置都是四個角的加權混合。
+
+   ★ 關鍵決定：四個角放「已經調校過的預設」，不是自己發明一套軸增減。
+     每個點都是四組驗證過的參數的混合，不會跑到沒人試過的組合。
+     這五個預設的離散軸（term/head/hookst）剛好都是 0，所以純數值內插就夠。
+     ——加新角時要重新確認這一點，否則造型軸會被內插成 2.7 這種無意義的值。
+   ========================================================================== */
+const SMAP_CORNERS={ lt:"ming", rt:"yuan", lb:"kai", rb:"hei" };
+let smapX=0.5, smapY=0.5, smapOn=false;
+function scStyleMapApply(x,y){
+  smapX=Math.max(0,Math.min(1,x)); smapY=Math.max(0,Math.min(1,y));
+  const P={lt:PRESETS[SMAP_CORNERS.lt], rt:PRESETS[SMAP_CORNERS.rt],
+           lb:PRESETS[SMAP_CORNERS.lb], rb:PRESETS[SMAP_CORNERS.rb]};
+  const w={ lt:(1-smapX)*(1-smapY), rt:smapX*(1-smapY),
+            lb:(1-smapX)*smapY,     rb:smapX*smapY };
+  /* 先回到出廠值再疊 —— 跟 applyPreset 同樣的道理：
+     只混合「預設有列出來的鍵」的話，沒列到的軸會留在上一組的值。 */
+  for(const k of AXKEYS) if(F_DEFAULT[k]!==undefined) F[k]=F_DEFAULT[k];
+  const acc={};
+  for(const corner of ["lt","rt","lb","rb"]){
+    const pre=P[corner]; if(!pre) continue;
+    for(const k in pre){ if(typeof pre[k]!=="number") continue;
+      acc[k]=(acc[k]||0)+pre[k]*w[corner]; }
+  }
+  for(const k in acc){ if(k==="seed") continue; F[k]=acc[k]; }
+  /* 離散軸取權重最大的角，不能內插 */
+  const domin=["lt","rt","lb","rb"].reduce((a,b)=>w[a]>=w[b]?a:b);
+  for(const k of ["term","head","hookst"]){
+    const v=P[domin]&&P[domin][k];
+    F[k]= typeof v==="number" ? v : F_DEFAULT[k];
+  }
+  presetKey="";
+  document.querySelectorAll("#scPreset button").forEach(b=>b.classList.remove("on"));
+  scStyleMapDot(); scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+}
+function scStyleMapDot(){
+  const d=$("smapDot"); if(!d) return;
+  d.style.left=(smapX*100)+"%"; d.style.top=(smapY*100)+"%";
+}
 function scBalanceWidth(){
   /* 視覺等寬：中文字的字身框本來就等寬，但墨跡寬度差很多
      （實測「方寸建築」四個字差 1.21 倍）。標準字要的是看起來一樣寬。 */
@@ -8809,6 +8882,26 @@ if($("scShadowMode")) $("scShadowMode").addEventListener("click",e=>{
   document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x===b));
   scDraw(); saveLocal();
 });
+if($("smapToggle")) $("smapToggle").addEventListener("click",()=>{
+  smapOn=!smapOn;
+  $("smapBox").hidden=!smapOn;
+  $("smapToggle").setAttribute("aria-pressed",smapOn?"true":"false");
+  $("smapToggle").textContent=smapOn?"收起":"打開";
+  if(smapOn) scStyleMapDot();
+});
+if($("smapBox")){
+  const box=$("smapBox"); let drag=false;
+  const at=e=>{ const r=box.getBoundingClientRect();
+    return [(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]; };
+  box.addEventListener("pointerdown",e=>{ drag=true;
+    try{ box.setPointerCapture(e.pointerId); }catch(err){}
+    scCommit(); const [x,y]=at(e); scStyleMapApply(x,y); e.preventDefault(); });
+  box.addEventListener("pointermove",e=>{ if(!drag) return;
+    const [x,y]=at(e); scStyleMapApply(x,y); e.preventDefault(); });
+  const end=()=>{ if(drag){ drag=false; saveLocal(); } };
+  box.addEventListener("pointerup",end);
+  box.addEventListener("pointercancel",end);
+}
 if($("scRefBtn")) $("scRefBtn").addEventListener("click",()=>$("scRefIn").click());
 if($("scRefIn")) $("scRefIn").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value="";
@@ -8904,7 +8997,12 @@ function scBuildPresets(){
   const seg=$("scPreset"); if(!seg||seg.childElementCount) return;
   for(const k of Object.keys(PRESETS)){
     const b=document.createElement("button");
-    b.type="button"; b.dataset.p=k; b.textContent=PNAME[k]||k;
+    b.type="button"; b.dataset.p=k;
+    /* ★ 縮圖而不只是文字。純文字看不出「明體」跟「楷書」差在哪 ——
+       用使用者自己輸入的第一個字去渲染，看得到才選得下去。
+       只畫一個字、而且有快取，成本很低。 */
+    b.className="pth";
+    b.innerHTML='<span class="pth-g"></span><span class="pth-n">'+(PNAME[k]||k)+'</span>';
     b.addEventListener("click",()=>{
       applyPreset(k); presetKey=k;
       document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
@@ -8915,7 +9013,38 @@ function scBuildPresets(){
     seg.appendChild(b);
   }
   document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===presetKey));
+  scPresetThumbs();
   if(typeof scSeedLabel==="function") scSeedLabel();
+}
+/* 預設縮圖：拿使用者輸入的第一個字，用各預設的參數畫出來。
+   ★ 用 requestAnimationFrame 分批，18 個字形一次算完會卡一下畫面。
+   ★ 快取以「字＋預設」為鍵；換字才重畫。 */
+let PTHUMB_CH=null;
+function scPresetThumbs(){
+  const seg=$("scPreset"); if(!seg) return;
+  const txt=($("scTxt")&&$("scTxt").value||"").replace(/\s/g,"");
+  const ch=[...txt][0]||"永";
+  if(ch===PTHUMB_CH) return;
+  PTHUMB_CH=ch;
+  const btns=[...seg.querySelectorAll("button")];
+  let i=0;
+  const step=()=>{
+    if(i>=btns.length) return;
+    const b=btns[i++], k=b.dataset.p, holder=b.querySelector(".pth-g");
+    if(holder && PRESETS[k]){
+      const f={};
+      for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) f[ax]=F_DEFAULT[ax];
+      Object.assign(f,PRESETS[k]);
+      let d="";
+      try{ const cs=glyphContours(ch,f); if(cs&&cs.length) d=cs.map(svgD).join(" "); }catch(e){}
+      holder.innerHTML = d
+        ? '<svg viewBox="0 0 1000 1000" width="26" height="26" aria-hidden="true">'+
+          '<path d="'+d+'" fill="currentColor" fill-rule="nonzero"/></svg>'
+        : "";
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 $("scReset").addEventListener("click",()=>{
   if(scAxMode&&scAxKey){                 /* 單字模式：只清這個字 */
