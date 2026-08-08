@@ -779,6 +779,34 @@
     #scPreset button.pth .pth-n{font-size:9px}
   }
   /* 風格座標面板：浮在畫布右上角 */
+  /* 風格模式：底部整區換成風格介面 */
+  .smapmode{order:2;width:100%;display:flex;gap:12px;align-items:center;
+    padding:6px 0 2px;overflow:hidden}
+  .smapmode[hidden]{display:none}
+  .smapthumbs{flex:1 1 auto;display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;
+    scrollbar-width:thin;min-width:0}
+  .smapthumbs::-webkit-scrollbar{height:5px}
+  .smapthumbs button{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+    border:1px solid var(--line-2,#cfc8b8);background:var(--paper);color:var(--ink);
+    border-radius:9px;padding:6px 8px 4px;cursor:pointer;font-family:inherit}
+  .smapthumbs button:hover{background:var(--line,#e8e3d6)}
+  .smapthumbs button.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+  .smapthumbs .t-g{display:block;width:40px;height:40px}
+  .smapthumbs .t-g svg{display:block}
+  .smapthumbs .t-n{font-size:10.5px;white-space:nowrap}
+  /* 風格模式下 .scfoot 只留輸入框與風格區。
+     .tag（字數統計）與 #scTypeBox（21 根軸的收合盒）也要一起收，
+     否則風格區被擠在中間、下面還掛著一堆東西。 */
+  body.smap-on .scfoot>.scaxes,
+  body.smap-on .scfoot>.scfoot-type,
+  body.smap-on .scfoot>.tag,
+  body.smap-on .scfoot>#scTypeMore,
+  body.smap-on #scTypeBox{display:none !important}
+  @media(max-width:1099px){
+    .smapmode{gap:8px}
+    .smapthumbs .t-g{width:32px;height:32px}
+    .smapthumbs .t-n{font-size:9.5px}
+  }
   /* 風格座標的小按鈕：畫布左下，跟右下的縮放 −／＋ 對稱。
      左下原本是提示文字 .schint，按鈕放它上面一點。 */
   #smapBtn{position:absolute;left:10px;bottom:34px;z-index:6;
@@ -788,12 +816,12 @@
   #smapBtn:hover{background:var(--line,#e8e3d6)}
   #smapBtn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   @media(max-width:700px){ #smapBtn{left:8px;bottom:30px;padding:6px 10px;font-size:11px} }
-  #smapBox{position:absolute;left:10px;bottom:74px;z-index:6;width:172px;height:172px;
+  #smapBox{position:relative;flex:none;width:128px;height:128px;
     background:var(--paper);border:1px solid var(--ink);border-radius:10px;
-    box-shadow:0 6px 20px rgba(0,0,0,.16);touch-action:none;cursor:crosshair}
-  #smapBox[hidden]{display:none}
-  #smapBox .smap-l{position:absolute;left:50%;transform:translateX(-50%);
+    touch-action:none;cursor:crosshair}
+  #smapBox .smap-l{position:absolute;left:50%;top:4px;transform:translateX(-50%);
     font-size:10px;color:var(--muted);white-space:nowrap;pointer-events:none}
+  #smapBox .smap-b{top:auto;bottom:4px}
   #smapBox .smap-v{position:absolute;left:50%;top:9%;bottom:9%;width:1px;background:var(--box);opacity:.5}
   #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
   #smapNext{position:absolute;left:5px;top:3px;z-index:2;border:0;background:transparent;
@@ -802,7 +830,7 @@
   #smapNext:hover{background:var(--line,#e8e3d6);color:var(--ink)}
   #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
     border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
-  @media(max-width:1099px){ #smapBox{width:132px;height:132px;left:8px;bottom:66px} }
+  @media(max-width:1099px){ #smapBox{width:104px;height:104px} }
   .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
   .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
@@ -1416,15 +1444,7 @@
          把它們移到這層不捲動的 wrapper 底下，就永遠釘在畫布區的角落。 -->
     <div class="scstagewrap">
       <button id="smapBtn" type="button" aria-pressed="false"
-              title="風格座標：拖一顆點在四種字體之間連續移動">風格</button>
-      <div id="smapBox" hidden>
-        <span class="smap-l" id="smapTop" style="top:4px">明體　圓體</span>
-        <span class="smap-l" id="smapBot" style="bottom:4px">楷書　黑體</span>
-        <button id="smapNext" type="button" title="換一組座標">
-          <span id="smapName">基本</span> ⇄</button>
-        <i class="smap-v"></i><i class="smap-h"></i>
-        <div id="smapDot"></div>
-      </div>
+              title="風格模式：底部換成風格選擇">風格</button>
     <div class="scstage" id="scStage">
       <!-- 縮放只作用在顯示層：包一層做 CSS transform，
            不改 SVG 的實際尺寸，繪圖與匯出邏輯完全不受影響。 -->
@@ -1443,6 +1463,20 @@
       <textarea id="scTxt" rows="1" spellcheck="false" placeholder="打字看看…（Shift + Enter 換行）">永春</textarea>
       <!-- 這是調字的工具，字型軸就是主要操作 —— 常駐在底部列，不要藏進面板。
            放六根最能改變字型個性的；其餘二十一根在下方調整區。 -->
+      <!-- 風格模式：點畫布左下的「風格」進來，底部整區換成風格介面。
+           左邊是座標盤（拖一顆點在四種字體之間連續移動），右邊是可捲的縮圖。 -->
+      <div class="smapmode" id="smapMode" hidden>
+        <div id="smapBox">
+          <span class="smap-l" id="smapTop">明體　圓體</span>
+          <span class="smap-l smap-b" id="smapBot">楷書　黑體</span>
+          <button id="smapNext" type="button" title="換一組座標">
+            <span id="smapName">基本</span> ⇄</button>
+          <i class="smap-v"></i><i class="smap-h"></i>
+          <div id="smapDot"></div>
+        </div>
+        <div class="smapthumbs" id="smapThumbs"></div>
+        <button class="btn ghost sm" id="smapClose" type="button">完成</button>
+      </div>
       <div class="scaxes" id="scAxes">
         <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"><b id="scWtB">88</b></div>
         <div class="g"><label>對比</label><input type="range" id="scCt" min="0.62" max="1.90" step="0.02" value="1.02"><b id="scCtB">1.02</b></div>
@@ -7612,7 +7646,7 @@ if($("scStage")) $("scStage").addEventListener("wheel",e=>{
    原本改文字時只清了 scOvr，scCustom 留著 —— 只要同一個字又回到同一個位置，
    舊的自訂色就冒出來，而且 fill 的判斷順序是 cust 最優先，
    於是那幾個字對調色盤完全沒反應。這就是「有些字卡住、調不動」。 */
-$("scTxt").addEventListener("input",()=>{scOvr={};scCustom={};scSelKey=null;scFitInput();scDraw();scPresetThumbs();saveLocal();});
+$("scTxt").addEventListener("input",()=>{scOvr={};scCustom={};scSelKey=null;scFitInput();scDraw();scPresetThumbs();if(smapOn) smapBuildThumbs();saveLocal();});
 $("scClear").addEventListener("click",()=>{scOvr={};scCustom={};scDraw();saveLocal();});
 $("scWt").addEventListener("input",e=>{const val=+e.target.value;
   if(scAxMode&&scAxKey){ (scAxOvr[scAxKey]||(scAxOvr[scAxKey]={})).weight=val;
@@ -8918,12 +8952,64 @@ if($("scShadowMode")) $("scShadowMode").addEventListener("click",e=>{
   document.querySelectorAll("#scShadowMode button").forEach(x=>x.classList.toggle("on",x===b));
   scDraw(); saveLocal();
 });
-if($("smapBtn")) $("smapBtn").addEventListener("click",()=>{
-  smapOn=!smapOn;
-  $("smapBox").hidden=!smapOn;
-  $("smapBtn").setAttribute("aria-pressed",smapOn?"true":"false");
-  if(smapOn) scStyleMapDot();
-});
+/* 風格模式：底部整區換成風格介面。
+   ★ 用 body 的 class 控制顯示／隱藏，不動 DOM —— 重建 DOM 是以前把版面弄壞的原因。 */
+function scStyleMode(on){
+  smapOn=!!on;
+  document.body.classList.toggle("smap-on",smapOn);
+  const m=$("smapMode"); if(m) m.hidden=!smapOn;
+  const b=$("smapBtn"); if(b) b.setAttribute("aria-pressed",smapOn?"true":"false");
+  if(smapOn){ scStyleMapDot(); smapBuildThumbs(); }
+}
+if($("smapBtn")) $("smapBtn").addEventListener("click",()=>scStyleMode(!smapOn));
+if($("smapClose")) $("smapClose").addEventListener("click",()=>scStyleMode(false));
+/* 風格模式的大縮圖：直接就是 18 個預設，用使用者輸入的第一個字渲染。
+   跟預設列共用 scPresetThumbs 的思路，但尺寸大、可橫向捲。 */
+let SMAP_TH_CH=null;
+function smapBuildThumbs(){
+  const box=$("smapThumbs"); if(!box) return;
+  const txt=($("scTxt")&&$("scTxt").value||"").replace(/\s/g,"");
+  const ch=[...txt][0]||"永";
+  if(box.childElementCount && ch===SMAP_TH_CH){
+    box.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.p===presetKey));
+    return;
+  }
+  SMAP_TH_CH=ch;
+  box.textContent="";
+  const list=Object.keys(PRESETS);
+  for(const k of list){
+    const b=document.createElement("button");
+    b.type="button"; b.dataset.p=k;
+    b.innerHTML='<span class="t-g"></span><span class="t-n">'+(PNAME[k]||k)+'</span>';
+    b.classList.toggle("on",k===presetKey);
+    b.addEventListener("click",()=>{
+      scCommit(); applyPreset(k); presetKey=k;
+      document.querySelectorAll("#smapThumbs button").forEach(x=>x.classList.toggle("on",x===b));
+      document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
+      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];
+      syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+    });
+    box.appendChild(b);
+  }
+  /* 分批畫，18 個一次算完會卡一下 */
+  const btns=[...box.querySelectorAll("button")];
+  let i=0;
+  const step=()=>{
+    if(i>=btns.length) return;
+    const b=btns[i++], k=b.dataset.p, g=b.querySelector(".t-g");
+    if(g&&PRESETS[k]){
+      const f={};
+      for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) f[ax]=F_DEFAULT[ax];
+      Object.assign(f,PRESETS[k]);
+      let d="";
+      try{ const cs=glyphContours(ch,f); if(cs&&cs.length) d=cs.map(svgD).join(" "); }catch(e){}
+      g.innerHTML = d ? '<svg viewBox="0 0 1000 1000" width="100%" height="100%" aria-hidden="true">'+
+        '<path d="'+d+'" fill="currentColor" fill-rule="nonzero"/></svg>' : "";
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 if($("smapBox")){
   const box=$("smapBox"); let drag=false;
   const at=e=>{ const r=box.getBoundingClientRect();
