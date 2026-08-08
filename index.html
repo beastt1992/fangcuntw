@@ -1712,7 +1712,7 @@ const F={weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00
             它在 axesOf() 裡把其他軸整組往「更有個性」的方向推。 */
          pers:0,
          /* 端點造型（0＝依筆意，就是現狀）與內白圓度（0＝不作用） */
-         term:0, cround:0,
+         term:0, head:0, cround:0,
          /* 端點造型。出廠值＝圓角值，所以出廠輸出跟以前一模一樣；
             拆出來之後就能「圓角大但端點方」，做標準字很需要。 */
          cap:0.18,
@@ -1728,7 +1728,7 @@ const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','ha
                /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
                   漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
                   「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
-               'diag','cnaniso','term','cround','pers'];
+               'diag','cnaniso','term','head','cround','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -2709,13 +2709,16 @@ function caps(st,f){
   /* ★ 端點造型：把原本寫死的幾種端點開放成一根軸。
      只覆寫「開放端」—— 鉤、腳跟、接續、彎尾帶有結構語意，覆寫掉字會散。
      0＝依筆意（完全等於舊行為）。 */
+  /* 收筆造型只管收筆，起筆另一根 —— 書法區分藏鋒／露鋒／方筆，那是起筆的事。 */
   const TERM=["", "flat", 1, "uroko", "pt", "wedge"];
-  const tm=TERM[Math.round(f.term||0)] ?? "";
+  const HEAD=["", 1, "pt", "flat", "silk"];      /* 依筆意／藏鋒／露鋒／方筆／蠶頭 */
+  let tm=TERM[Math.round(f.term||0)] ?? "";
+  const hd=HEAD[Math.round(f.head||0)] ?? "";
   const OPEN=q=>(!q || q==="open");
-  if(tm!==""){
-    /* 三角（うろこ）本來就只在橫畫收筆才成立，套到豎畫會變成怪刺 */
-    if(!(tm==="uroko" && st.t!=="heng")) r=tm;
-  }
+  /* 三角（うろこ）本來就只在橫畫收筆才成立，套到豎畫會變成怪刺 */
+  if(tm==="uroko" && st.t!=="heng") tm="";
+  const rEnd = tm!=="" ? tm : r;
+  const rHead= hd!=="" ? hd : r;
   if(st.h||st.e){
     /* 明體：橫畫開放的收筆長出三角（うろこ） */
     const uroko = f.finish>0.45 && st.t==="heng" && (!st.e||st.e==="open");
@@ -2724,18 +2727,20 @@ function caps(st,f){
     if(f.inflate>0.15) return {a:"round", b:"round"};   /* 膨脹一律圓頭 */
     /* 使用者指定造型時，開放端才換掉；有語意的端點維持原本的 CAP_OF */
     const bb = uroko ? "uroko" : (CAP_OF[st.e] || r);
-    return {a: (tm!==""&&OPEN(st.h)) ? r : ha,
-            b: (tm!==""&&OPEN(st.e)) ? r : bb};
+    return {a: (hd!==""&&OPEN(st.h)) ? rHead : ha,
+            b: (tm!==""&&OPEN(st.e)) ? rEnd  : bb};
   }
   switch(st.t){
-    case "pie": return {a:r,b:"pt"};
-    /* ★ r 現在可能是 "flat"/"wedge" 這種字串（端點造型軸），
-       Math.min("flat",0.25) 會得到 NaN 並一路流進座標。只有數值才夾限。 */
-    case "na":  return {a:"pt",b:(typeof r==="number"?Math.min(r,0.25):r)};
-    case "dian":return {a:"pt",b:(typeof r==="number"?Math.max(r,0.5):r)};
-    case "ti":  return {a:r,b:"pt"};
-    case "zhe": return {a:r,b:st.end==="hook"?"pt":r};
-    default:    return {a:r,b:r};
+    /* 撇捺點提的收筆本來就是尖的（那是筆意不是造型選擇），所以不套收筆造型；
+       起筆一律交給 head。
+       ★ rEnd 可能是 "flat"/"wedge" 這種字串，Math.min("flat",0.25) 會得到 NaN
+         並一路流進座標 —— 只有數值才夾限。 */
+    case "pie": return {a:rHead,b:"pt"};
+    case "na":  return {a:"pt",b:(typeof rEnd==="number"?Math.min(rEnd,0.25):rEnd)};
+    case "dian":return {a:"pt",b:(typeof rEnd==="number"?Math.max(rEnd,0.5):rEnd)};
+    case "ti":  return {a:rHead,b:"pt"};
+    case "zhe": return {a:rHead,b:st.end==="hook"?"pt":rEnd};
+    default:    return {a:rHead,b:rEnd};
   }
 }
 function capCmds(kind,tip,T,w,dir,to,out,f){
@@ -2768,6 +2773,15 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
     out.push(["L", ex-nx*w*1.15*g, ey-ny*w*1.15*g]);
     out.push(["L", ex+T[0]*w*1.05*g*dir, ey+T[1]*w*1.05*g*dir]);
     out.push(["L", to[0], to[1]]); return;
+  }
+  if(kind==="silk"){
+    /* 蠶頭：隸書橫畫的起筆，比筆身更飽滿的圓頭 —— 控制點推得比一般圓頭遠並往兩側撐。 */
+    const nx=-T[1], ny=T[0];
+    out.push(["Q", tip[0]+T[0]*w*0.95*dir-nx*w*0.34, tip[1]+T[1]*w*0.95*dir-ny*w*0.34,
+                   tip[0]+T[0]*w*1.05*dir,           tip[1]+T[1]*w*1.05*dir]);
+    out.push(["Q", tip[0]+T[0]*w*0.95*dir+nx*w*0.34, tip[1]+T[1]*w*0.95*dir+ny*w*0.34,
+                   to[0], to[1]]);
+    return;
   }
   if(kind==="wedge"){
     /* 楔形：一側順著切線頂出去、另一側幾乎不動，形成斜切的尖。
@@ -4946,8 +4960,10 @@ const AXES=[
   /* 內白保護：字很粗時，筆畫之間該留的白會被擠掉糊成一團。
      這根軸會在該留白的地方挖出保證寬度的縫。出廠 0（關），
      只有做極粗的標準字才需要開，36 是實測的甜蜜點。 */
-  {k:"term",    n:"端點造型",en:"TERM", min:0,   max:5,   step:1,   lo:"依筆意",hi:"楔形",
+  {k:"term",    n:"收筆造型",en:"TERM", min:0,   max:5,   step:1,   lo:"依筆意",hi:"楔形",
    f:v=>["依筆意","平切","圓頭","三角","尖收","楔形"][Math.round(v)]||String(v)},
+  {k:"head",    n:"起筆造型",en:"HEAD", min:0,   max:4,   step:1,   lo:"依筆意",hi:"蠶頭",
+   f:v=>["依筆意","藏鋒","露鋒","方筆","蠶頭"][Math.round(v)]||String(v)},
   {k:"cround",  n:"內白圓度",en:"CRND", min:0,   max:1,   step:0.02,lo:"方",  hi:"圓",  f:v=>(+v).toFixed(2)},
   {k:"pers",    n:"個性",    en:"PERS", min:0,   max:100, step:1,   lo:"正常",hi:"誇張",f:v=>String(v|0)},
   {k:"diag",    n:"斜筆粗細",en:"DIAG", min:0.45,max:1.75,step:0.01,lo:"細",  hi:"粗",  f:v=>(+v).toFixed(2)},
@@ -4975,6 +4991,25 @@ const PRESETS={
   lgScatter:{weight:84,optic:0.70,contrast:1.05,round:0.22,counter:1.00,gravity:1.00,face:1.05,
     hand:0.42,finish:0,width:1.00,slant:0,taper:1.10,hook:1.00,dun:0.00,press:0.00,rise:0.03,
     seed:88,scatter:0.34,wobble:0.46,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.22,cmin:0},
+  /* ---- 書法風格。對照各書體的筆法特徵調出來的：
+         篆＝等粗圓筆無鉤；隸＝橫粗豎細、蠶頭燕尾、扁寬；
+         魏碑＝方筆斬截；瘦金＝極細高對比長鉤；行書＝圓轉帶書寫感。
+         草書沒做 —— 它需要連筆與簡化結構，那是骨架的事，不是參數調得出來的。 ---- */
+  zhuan:{weight:62,contrast:1.00,round:0.90,counter:1.02,gravity:1.00,face:1.00,
+    hand:0.06,finish:0,width:0.88,slant:0,taper:0.00,hook:0.10,dun:0.00,press:0.00,rise:0.00,
+    cap:1.00,term:2,head:1,optic:0.35,cnaniso:0,diag:1.00,cround:0,pers:0,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cmin:0},
+  li:{weight:78,contrast:0.72,round:0.34,counter:1.06,gravity:0.98,face:1.04,
+    hand:0.12,finish:0.55,width:1.18,slant:0,taper:0.70,hook:0.22,dun:0.85,press:0.70,rise:0.02,
+    cap:0.34,term:5,head:4,optic:0.35,cnaniso:0,diag:1.00,cround:0,pers:0,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cmin:0},
+  weibei:{weight:92,contrast:1.28,round:0.02,counter:0.94,gravity:1.00,face:1.05,
+    hand:0.10,finish:0.45,width:1.00,slant:0.04,taper:1.20,hook:1.15,dun:1.20,press:0.85,rise:0.06,
+    cap:0.02,term:5,head:3,optic:0.35,cnaniso:0,diag:1.00,cround:0,pers:0,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cmin:0},
+  shoujin:{weight:38,contrast:1.85,round:0.10,counter:1.10,gravity:1.00,face:1.02,
+    hand:0.08,finish:0.75,width:0.94,slant:0,taper:1.50,hook:1.85,dun:0.70,press:1.10,rise:0.12,
+    cap:0.10,term:4,head:2,optic:0.35,cnaniso:0,diag:1.00,cround:0,pers:0,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cmin:0},
+  xing:{weight:58,contrast:1.35,round:0.72,counter:0.90,gravity:0.96,face:1.02,
+    hand:0.62,finish:0.40,width:1.00,slant:0.05,taper:1.20,hook:1.20,dun:0.60,press:1.05,rise:0.09,
+    cap:0.72,term:0,head:1,optic:0.35,cnaniso:0,diag:1.00,cround:0,pers:0,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cmin:0},
   hei:{weight:80,optic:0.70,contrast:1.02,round:0.18,counter:1.00,gravity:1.00,face:1.05,hand:0,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.18,cmin:0},
   yuan:{weight:84,optic:0.45,contrast:1.00,round:1.00,counter:0.90,gravity:0.97,face:1.03,hand:0.06,finish:0,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:1.00,cmin:0},
   ming:{weight:60,optic:0.35,contrast:2.10,round:0.04,counter:1.08,gravity:1.03,face:1.05,hand:0,finish:0.95,width:1.00,slant:0,taper:1.00,hook:1.00,dun:0.85,press:0.25,rise:0.045,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.04,cmin:0},
@@ -4984,7 +5019,7 @@ const PRESETS={
   kai:{weight:64,optic:0.35,contrast:1.25,round:0.30,counter:0.96,gravity:0.99,face:1.02,hand:0.10,finish:0.30,width:1.00,slant:0,taper:1.15,hook:1.06,dun:1.00,press:1.00,rise:0.114,seed:7,scatter:0.00,wobble:0.00,spike:0.00,hollow:0.00,arch:0.00,inflate:0.00,wave:0.00,chop:0.00,cap:0.30,cmin:0},
   kage:{weight:50,optic:0.00,contrast:1.00,round:0.02,counter:1.00,gravity:1.00,face:1.00,hand:0,finish:0,width:1.00,slant:0,taper:0.00,hook:1.00,dun:0.00,press:0.00,rise:0.00,miter:0,cap:0.02,cmin:0}
 };
-const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
+const PNAME={lgSharp:"銳利",lgPlump:"膨潤",lgWire:"線框",lgBroken:"破碎",lgWave:"波動",lgScatter:"散排",zhuan:"篆書",li:"隸書",weibei:"魏碑",shoujin:"瘦金",xing:"行書",hei:"黑體",yuan:"圓體",ming:"明體",hand:"手寫",title:"標題黑",kai:"楷書",kage:"原樣"};
 const PNAME_EN={lgSharp:"Sharp",lgPlump:"Plump",lgWire:"Wire",lgBroken:"Broken",lgWave:"Wave",lgScatter:"Scatter",hei:"Hei",yuan:"Yuan",ming:"Ming",hand:"Hand",title:"Display",kai:"Kai",kage:"Source"};
 const asciiSafe=v=>(v||"").replace(/[^\x20-\x7E]/g,"").replace(/[^A-Za-z0-9-]/g,"").slice(0,40);
 
@@ -5612,7 +5647,7 @@ const SCMORE_SKIP=new Set(["weight","contrast","round","face","counter","taper"]
 const SCAX_GROUPS=[
   {t:"個性（一根推動全部）",en:"PERSONALITY",ks:["pers"]},
   {t:"骨架",en:"SKELETON",ks:["gravity","width","slant","rise"]},
-  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag","term"]},
+  {t:"筆畫",en:"STROKE",  ks:["optic","hand","finish","hook","dun","press","cap","diag","head","term"]},
   {t:"造型（做標準字用）",en:"DISPLAY",ks:["seed","scatter","wobble","spike","hollow","arch","inflate","wave","chop"]},
   {t:"內白",en:"COUNTER", ks:["cnaniso","cmin","cround"]}
 ];
@@ -6767,6 +6802,7 @@ function scRandomFace(){
     cmin:0,
     /* 端點造型：六成機率維持「依筆意」，其餘隨機挑一種 —— 這根對外觀影響很大 */
     term: rrChance(0.40)? (1+Math.floor(Math.random()*5)) : 0,
+    head: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
     cround: rrChance(0.30)? +rrRnd(0.3,1.0).toFixed(2) : 0,
     pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
     seed:1+Math.floor(Math.random()*999)
