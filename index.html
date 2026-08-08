@@ -1414,6 +1414,9 @@
              同一塊面板兩個「隨機」意思不同，按下去只會嚇到人。 -->
         <div class="sclay-g"><label>隨機字形</label>
           <button class="btn ghost sm" id="scReroll" type="button">重骰</button>
+            <label style="font-size:10.5px;color:var(--muted)">變化</label>
+            <input type="range" id="scRandAmt" min="0" max="1" step="0.05" value="1" style="width:96px">
+            <b id="scRandAmtV" style="font-family:var(--mono);font-size:10px;width:34px">100%</b>
           <span class="tip" id="scSeedV" style="font-family:var(--mono);font-size:10px">種子 7</span></div>
       </div>
       <button class="btn ghost sm" id="scTypeMore" type="button" aria-expanded="false">展開調整</button>
@@ -6875,23 +6878,30 @@ function scSeedLabel(){
 const rrRnd=(a,b)=>a+Math.random()*(b-a);
 const rrPick=a=>a[Math.floor(Math.random()*a.length)];
 const rrChance=p=>Math.random()<p;
+/* 變化程度：0 ＝ 幾乎不動（在你現在這套字上微調），1 ＝ 完全隨機。
+   這是工具設定不是字型參數，所以不放進 AXES，另外存。 */
+let scRandAmt=1;
 function scRandomFace(){
-  /* 狂野版：字重、字寬、傾斜、對比全部拉到軸的實際邊界，
-     造型效果的機率與強度都提高，而且允許疊兩種。
-     仍然保留的護欄（純亂數必醜的那幾條）：
+  /* 先抽一組「完全隨機」的目標，再依變化程度往目前這套字內插。
+     所以低變化程度不是「小幅度的全新隨機」，而是「你這套字的變體」——
+     這才是調整程度該有的行為。
+
+     保留的護欄（純亂數必醜的那幾條）：
        · 高對比一定配收筆與頓，否則橫畫細得像斷掉
        · 端點跟圓角同向
        · 視覺補償不離開 0.55–0.80
-       · 內白保護永遠 0（那段還是壞的） */
-  const wt=Math.round(rrRnd(34,150));                 /* 原本 46–132 → 拉到滿 */
+       · 內白保護永遠 0（那段還是壞的）
+       · 內白圓度永遠 0（會讓每次重畫慢五倍，不該由骰子決定） */
+  const t=Math.max(0,Math.min(1,scRandAmt));
+  const cur={...F};
+  const wt=Math.round(rrRnd(34,150));
   const heavy=wt>100, light=wt<58;
   const roundness=rrPick([0,0.04,0.10,0.20,0.34,0.55,0.78,0.92,1.00]);
-  /* 細字才撐得住強對比；明體預設本身就到 2.10，這裡也放行 */
   const ct = heavy ? rrRnd(0.85,1.30)
            : light ? rrRnd(0.90,2.10)
                    : rrRnd(0.85,1.75);
   const hiCt = ct>1.4;
-  Object.assign(F,{
+  const T={
     weight:wt,
     optic:+rrRnd(0.55,0.80).toFixed(2),
     contrast:+ct.toFixed(2),
@@ -6900,46 +6910,57 @@ function scRandomFace(){
     counter:+rrRnd(heavy?0.78:0.86, heavy?1.02:1.26).toFixed(2),
     face:+rrRnd(0.90,1.10).toFixed(2),
     gravity:+rrRnd(0.88,1.14).toFixed(2),
-    width:+rrRnd(0.76,1.22).toFixed(2),                /* 原本 0.90–1.12 */
-    slant: rrChance(0.34)? +rrRnd(-0.26,0.28).toFixed(2) : 0,   /* 機率與幅度都加大 */
+    width:+rrRnd(0.76,1.22).toFixed(2),
+    slant: rrChance(0.34)? +rrRnd(-0.26,0.28).toFixed(2) : 0,
     finish: hiCt? +rrRnd(0.60,1.00).toFixed(2) : (rrChance(0.42)? +rrRnd(0,0.55).toFixed(2) : 0),
     dun:    hiCt? +rrRnd(0.55,1.30).toFixed(2) : (rrChance(0.42)? +rrRnd(0,0.65).toFixed(2) : 0),
     press:  rrChance(0.45)? +rrRnd(0.20,1.35).toFixed(2) : 0,
     hand:   rrChance(0.38)? +rrRnd(0.10,0.95).toFixed(2) : 0,
     taper:  heavy? +rrRnd(0,0.60).toFixed(2) : +rrRnd(0.40,1.55).toFixed(2),
-    /* 斜筆粗細：高對比那一路撇捺明顯比豎畫細；其餘放到接近滿軸 */
     diag:   hiCt ? +rrRnd(0.45,0.80).toFixed(2) : +rrRnd(0.70,1.60).toFixed(2),
     cnaniso: rrChance(0.50)? +rrRnd(-0.85,0.85).toFixed(2) : 0,
     hook:   +rrRnd(0.45,1.75).toFixed(2),
     rise:   +rrRnd(0,0.14).toFixed(3),
-    scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0,
-    cmin:0,
-    /* 端點造型：六成機率維持「依筆意」，其餘隨機挑一種 —— 這根對外觀影響很大 */
-    term: rrChance(0.40)? (1+Math.floor(Math.random()*5)) : 0,
-    head: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
-    hookst: rrChance(0.35)? (1+Math.floor(Math.random()*4)) : 0,
-    /* ★ 內白圓度不放進重骰。它會啟動布林運算，實測每次重畫慢 5.7 倍
-       （8 字 56ms → 317ms，手機再乘幾倍）—— 隨機抽到就等於整個 app 變頓，
-       而且設定會存進 localStorage，重開還是頓。要用請自己開。 */
-    cround: 0,
-    pers:0,          /* 重骰本身已經夠野；個性留給你自己疊上去 */
-    seed:1+Math.floor(Math.random()*999)
-  });
-  /* 造型效果：六成機率來一種，其中三成再疊第二種。
-     強度也拉高了 —— 但仍然最多兩種，三種以上一定糊成一團。 */
+    scatter:0,wobble:0,spike:0,hollow:0,arch:0,inflate:0,wave:0,chop:0
+  };
+  /* 造型效果：機率隨變化程度縮放 */
   const R={scatter:[0.12,0.62],wobble:[0.18,0.80],spike:[0.45,1.30],hollow:[0.30,0.85],
            inflate:[0.30,0.95],wave:[0.18,0.75],chop:[0.20,0.75],arch:[-0.45,0.45]};
   if(rrChance(0.60)){
     const ks=["scatter","wobble","spike","hollow","inflate","wave","chop","arch"];
     const k=rrPick(ks);
-    F[k]=+rrRnd(R[k][0],R[k][1]).toFixed(2);
-    if(k==="scatter") F.wobble=+rrRnd(0.12,0.42).toFixed(2);
+    T[k]=+rrRnd(R[k][0],R[k][1]).toFixed(2);
+    if(k==="scatter") T.wobble=+rrRnd(0.12,0.42).toFixed(2);
     if(rrChance(0.30)){
-      /* 疊第二種時強度減半，兩個都全開會看不出字 */
       const k2=rrPick(ks.filter(x=>x!==k&&!(k==="scatter"&&x==="wobble")));
-      F[k2]=+(rrRnd(R[k2][0],R[k2][1])*0.55).toFixed(2);
+      T[k2]=+(rrRnd(R[k2][0],R[k2][1])*0.55).toFixed(2);
     }
   }
+  /* 連續軸：往目標內插 */
+  const out={};
+  for(const k in T){
+    const a=typeof cur[k]==="number"?cur[k]:0, b=T[k];
+    out[k]= a + (b-a)*t;
+  }
+  /* 離散軸（造型選項）：用機率決定換不換，機率就是變化程度 */
+  out.term   = rrChance(0.40*t)? (1+Math.floor(Math.random()*5)) : cur.term;
+  out.head   = rrChance(0.35*t)? (1+Math.floor(Math.random()*4)) : cur.head;
+  out.hookst = rrChance(0.35*t)? (1+Math.floor(Math.random()*4)) : cur.hookst;
+  out.cmin=0; out.cround=0; out.pers=0;
+  out.seed=1+Math.floor(Math.random()*999);
+  /* 內插後高對比可能失去收筆與頓的配套，補回護欄 */
+  if(out.contrast>1.4){ out.finish=Math.max(out.finish,0.55); out.dun=Math.max(out.dun,0.50); }
+  /* ★ 夾限。內插本身不會超出範圍（兩端都合法），但上面那幾條護欄是
+     直接寫值的，可能把某根軸推出去。實測 100% 時有 15/400 次超出。 */
+  for(const a2 of AXES){ const v=out[a2.k];
+    if(typeof v==="number") out[a2.k]=Math.max(a2.min,Math.min(a2.max,v)); }
+  Object.assign(F,out);
+}
+if($("scRandAmt")){
+  const sync=()=>{ $("scRandAmtV").textContent=Math.round(scRandAmt*100)+"%"; };
+  $("scRandAmt").addEventListener("input",e=>{ scRandAmt=+e.target.value; sync(); });
+  $("scRandAmt").addEventListener("change",saveLocal);
+  sync();
 }
 $("scReroll").addEventListener("click",()=>{
   scRandomFace();
@@ -7293,6 +7314,7 @@ function scState(){
   const axes={};for(const k of AXKEYS)axes[k]=F[k];
   return {txt:$("scTxt").value,axes,canvas:scCanvas,margin:scMargin,bg:scBgColor,transparent:scTransparentBg,mono:scMonoColor,
     dir:scDir,lay:scLay,pal:scPal.k,col:scCol,blend:scBlend,align:scAlignMode,scale:scScale,gx:scGxAdj,gy:scGyAdj,
+    randAmt:scRandAmt,
     ovr:{...scOvr},custom:{...scCustom},off:JSON.parse(JSON.stringify(scOff)),tr:JSON.parse(JSON.stringify(scTr)),axovr:JSON.parse(JSON.stringify(scAxOvr))};
 }
 function scCommit(){
@@ -7306,6 +7328,10 @@ function scApplyState(s){
     $("scTxt").value=s.txt||""; if(s.axes)for(const k of AXKEYS)if(s.axes[k]!==undefined)F[k]=s.axes[k];
     scCanvas=s.canvas||"free"; scMargin=typeof s.margin==="number"?s.margin:.08; scBgColor=s.bg||scPal.bg;
     scTransparentBg=!!s.transparent; scMonoColor=s.mono||scPal.ink; scDir=s.dir||"h"; scLay=s.lay||"huge";
+    /* 變化程度是工具設定（不在 AXKEYS 裡），還原時要一併帶回並更新滑桿 */
+    if(typeof s.randAmt==="number"){ scRandAmt=s.randAmt;
+      if($("scRandAmt")){ $("scRandAmt").value=scRandAmt;
+        $("scRandAmtV").textContent=Math.round(scRandAmt*100)+"%"; } }
     scSetPaletteKey(s.pal||"yan"); scCol=s.col||"stroke"; scBlend=s.blend||"normal"; scAlignMode=s.align||"center";
     scScale=typeof s.scale==="number"?s.scale:1; scGxAdj=typeof s.gx==="number"?s.gx:0; scGyAdj=typeof s.gy==="number"?s.gy:0;
     scOvr=s.ovr||{};scCustom=s.custom||{};scOff=s.off||{};scTr=s.tr||{};scAxOvr=s.axovr||{};scSelKey=null;
