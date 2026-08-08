@@ -846,6 +846,12 @@
   #smapBox .smap-v{position:absolute;left:50%;top:9%;bottom:9%;width:1px;background:var(--box);opacity:.5}
   #smapBox .smap-h{position:absolute;top:50%;left:9%;right:9%;height:1px;background:var(--box);opacity:.5}
   .smappad{display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:2px}
+  /* 座標盤決定「形狀」，字重另外給一根 —— 不然想要楷書的形狀但不要那麼細就做不到
+     （各預設的字重差很多：楷書 64、標題黑 128、瘦金 38）。 */
+  .smapwt{display:flex;align-items:center;justify-content:center;gap:8px;padding-top:2px}
+  .smapwt label{font-size:11px;color:var(--muted)}
+  .smapwt input[type=range]{width:150px}
+  .smapwt b{font-family:var(--mono);font-size:10.5px;width:26px;text-align:right}
   /* 組名放盤子下方 —— 原本絕對定位塞在盤內左上角，會壓在「明體」那行標籤上。 */
   #smapNext{border:1px solid var(--line-2,#cfc8b8);background:var(--paper);color:var(--muted);
     font-size:10.5px;padding:3px 9px;cursor:pointer;border-radius:7px;
@@ -1504,6 +1510,11 @@
           </div>
           <button id="smapNext" type="button" title="換一組座標">
             <span id="smapName">基本</span> ⇄</button>
+        </div>
+        <div class="smapwt">
+          <label for="smapWt">字重</label>
+          <input type="range" id="smapWt" min="34" max="150" step="1" value="80">
+          <b id="smapWtB">80</b>
         </div>
       </div>
       <div class="scaxes" id="scAxes">
@@ -8931,7 +8942,11 @@ function scStyleMapApply(x,y){
     F[k]= typeof v==="number" ? v : F_DEFAULT[k];
   }
   presetKey="";
-  document.querySelectorAll("#scPreset button").forEach(b=>b.classList.remove("on"));
+  /* 兩處縮圖的 highlight 都要清 —— 拖了座標盤就不再是任何一個預設了。
+     原本只清 #scPreset，風格模式的 #smapThumbs 會一直亮著上一個選擇。 */
+  document.querySelectorAll("#scPreset button, #smapThumbs button").forEach(b=>b.classList.remove("on"));
+  /* 混合改了字重，滑桿要跟上 */
+  if($("smapWt")){ $("smapWt").value=Math.round(F.weight); $("smapWtB").textContent=Math.round(F.weight); }
   scStyleMapDot(); scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
 }
 function scStyleMapDot(){
@@ -9007,6 +9022,7 @@ function scStyleMode(on){
   const m=$("smapMode"); if(m) m.hidden=!smapOn;
   const b=$("smapBtn"); if(b) b.setAttribute("aria-pressed",smapOn?"true":"false");
   if(smapOn){ scStyleMapDot(); smapBuildThumbs();
+    if($("smapWt")){ $("smapWt").value=Math.round(F.weight); $("smapWtB").textContent=Math.round(F.weight); }
     /* 進來時把目前選中的捲到正中間 */
     requestAnimationFrame(()=>{ const on=$("smapThumbs")&&$("smapThumbs").querySelector("button.on");
       if(on) smapCenter(on); }); }
@@ -9092,6 +9108,15 @@ if($("smapBox")){
   box.addEventListener("pointercancel",end);
 }
 if($("smapNext")) $("smapNext").addEventListener("click",e=>{ e.stopPropagation(); scStyleMapCycle(); });
+/* 字重滑桿：只改字重，座標盤決定的其他軸不動 */
+if($("smapWt")){
+  $("smapWt").addEventListener("input",e=>{
+    F.weight=+e.target.value;
+    $("smapWtB").textContent=F.weight;
+    syncShowAxes(); scDraw();
+  });
+  $("smapWt").addEventListener("change",()=>{ scheduleSlow(); saveLocal(); });
+}
 if($("scRefBtn")) $("scRefBtn").addEventListener("click",()=>$("scRefIn").click());
 if($("scRefIn")) $("scRefIn").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value="";
