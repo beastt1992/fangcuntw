@@ -1724,7 +1724,11 @@ const F_DEFAULT={...F};   /* 出廠設計軸，供「重設」用 */
 const AXKEYS=['weight','optic','contrast','round','counter','gravity','face','hand','finish',
                'width','slant','taper','hook','dun','press','rise',
                'seed','scatter','wobble','spike','hollow',
-               'arch','inflate','wave','chop','cap','cmin'];
+               'arch','inflate','wave','chop','cap','cmin',
+               /* ★ 新軸一定要同步加進來 —— 這份清單管存檔、復原、重設設計軸。
+                  漏掉的話：關掉重開值會不見、按復原那幾根不會跟著回去、
+                  「重設設計軸」也重設不到。加軸時最容易忘的就是這裡。 */
+               'diag','cnaniso','term','cround','pers'];
 let FAMILY="方寸黑體", LATIN="FangcunHei";
 
 const G = {
@@ -3787,7 +3791,9 @@ function csOrientRing(q,wantPositive){
 }
 function csToCmds(res){
   const out=[];
+  let pi=-1;
   for(const poly of res){
+    pi++;
     for(let ri=0;ri<poly.length;ri++){
       const ring=poly[ri];
       let p=ring.slice();
@@ -3801,6 +3807,11 @@ function csToCmds(res){
       q=csOrientRing(q,ri===0);
       const c=[["M",q[0][0],q[0][1]]];
       for(let i=1;i<q.length;i++) c.push(["L",q[i][0],q[i][1]]);
+      /* ★ 標記所屬的 polygon 與是否為洞。
+         展示頁是「一個輪廓一個 <path> 各自填色」（依筆順上色需要），
+         洞環單獨成為一個 path 就會被畫成實心，內白直接消失。
+         有了分組標記，渲染端才能把外殼與它的洞併進同一個 path。 */
+      c.grp=pi; c.hole=(ri!==0);
       out.push(c);
     }
   }
@@ -6536,7 +6547,23 @@ function scDraw(){
       lg.appendChild(el("stop",{offset:"100%","stop-color":ov!==undefined?scPal.c[(ov+2)%scPal.c.length]:scRamp(t1)}));
       defs.appendChild(lg); ref="url(#"+id+")";
     }
-    cs.forEach((c,si)=>{
+    /* ★ 內白保護／圓度開啟時，輪廓會帶 grp 標記（外殼與它的洞同一組）。
+       同一組必須畫進同一個 <path>，否則洞會被當成實心形狀填掉。
+       這時「依筆順上色」自然退化成一組一色 —— 布林運算後筆畫已經合併，
+       本來就不存在逐筆的對應關係了。 */
+    const grouped=cs.length&&cs.some(c=>c.grp!==undefined);
+    const units=[];
+    if(grouped){
+      const byG=new Map();
+      cs.forEach(c=>{ const k=c.grp===undefined?("s"+units.length):c.grp;
+        if(!byG.has(k)) byG.set(k,[]); byG.get(k).push(c); });
+      for(const arr of byG.values()) units.push(arr);
+    }else{
+      cs.forEach(c=>units.push([c]));
+    }
+    const n2=Math.max(1,units.length);
+    units.forEach((arr,si)=>{
+      const n=n2;
       let fill;
       if(cust) fill=cust;
       else if(ov!==undefined && !ref) fill = scCol==="stroke" ? scPal.c[(ov+si)%scPal.c.length] : scPal.c[ov%scPal.c.length];
@@ -6544,7 +6571,7 @@ function scDraw(){
       else if(scCol==="mono") fill=scMonoColor;
       else if(scCol==="stroke") fill=scRamp(n<2?0:si/(n-1));
       else fill=scPal.c[Math.floor(scHash(ch+"#"+si+"#"+i)*scPal.c.length)%scPal.c.length];
-      g.appendChild(el("path",{d:svgD(c),fill,"fill-rule":"nonzero"}));
+      g.appendChild(el("path",{d:arr.map(svgD).join(" "),fill,"fill-rule":"nonzero"}));
     });
     if(scSelKey===key0) g.appendChild(el("rect",{x:8,y:8,width:984,height:984,class:"sc-selection"}));
     g.appendChild(el("rect",{x:0,y:0,width:1000,height:1000,fill:"transparent",cursor:"grab","data-key":key0}));
