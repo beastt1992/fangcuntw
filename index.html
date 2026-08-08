@@ -781,16 +781,22 @@
   /* 風格座標面板：浮在畫布右上角 */
   /* 風格模式：底部整區換成風格介面 */
   /* 整區置中；底部留安全距離（手機還要加瀏海／home bar 的內距）。 */
-  .smapmode{order:2;width:100%;display:flex;gap:14px;align-items:center;
-    justify-content:center;padding:10px 0 calc(14px + env(safe-area-inset-bottom));
-    overflow:hidden}
+  /* 上下兩列：座標盤在上（置中），縮圖獨佔一整列。
+     ★ 縮圖必須是整個寬度 —— 跟座標盤並排的話它只分到右邊一小塊，
+       ::before/::after 的 50% 是那一小塊的 50%，當前那顆永遠置不了中
+       （實機只擠得下兩個縮圖）。 */
+  .smapmode{order:2;width:100%;display:flex;flex-direction:column;gap:8px;
+    padding:10px 0 calc(14px + env(safe-area-inset-bottom));overflow:hidden}
+  .smaphead{display:flex;gap:14px;align-items:center;justify-content:center;position:relative}
+  .smaphead #smapClose{position:absolute;right:2px;bottom:2px}
   .smapmode[hidden]{display:none}
   /* Apple 相簿那種：當前的置中，左右各露出鄰居。
      前後補一半寬度的留白，第一個和最後一個才也能捲到正中間。 */
-  .smapthumbs{flex:1 1 auto;display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;
+  .smapthumbs{width:100%;display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;
     scrollbar-width:none;min-width:0;scroll-snap-type:x mandatory;
     scroll-padding-inline:50%}
-  .smapthumbs::before,.smapthumbs::after{content:"";flex:none;width:calc(50% - 40px)}
+  /* 前後補一半寬度的留白，第一個和最後一個才也能捲到正中間 */
+  .smapthumbs::before,.smapthumbs::after{content:"";flex:none;width:calc(50% - 42px)}
   .smapthumbs>button{scroll-snap-align:center}
   .smapthumbs::-webkit-scrollbar{display:none}
   .smapthumbs button{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;
@@ -823,7 +829,7 @@
   #smapBtn:hover{background:var(--line,#e8e3d6)}
   #smapBtn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
   @media(max-width:700px){ #smapBtn{left:8px;bottom:30px;padding:6px 10px;font-size:11px} }
-  #smapBox{position:relative;flex:none;width:150px;height:150px;
+  #smapBox{position:relative;flex:none;width:136px;height:136px;
     background:var(--paper);border:1px solid var(--ink);border-radius:10px;
     touch-action:none;cursor:crosshair}
   #smapBox .smap-l{position:absolute;left:50%;top:4px;transform:translateX(-50%);
@@ -839,7 +845,7 @@
   #smapNext:hover{background:var(--line,#e8e3d6);color:var(--ink)}
   #smapDot{position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;
     border-radius:50%;background:var(--ink);border:2px solid var(--paper);pointer-events:none}
-  @media(max-width:1099px){ #smapBox{width:132px;height:132px} }
+  @media(max-width:1099px){ #smapBox{width:122px;height:122px} }
   .scstagewrap{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
   .scstagewrap>.scstage{flex:1 1 auto;min-width:0;width:100%}
   .sczoom{position:absolute;right:10px;bottom:10px;display:flex;
@@ -1475,6 +1481,7 @@
       <!-- 風格模式：點畫布左下的「風格」進來，底部整區換成風格介面。
            左邊是座標盤（拖一顆點在四種字體之間連續移動），右邊是可捲的縮圖。 -->
       <div class="smapmode" id="smapMode" hidden>
+        <div class="smaphead">
         <div class="smappad">
           <div id="smapBox">
             <span class="smap-l" id="smapTop">明體　圓體</span>
@@ -1485,8 +1492,9 @@
           <button id="smapNext" type="button" title="換一組座標">
             <span id="smapName">基本</span> ⇄</button>
         </div>
-        <div class="smapthumbs" id="smapThumbs"></div>
         <button class="btn ghost sm" id="smapClose" type="button">完成</button>
+        </div>
+        <div class="smapthumbs" id="smapThumbs"></div>
       </div>
       <div class="scaxes" id="scAxes">
         <div class="g"><label>字重</label><input type="range" id="scWt" min="34" max="150" step="1" value="88"><b id="scWtB">88</b></div>
