@@ -63,7 +63,7 @@
   本檔案不含任何 GPL 授權的程式碼。
 ================================================================================
 -->
-<!-- FANGCUN v108 · MOBILE CANVAS + LAYOUT ONE ROW -->
+<!-- FANGCUN v176 · HOOK ROOT TRUE JOIN -->
 <!-- FANGCUN-COUNTER-CELLS: v66 reference-topology-safety -->
 <html lang="zh-Hant">
 <head>
@@ -3235,6 +3235,22 @@ function appendKageTail(S,st,f,wScale){
     B=[A[0]+m*0.78,A[1]+m*1.28];
   }
   const steps=5;
+  /* v176 — 鉤根必須有「同一個骨架座標、兩個不同切線」的明確 join anchor。
+     舊版直接從 t=0.2 開始追加鉤曲線，因此豎畫最後一點 A 與鉤的第一個取樣點
+     已經相隔一小段距離。round-join 雖然知道前後切線不同，卻只能在 A 周圍補弧，
+     再用一條斜線追到下一個 offset 點；高字重時那一小段正是肉眼看到的「鉤根縫」。
+
+     正確幾何不是把鉤再延長，而是在 A 上放一個 outgoing tangent 的重複 anchor：
+       A(incoming tangent) -> A(outgoing tangent) -> hook curve
+     這樣下面的 round-join 會在**同一圓心**完成真正的 Minkowski join，
+     不管字重／對比／鉤長怎麼變，鉤根都不會被兩個不同圓心之間的弦切出缺口。 */
+  if(st.e==="hook"){
+    out.push({
+      p:[A[0],A[1]],
+      t:[2*(C[0]-A[0]),2*(C[1]-A[1])],
+      hookJoinAnchor:true
+    });
+  }
   for(let i=1;i<=steps;i++){
     const t=i/steps,u=1-t;
     out.push({
@@ -3516,9 +3532,14 @@ function strokeOutline(st,f,wScale,NS){
            實測「了」只補到 61.5，改成固定圓心後是 71.6，半寬是 73.8。）
          最後一點補到 a1 那個角度，再由原本的 p1 接下去。 */
       const arc=[];
+      const sameCenter=Math.hypot(c1[0]-c0[0],c1[1]-c0[1])<0.01;
       for(let k=1;k<=JOIN_K;k++){
-        const ang=a0+da*k/JOIN_K;
-        arc.push([c0[0]+Math.cos(ang)*r0, c0[1]+Math.sin(ang)*r0]);
+        const u=k/JOIN_K, ang=a0+da*u;
+        /* hookJoinAnchor 讓前後 offset 都以 A 為圓心。字寬可能因 t 稍有不同，
+           所以半徑從 r0 平滑過渡到 r1；最後一點會精確落到 outgoing 邊界，
+           不再留下 fixed-r0 -> p1 的微小徑向接縫。一般轉角仍維持原本固定半徑。 */
+        const rr=sameCenter ? r0+(r1-r0)*u : r0;
+        arc.push([c0[0]+Math.cos(ang)*rr, c0[1]+Math.sin(ang)*rr]);
       }
       /* ★ 守門：乙線彎尾（乚）會往回捲，捲的半徑比筆畫半寬還小 ——
          這時補出來的弧會穿過自己後面那段（實測「見」「已」「起」）。
