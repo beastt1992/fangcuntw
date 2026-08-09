@@ -63,7 +63,7 @@
   本檔案不含任何 GPL 授權的程式碼。
 ================================================================================
 -->
-<!-- FANGCUN v176 · HOOK ROOT TRUE JOIN -->
+<!-- FANGCUN v187 · VF COMPAT REPAIR + QA PROBLEM BROWSER -->
 <!-- FANGCUN-COUNTER-CELLS: v66 reference-topology-safety -->
 <html lang="zh-Hant">
 <head>
@@ -212,6 +212,18 @@
   .qanums .b::before{background:var(--w2)}
   .qa label{display:flex;align-items:center;gap:7px;font-size:11.5px;cursor:pointer;user-select:none}
   .qa label input{width:13px;height:13px;accent-color:var(--skel)}
+  .qadash{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:10px 0}
+  .qacard{border:1px solid var(--line-2);background:var(--paper);padding:9px 10px;min-width:0}
+  .qacard b{display:block;font-family:var(--mono);font-size:20px;line-height:1.1;font-weight:500;color:var(--ink)}
+  .qacard span{display:block;font-size:10.5px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qacard.ok b{color:var(--ok)} .qacard.warn b{color:var(--w1)} .qacard.bad b{color:var(--w2)}
+  .qafullrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0 0}
+  .qaproblems{margin-top:10px;border-top:1px solid var(--line);padding-top:9px;display:grid;gap:7px}
+  .qaprow{display:flex;gap:7px;align-items:flex-start;flex-wrap:wrap}
+  .qaprow>label{width:82px;flex:none;font-size:10.5px;color:var(--muted);padding-top:5px}
+  .qachip{border:1px solid var(--line-2);background:var(--paper);color:var(--ink);padding:3px 7px;font-family:var(--mono);font-size:12px;cursor:pointer}
+  .qachip:hover{border-color:var(--ink);background:var(--paper-2)}
+  @media(max-width:700px){.qadash{grid-template-columns:repeat(2,minmax(0,1fr))}.qacard:first-child{grid-column:1/-1}.qaprow>label{width:100%}}
 
   .gridwrap{flex:1;min-height:0;overflow:auto;padding:7px}
   .cells{display:grid;gap:5px;grid-template-columns:repeat(9,minmax(0,1fr));
@@ -1797,6 +1809,18 @@
           <button class="btn ghost sm" id="qaClear" type="button">清除基準</button>
           <span class="tip" id="qaStat">—</span>
         </div>
+        <div class="qadash" id="qaDash">
+          <div class="qacard ok"><b id="qaDPass">—</b><span>結構正常</span></div>
+          <div class="qacard warn"><b id="qaDDrift">—</b><span>與基準不同</span></div>
+          <div class="qacard bad"><b id="qaDSelf">—</b><span>輪廓自交</span></div>
+          <div class="qacard bad"><b id="qaDOverflow">—</b><span>爆框／非有限值</span></div>
+          <div class="qacard"><b id="qaDHoles">—</b><span>內白變化</span></div>
+        </div>
+        <div class="qafullrow">
+          <button class="btn ghost sm" id="qaScanAll" type="button">全字庫快速掃描</button>
+          <span class="tip" id="qaAllStat">只做幾何檢查：空輪廓、NaN、爆框、自交；不做 40px 光柵比較。</span>
+        </div>
+        <div class="qaproblems" id="qaProblems" hidden></div>
         <div id="qaOut" style="font-family:var(--mono);font-size:11px;line-height:1.75;
              max-height:46vh;overflow:auto;white-space:pre;color:var(--muted)"></div>
       </div>
@@ -9080,10 +9104,36 @@ const QA_CORPUS=[
 const QA_KEY="fangcun-qa-baseline";
 let qaLast=null;
 
+/* v186：輪廓自交偵測。QA 與 VF preflight 共用。
+   只判斷同一 contour 內的非相鄰線段；相鄰 segment 共用端點不算自交。 */
+function geomSegHit(a,b,c,d){
+  const eps=1e-7;
+  const cross=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);
+  const o1=cross(a,b,c),o2=cross(a,b,d),o3=cross(c,d,a),o4=cross(c,d,b);
+  return ((o1>eps&&o2<-eps)||(o1<-eps&&o2>eps))&&((o3>eps&&o4<-eps)||(o3<-eps&&o4>eps));
+}
+function contourSelfX(cmd,SUB){
+  const p=pcFlatten(cmd,SUB||3);
+  const n=p.length-1; if(n<4)return 0;
+  let hits=0;
+  for(let i=0;i<n;i++){
+    const a=p[i],b=p[i+1];
+    for(let j=i+1;j<n;j++){
+      if(Math.abs(i-j)<=1) continue;
+      if(i===0&&j===n-1) continue;
+      if(geomSegHit(a,b,p[j],p[j+1])) hits++;
+    }
+  }
+  return hits;
+}
+function contoursSelfX(cs,SUB){
+  let n=0; for(const c of (cs||[])) n+=contourSelfX(c,SUB||3); return n;
+}
+
 /* 用 canvas 光柵化，量黑度與內白數；同時檢查結構有沒有壞 */
 function glyphStats(id,f,N){
   N=N||40;
-  const out={ok:false,contours:0,points:0,ink:0,holes:0,nan:false,bbox:null};
+  const out={ok:false,contours:0,points:0,ink:0,holes:0,nan:false,bbox:null,selfx:0,overflow:false};
   let cs;
   try{ cs=glyphContours(id,f,null,20); }catch(e){ out.err=String(e.message||e); return out; }
   if(!cs||!cs.length){ out.err="空輪廓"; return out; }
@@ -9101,7 +9151,8 @@ function glyphStats(id,f,N){
   if(out.nan){ out.err="有 NaN／Infinity"; return out; }
   if(minX>maxX){ out.err="bbox 無效"; return out; }
   out.bbox=[Math.round(minX),Math.round(minY),Math.round(maxX),Math.round(maxY)];
-  if(minX<-260||maxX>EM+260||minY<-260||maxY>EM+260) out.err="超出安全範圍";
+  if(minX<-260||maxX>EM+260||minY<-260||maxY>EM+260){ out.err="超出安全範圍"; out.overflow=true; }
+  out.selfx=contoursSelfX(cs,3);
   const cv=document.createElement("canvas"); cv.width=cv.height=N;
   const cx=cv.getContext("2d",{willReadFrequently:true});
   cx.fillStyle="#fff"; cx.fillRect(0,0,N,N);
@@ -9152,16 +9203,21 @@ async function qaRun(){
   const rows=[], lines=[];
   const list=QA_CORPUS.filter(ch=>G[ch]);
   const missing=QA_CORPUS.filter(ch=>!G[ch]);
-  let bad=0, drift=0, worst=0, worstCh="";
+  let bad=0, drift=0, worst=0, worstCh="", selfN=0, overN=0, holeDrift=0, passN=0;
   for(let i=0;i<list.length;i++){
     const ch=list[i];
     const a=glyphStats(ch,axesOf("fangcun"),40);
     const r=glyphStats(ch,axesOf("reference"),40);
     rows.push({ch,ink:+a.ink.toFixed(4),holes:a.holes,contours:a.contours,
-               points:a.points,refInk:+r.ink.toFixed(4),refHoles:r.holes});
+               points:a.points,selfx:a.selfx||0,overflow:!!a.overflow,
+               refInk:+r.ink.toFixed(4),refHoles:r.holes});
     let flag="";
     if(!a.ok){ flag=" ✗ "+a.err; bad++; }
     else if(!r.ok){ flag=" ✗ 原樣:"+r.err; bad++; }
+    if(a.selfx){ selfN++; flag+="  ⚠ 自交 "+a.selfx; }
+    if(a.overflow||a.nan){ overN++; }
+    if(a.holes!==r.holes) holeDrift++;
+    if(a.ok&&!a.selfx) passN++;
     if(base && base.rows){
       const b=base.rows.find(x=>x.ch===ch);
       if(b){
@@ -9172,22 +9228,100 @@ async function qaRun(){
       }
     }
     lines.push(ch+"  黑度 "+a.ink.toFixed(4)+"  內白 "+String(a.holes).padStart(2)+
-               "  外框 "+String(a.contours).padStart(3)+"  節點 "+String(a.points).padStart(4)+flag);
+               "  外框 "+String(a.contours).padStart(3)+"  節點 "+String(a.points).padStart(4)+
+               "  自交 "+String(a.selfx||0).padStart(2)+flag);
     if(i%12===0){ out.textContent=lines.join("\n"); await yield_(); }
   }
   out.textContent=lines.join("\n")+(missing.length?"\n\n字庫沒有："+missing.join(" "):"");
   qaLast={when:new Date().toISOString().slice(0,16).replace("T"," "),masters:{...MASTERS},rows};
   $("qaRun").disabled=false; $("qaSave").disabled=false;
   $("qaStat").textContent=list.length+" 字檢查完成";
+  if($("qaDPass")) $("qaDPass").textContent=passN;
+  if($("qaDDrift")) $("qaDDrift").textContent=drift;
+  if($("qaDSelf")) $("qaDSelf").textContent=selfN;
+  if($("qaDOverflow")) $("qaDOverflow").textContent=overN;
+  if($("qaDHoles")) $("qaDHoles").textContent=holeDrift;
   const nm=Object.keys(MASTERS).length;
   const mstNote=nm?("　（目前套用 "+nm+" 條部件母版）"):"";
   const v=$("qaVerdict");
   if(bad) v.innerHTML="<b style='color:var(--w2)'>發現 "+bad+" 個字有結構問題</b> —— 這是真的壞了，不是風格差異"+mstNote;
+  else if(selfN) v.innerHTML="<b style='color:var(--w1)'>結構可渲染，但有 "+selfN+" 個字存在輪廓自交</b>。靜態 OTF 可去重疊；Variable Font 會在匯出前做相容性清理。"+mstNote;
   else if(!base) v.innerHTML="結構全部正常。<b>按「存成基準」記下現在的數字</b>，之後才比得出變化。"+mstNote;
   else if(!drift) v.innerHTML="<b style='color:var(--ok)'>結構全部正常，而且跟基準一模一樣</b>"+mstNote;
   else v.innerHTML="結構正常，但有 <b>"+drift+"</b> 個字跟基準不同（最大變化："+worstCh+
                    " 黑度差 "+worst.toFixed(4)+"）。上面標了「← 變了」的就是。"+mstNote;
 }
+let QA_LAST_PROBLEMS=null;
+function qaOpenGlyph(ch){
+  if(!G[ch])return;
+  current=ch; varSel=null;
+  $("qamodal").classList.remove("on");
+  if(MODE!=="work") setMode("work");
+  mark(); drawAll();
+  const el=document.querySelector('.cell[data-ch="'+CSS.escape(ch)+'"]');
+  if(el) try{el.scrollIntoView({behavior:"smooth",block:"center",inline:"center"});}catch(e){}
+}
+function qaRenderProblems(p){
+  QA_LAST_PROBLEMS=p;
+  const box=$("qaProblems"); if(!box)return;
+  box.innerHTML="";
+  const rows=[
+    ["輪廓自交","selfx"],["爆框","overflow"],["NaN","nan"],["空輪廓","empty"],["例外","err"]
+  ];
+  let any=false;
+  for(const [label,k] of rows){
+    const arr=(p&&p[k])||[]; if(!arr.length)continue; any=true;
+    const row=document.createElement("div");row.className="qaprow";
+    const lb=document.createElement("label");lb.textContent=label+" "+arr.length;row.appendChild(lb);
+    for(const ch of arr.slice(0,48)){
+      const b=document.createElement("button");b.type="button";b.className="qachip";b.textContent=ch;
+      b.title="跳到「"+ch+"」";b.addEventListener("click",()=>qaOpenGlyph(ch));row.appendChild(b);
+    }
+    if(arr.length>48){const more=document.createElement("span");more.className="tip";more.textContent="…另 "+(arr.length-48)+" 字";row.appendChild(more);}
+    box.appendChild(row);
+  }
+  box.hidden=!any;
+}
+
+async function qaScanAll(){
+  const btn=$("qaScanAll"), stat=$("qaAllStat");
+  btn.disabled=true;
+  const ids=ALL.filter(id=>G[id]&&G[id].u&&!G[id].sp);
+  let empty=0,nan=0,overflow=0,selfx=0,err=0;
+  const samples={empty:[],nan:[],overflow:[],selfx:[],err:[]};
+  stat.textContent="掃描 0 / "+ids.length.toLocaleString();
+  for(let i=0;i<ids.length;i++){
+    const id=ids[i]; let cs;
+    try{ cs=glyphContours(id,axesOf("fangcun"),null,8); }
+    catch(e){err++;samples.err.push(id);continue;}
+    if(!cs||!cs.length){empty++;samples.empty.push(id);continue;}
+    let badNum=false,minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+    for(const c of cs)for(const k of c)for(let j=1;j<k.length;j++){
+      const v=k[j]; if(!isFinite(v)){badNum=true;break;}
+      if(j%2){minX=Math.min(minX,v);maxX=Math.max(maxX,v);}
+      else{minY=Math.min(minY,v);maxY=Math.max(maxY,v);}
+    }
+    if(badNum){nan++;samples.nan.push(id);}
+    if(minX<-260||maxX>EM+260||minY<-260||maxY>EM+260){
+      overflow++;samples.overflow.push(id);
+    }
+    if(contoursSelfX(cs,2)>0){selfx++;samples.selfx.push(id);}
+    if((i&127)===0){stat.textContent="掃描 "+i.toLocaleString()+" / "+ids.length.toLocaleString();await yield_();}
+  }
+  const summary="全字庫 "+ids.length.toLocaleString()+" 字：空輪廓 "+empty+" · NaN "+nan+
+    " · 爆框 "+overflow+" · 自交 "+selfx+" · 例外 "+err;
+  stat.textContent=summary;
+  qaRenderProblems(samples);
+  const details=[];
+  for(const k of ["empty","nan","overflow","selfx","err"]) if(samples[k].length)
+    details.push(k+"："+samples[k].slice(0,12).join(" ")+(samples[k].length>12?" …":""));
+  if(details.length) $("qaOut").textContent=summary+"\n\n"+details.join("\n")+"\n\n（上方問題瀏覽器可直接點字跳回工作台；文字區每類只列前 12 字）";
+  if($("qaDSelf")) $("qaDSelf").textContent=selfx;
+  if($("qaDOverflow")) $("qaDOverflow").textContent=overflow+nan;
+  btn.disabled=false;
+}
+$("qaScanAll").addEventListener("click",()=>qaScanAll().catch(e=>{$("qaScanAll").disabled=false;alert("全字庫掃描失敗："+e.message);}));
+
 $("btnQA").addEventListener("click",()=>{ $("qamodal").classList.add("on");
   const b=qaBaseline();
   $("qaStat").textContent=b?("基準存於 "+b.when+"，共 "+b.rows.length+" 字"):"還沒有基準";
@@ -9497,6 +9631,100 @@ const VF_EXTRA_AXES=[
   {k:"round",   tag:"ROND", name:"Round",    min:0,    max:1,    label:"圓角"},
   {k:"width",   tag:"wdth", name:"Width",    min:0.78, max:1.22, label:"字寬"}
 ];
+/* v187 — VF compatibility-preserving self-intersection repair
+   先 Boolean 去自交；若各 master 只差「取樣節點數」而 contour 數一致，
+   再依弧長重取樣到同一節點數。這比 v186 只接受完全相同 command 數更能救鉤根，
+   但仍然拒絕 contour 數／winding 結構改變的情況。 */
+function vfTopoSig(cs){
+  return (cs||[]).map(c=>c.length+":"+c.map(k=>k[0]).join("")).join("|");
+}
+function vfRingMeta(c){
+  let p=pcFlatten(c,1); if(p.length>1&&dist(p[0],p[p.length-1])<1e-8)p=p.slice(0,-1);
+  let A=0,cx=0,cy=0;
+  for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],q=a[0]*b[1]-b[0]*a[1];A+=q;cx+=(a[0]+b[0])*q;cy+=(a[1]+b[1])*q;}
+  A/=2; const d=6*A||1; cx/=d;cy/=d;
+  return {c,p,a:A,cx,cy,sign:A>=0?1:-1};
+}
+function vfSortContours(cs){
+  return (cs||[]).map(vfRingMeta).sort((a,b)=>
+    b.sign-a.sign || Math.abs(b.a)-Math.abs(a.a) || a.cx-b.cx || a.cy-b.cy);
+}
+function vfResampleClosed(meta,N){
+  const p=meta.p;if(p.length<3)return meta.c;
+  const seg=[],cum=[0];let total=0;
+  for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],L=dist(a,b);seg.push(L);total+=L;cum.push(total);}
+  if(total<1e-6)return meta.c;
+  const q=[];let si=0;
+  for(let k=0;k<N;k++){
+    const t=total*k/N;while(si<seg.length-1&&cum[si+1]<t)si++;
+    const a=p[si],b=p[(si+1)%p.length],u=(t-cum[si])/(seg[si]||1);
+    q.push([a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u]);
+  }
+  const cmds=[["M",q[0][0],q[0][1]]];for(let i=1;i<q.length;i++)cmds.push(["L",q[i][0],q[i][1]]);return cmds;
+}
+function vfCompatResampleSets(sets){
+  if(!sets.length)return null;
+  const sorted=sets.map(vfSortContours);const n=sorted[0].length;
+  if(!n||sorted.some(s=>s.length!==n))return null;
+  /* winding 也必須一致；否則 exterior/hole 結構已經變了 */
+  for(let ci=0;ci<n;ci++){
+    const sg=sorted[0][ci].sign;
+    if(sorted.some(s=>s[ci].sign!==sg))return null;
+  }
+  const out=sorted.map(()=>[]);
+  for(let ci=0;ci<n;ci++){
+    let N=0;for(const s of sorted)N=Math.max(N,s[ci].p.length);
+    N=Math.max(12,Math.min(192,Math.ceil(N/4)*4));
+    for(let mi=0;mi<sorted.length;mi++)out[mi].push(vfResampleClosed(sorted[mi][ci],N));
+  }
+  const sig=vfTopoSig(out[0]);
+  if(out.some(cs=>vfTopoSig(cs)!==sig||contoursSelfX(cs,2)))return null;
+  return out;
+}
+function vfBooleanClean(raw){
+  /* dedupContours 對單一 contour 會早退；VF 的鉤根自交常常正好只有一條 contour。
+     這裡若只有一條也複製一份極小位移的 subject 不安全，因此直接交給 polygon-clipping
+     的 union；能 polygonize 才採用，失敗就回 null。 */
+  const pc=pcLib(); if(!pc||!raw||!raw.length)return null;
+  try{
+    const items=raw.map(c=>{const p=pcFlatten(c,5);return {p,a:csSignedAreaSimple(p)};}).filter(x=>x.p.length>=4);
+    if(!items.length)return null;
+    let major=items[0];for(const it of items)if(Math.abs(it.a)>Math.abs(major.a))major=it;
+    const sign=major.a>=0?1:-1;
+    const inks=items.filter(x=>!x.a||Math.sign(x.a)===sign).map(x=>[x.p]);
+    const holes=items.filter(x=>x.a&&Math.sign(x.a)!==sign).map(x=>[x.p]);
+    if(!inks.length)return null;
+    let res=pc.union(inks[0],...inks.slice(1));if(holes.length)res=pc.difference(res,...holes);
+    const out=[];
+    for(const poly of res)for(let ri=0;ri<poly.length;ri++){
+      let q=poly[ri].slice();if(q.length>2&&dist(q[0],q[q.length-1])<1e-8)q.pop();if(q.length<3)continue;
+      q=csOrientRing(q,ri===0);const c=[["M",q[0][0],q[0][1]]];for(let i=1;i<q.length;i++)c.push(["L",q[i][0],q[i][1]]);out.push(c);
+    }
+    return out.length?out:null;
+  }catch(e){return null;}
+}
+function vfSafeCleanMasters(masters,ids){
+  let candidates=0,cleaned=0,resampled=0,unresolved=0;
+  const unresolvedChars=[];
+  if(!masters.length)return {candidates,cleaned,resampled,unresolved,unresolvedChars};
+  const def=masters[0];
+  for(const id of ids){
+    const base=def.glyphs[id];if(!base||!contoursSelfX(base,2))continue;candidates++;
+    const sets=[];let ok=true;
+    for(const m of masters){const cc=vfBooleanClean(m.glyphs[id]||[]);if(!cc||!cc.length||contoursSelfX(cc,2)){ok=false;break;}sets.push(cc);}
+    if(ok){
+      const sig=vfTopoSig(sets[0]);
+      if(sets.every(cs=>vfTopoSig(cs)===sig)){
+        for(let i=0;i<masters.length;i++)masters[i].glyphs[id]=sets[i];cleaned++;continue;
+      }
+      const compat=vfCompatResampleSets(sets);
+      if(compat){for(let i=0;i<masters.length;i++)masters[i].glyphs[id]=compat[i];cleaned++;resampled++;continue;}
+    }
+    unresolved++;if(unresolvedChars.length<24)unresolvedChars.push(id);
+  }
+  return {candidates,cleaned,resampled,unresolved,unresolvedChars};
+}
+
 async function famExportVar(picked, ids, fam, lat){
   const N=8;                       /* 實測：節點 2.07 倍、形狀 IoU 0.9867，是甜蜜點 */
   const sorted=picked.slice().sort((a,b)=>a.w-b.w);
@@ -9565,6 +9793,9 @@ async function famExportVar(picked, ids, fam, lat){
         masters.push({name:a.name+(side<0?"Min":"Max"), coords, glyphs});
       }
     }
+    busy(true,"可變字型","清理自交輪廓…",86);
+    await yield_();
+    const vfClean=vfSafeCleanMasters(masters,ids);
     const axesOut=[{tag:"wght",name:"Weight",min:minW,def:defW,max:maxW,nameID:256}];
     let nid=257+sorted.length;
     for(const a of useExtra){
@@ -9592,9 +9823,12 @@ async function famExportVar(picked, ids, fam, lat){
     busy(false);
     download(new Blob([buf],{type:"font/ttf"}), lat+"-Variable.ttf");
     setTimeout(()=>alert("可變字型完成\n\n"+ids.length.toLocaleString()+" 字 · "+
-      sorted.length+" 個主體 · wght "+minW+"–"+maxW+"\n\n"+
+      sorted.length+" 個字重主體 · wght "+minW+"–"+maxW+"\n"+
+      "VF 自交清理："+vfClean.cleaned+"/"+vfClean.candidates+" 字安全清理"+
+      (vfClean.resampled?"（其中 "+vfClean.resampled+" 字做相容重取樣）":"")+
+      (vfClean.unresolved?" · "+vfClean.unresolved+" 字因主體拓樸不一致保留原輪廓":"")+"\n\n"+
       "裝好之後在 Illustrator、Figma、Word 裡選這個字型，"+
-      "就能直接拉字重滑桿，不用切換不同的檔案。"),400);
+      "就能直接拉可變軸，不用切換不同的檔案。"),400);
   } finally { VF_STABLE=false; }
 }
 
