@@ -5764,6 +5764,75 @@ function trimTerminalCrossingsSafe(strokes,f){
   return strokes;
 }
 
+/* ==========================================================================
+   轉折補角（v184）
+   漢字的「折」在 GlyphWiki 裡多半不是一筆，是兩筆用端點相接
+   （了・子・尔・好 的橫折都是 heng + pie）。延伸量被內側極限夾住之後，
+   夾角小於 90° 時外側那個尖補不到 —— 使用者指的「好的右邊子右上角」就是它。
+
+   ★ 上一次做這件事失敗（多邊形在銳角時自己打結、繞向抵銷、挖出破洞）。
+     這次改用**保證凸且簡單**的四邊形：
+         [ 接點 P , A 的外角 , 外側交點 Q , B 的外角 ]
+     P 在兩筆的墨裡面、A/B 的外角各在自己的外側邊界上、
+     Q 是兩條外側邊界線的交點。四個點依序繞一圈，四個外積同號 → 凸多邊形。
+     實算（夾角 60°、兩邊半寬 42）：P(0,0) A(0,−42) Q(−72.7,−42) B(−36.4,21)，
+     四個外積全為負，且沒有任何一對不相鄰的邊相交。
+
+   ★ 要不要補只看**角度**（sinθ≥0.10 且 cosθ>0），不看距離 ——
+     角度跟字重無關，輪廓數才能跨主體一致，可變字型不會壞。
+   ========================================================================== */
+function cornerFills(strokes,f){
+  if(f.miter===0) return [];
+  const out=[], seen=new Set(), E=[];
+  for(let i=0;i<strokes.length;i++){
+    const st=strokes[i]; if(!st.p||st.p.length<2) continue;
+    const n=st.p.length-1;
+    E.push({i,end:0,p:st.p[0],t:[st.p[0][0]-st.p[1][0],   st.p[0][1]-st.p[1][1]]});
+    E.push({i,end:1,p:st.p[n],t:[st.p[n][0]-st.p[n-1][0], st.p[n][1]-st.p[n-1][1]]});
+  }
+  const hwEnd=(s,end)=>{
+    const n=s.p.length-1;
+    const tan=end?[s.p[n][0]-s.p[n-1][0],s.p[n][1]-s.p[n-1][1]]
+                 :[s.p[1][0]-s.p[0][0],  s.p[1][1]-s.p[0][1]];
+    return Math.max(1, widthAt(s,end?1:0,tan,f)*(s.ws||1)/2);
+  };
+  for(const e of E){
+    const st=strokes[e.i];
+    if(!((e.end?st.ej:st.hj)>0)) continue;
+    let o=null;
+    for(const q of E){
+      if(q.i===e.i) continue;
+      if(Math.abs(q.p[0]-e.p[0])>=CORNER_TOL||Math.abs(q.p[1]-e.p[1])>=CORNER_TOL) continue;
+      o=q; break;
+    }
+    if(!o) continue;
+    const key=e.i<o.i?e.i+"_"+o.i:o.i+"_"+e.i;
+    if(seen.has(key)) continue; seen.add(key);
+    /* 筆身方向（朝外的相反），兩邊同時取負不改變夾角 */
+    const A=unit([-e.t[0],-e.t[1]]), B=unit([-o.t[0],-o.t[1]]);
+    const cs=A[0]*B[0]+A[1]*B[1], sn=Math.abs(A[0]*B[1]-A[1]*B[0]);
+    if(sn<0.10) continue;        /* 幾乎共線，沒有角 */
+    if(cs<=0) continue;          /* 夾角 ≥90°：延伸已經補滿，不用再補 */
+    const wA=hwEnd(st,e.end), wB=hwEnd(strokes[o.i],o.end);
+    const bis=unit([A[0]+B[0],A[1]+B[1]]);
+    const outN=d=>{ const n1=[-d[1],d[0]];
+      return (n1[0]*bis[0]+n1[1]*bis[1] < 0) ? n1 : [d[1],-d[0]]; };
+    const nA=outN(A), nB=outN(B);
+    const P=e.p;
+    const Ao=[P[0]+nA[0]*wA, P[1]+nA[1]*wA];
+    const Bo=[P[0]+nB[0]*wB, P[1]+nB[1]*wB];
+    /* Ao + s·A = Bo + t·B */
+    const det=A[0]*(-B[1])-A[1]*(-B[0]);
+    if(Math.abs(det)<1e-9) continue;
+    const rx=Bo[0]-Ao[0], ry=Bo[1]-Ao[1];
+    const s=(rx*(-B[1])-ry*(-B[0]))/det;
+    const Q=[Ao[0]+A[0]*s, Ao[1]+A[1]*s];
+    const LIM=Math.max(wA,wB)*3.2, dq=Math.hypot(Q[0]-P[0],Q[1]-P[1]);
+    if(dq>LIM){ Q[0]=P[0]+(Q[0]-P[0])*LIM/dq; Q[1]=P[1]+(Q[1]-P[1])*LIM/dq; }
+    out.push(orient([["M",P[0],P[1]],["L",Ao[0],Ao[1]],["L",Q[0],Q[1]],["L",Bo[0],Bo[1]]],-1));
+  }
+  return out;
+}
 function markCorners(strokes,f){
   const E=[];
   for(let i=0;i<strokes.length;i++){
@@ -5776,6 +5845,13 @@ function markCorners(strokes,f){
     const n=st.p.length-1;
     const tan=[st.p[n][0]-st.p[0][0], st.p[n][1]-st.p[0][1]];
     return Math.max(6, widthAt(st,0.5,tan,f)*(st.ws||1)/2);
+  };
+  /* 端點半寬（不是中段）。撇的端點細很多，用中段算會把外角點算到筆畫外面。 */
+  const hwEnd=(s,end)=>{
+    const n=s.p.length-1;
+    const tan=end?[s.p[n][0]-s.p[n-1][0],s.p[n][1]-s.p[n-1][1]]
+                 :[s.p[1][0]-s.p[0][0],  s.p[1][1]-s.p[0][1]];
+    return Math.max(1, widthAt(s,end?1:0,tan,f)*(s.ws||1)/2);
   };
   /* T 字接點：找出這個端點落在哪一筆身上，回傳允許的最大延伸量。
      取樣骨架只在真的有 conn 端點時才算，沒有就完全不花這個時間。 */
@@ -5809,7 +5885,7 @@ function markCorners(strokes,f){
     for(const o of E){
       if(o.i===e.i) continue;
       if(Math.abs(o.p[0]-e.p[0])>=CORNER_TOL||Math.abs(o.p[1]-e.p[1])>=CORNER_TOL) continue;
-      best=o; break;
+      best=o; break;   /* o 帶著 .end，下面 hwEnd 會用到 */
     }
     const key=e.end?"ej":"hj";
     if(!best){
@@ -5852,7 +5928,23 @@ function markCorners(strokes,f){
        hw2*3.2 這個上限就直接變成一根戳出去的尖刺。拉丁改成 1.15 倍。 */
     const tight = st.lat || strokes[best.i].lat;
     st[key]=(f.miter===0) ? 0
-      : Math.min(hw2*(tight?1.15:3.2), hw2/Math.max(tight?0.55:0.28, sin));
+      : Math.max(0, Math.min(hw2*(tight?1.15:3.2), (hwEnd(strokes[best.i],best.end)
+          - hwEnd(st,e.end)*Math.abs(a[0]*b[0]+a[1]*b[1])) / Math.max(1e-6,sin)));
+    /* ★★ v184：斜接量的正確式子。
+       舊版 `對方半寬 / sin(夾角)` 只有**直角**時才對 ——
+       所以「口日四馬」一直沒事，一離開直角就兩頭壞：
+         好·子的橫折 52°：舊 38/53、外側斜接 70/76 → 延伸不足，轉角缺一角
+         好·女的撇捺 116°：舊 29/30、外側斜接 16/18 → 延伸過頭，戳出一根刺
+
+       但外側斜接也不能直接拿來當延伸量：延伸是把整條骨架往外推、兩側一起走，
+       外側剛好補到尖的時候**內側就多戳出去**。兩個極限只差一個正負號：
+         外側斜接 = (對方半寬 + 自己半寬·cosθ)/sinθ
+         內側極限 = (對方半寬 − 自己半寬·cosθ)/sinθ
+       取兩者的小的，就是 (對方半寬 − 自己半寬·|cosθ|)/sinθ：
+         夾角 ≥ 90°：內側極限較大 → 取到外側斜接，尖補滿又不戳出去
+         夾角 < 90°：內側極限較小 → 尖補不到，改由 cornerFills() 補一塊四邊形
+       跟 T 字接點（v183）**完全同一條公式**，只是那邊 θ=90° 退化掉了。
+       ★ 半寬一定要取**端點**的，不是筆畫中段 —— 撇的端點細很多。 */
     /* ★ 記下**完整的夾角**（度），不是只有 sin。
        sin 分不出「平順接續」(180°) 和「急折回」(0°)——兩者的 sin 都接近 0，
        所以 v173 用 sin 算補償時，急折的地方反而算出 0。
@@ -5891,7 +5983,9 @@ function glyphContours(id,f,variant,NS){
   }
   const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
   const prepared=trimTerminalCrossingsSafe(protectWhite(warp(raw,f),f),f);
-  for(const st of markCorners(prepared,f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
+  const marked=markCorners(prepared,f);
+  for(const st of marked) out.push(...strokeContours(st,f,st.ws,outlineNS));
+  out.push(...cornerFills(marked,f));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
      出廠 cmin=0 直接跳過，所以不開就完全不影響（也不會呼叫布林運算）。 */
   if(counterOn) return protectCounters(id,f,f.cmin,out);
