@@ -3356,15 +3356,20 @@ function strokeOutline(st,f,wScale,NS){
     /* 延伸量按該筆、該端和部件縮放計算；舊版固定用全域半筆寬，小偏旁會突出。 */
     if(st.h==="conn"||st.h==="kakato"||st.hj){
       const tan=[SP[1][0]-SP[0][0],SP[1][1]-SP[0][1]];
-      const ext = st.hj ? st.hj
+      let ext = st.hj ? st.hj
                 : widthAt(st,0,tan,f)*wScale*(st.h==="conn"?0.46:0.16);
+      /* v183：T 字接點夾限（見 markCorners 的說明）。只夾 conn，不動 kakato 與斜接。 */
+      if(!st.hj && st.h==="conn" && st.hclim!==undefined && isFinite(st.hclim))
+        ext=Math.max(0,Math.min(ext,st.hclim));
       const d=unit([-tan[0],-tan[1]]);
       SP[0]=[SP[0][0]+d[0]*ext,SP[0][1]+d[1]*ext];
     }
     if(st.e==="conn"||st.e==="kakato"||st.ej){
       const m=SP.length-1,tan=[SP[m][0]-SP[m-1][0],SP[m][1]-SP[m-1][1]];
-      const ext = st.ej ? st.ej
+      let ext = st.ej ? st.ej
                 : widthAt(st,1,tan,f)*wScale*(st.e==="conn"?0.46:0.16);
+      if(!st.ej && st.e==="conn" && st.eclim!==undefined && isFinite(st.eclim))
+        ext=Math.max(0,Math.min(ext,st.eclim));
       const d=unit(tan);
       SP[m]=[SP[m][0]+d[0]*ext,SP[m][1]+d[1]*ext];
     }
@@ -5772,6 +5777,32 @@ function markCorners(strokes,f){
     const tan=[st.p[n][0]-st.p[0][0], st.p[n][1]-st.p[0][1]];
     return Math.max(6, widthAt(st,0.5,tan,f)*(st.ws||1)/2);
   };
+  /* T 字接點：找出這個端點落在哪一筆身上，回傳允許的最大延伸量。
+     取樣骨架只在真的有 conn 端點時才算，沒有就完全不花這個時間。 */
+  let SKC=null;
+  const tjLimit=(st,e)=>{
+    if(SKC===null) SKC=strokes.map(s=>{
+      try{ return (s.p&&s.p.length>1) ? sampleSkeleton(s.p,s.bend||0,40,40,s.cv,s.kj) : null; }
+      catch(err){ return null; }
+    });
+    let best=null;
+    for(let k=0;k<strokes.length;k++){
+      if(k===e.i||!SKC[k]) continue;
+      const S=SKC[k];
+      for(let q=0;q<S.length;q++){
+        const d=Math.hypot(S[q].p[0]-e.p[0], S[q].p[1]-e.p[1]);
+        if(!best||d<best.d) best={d,k,q,s:S[q],N:S.length};
+      }
+    }
+    if(!best||best.d>14) return Infinity;          /* 沒有靠在別筆身上 */
+    const o=strokes[best.k];
+    const wO=widthAt(o,best.q/Math.max(1,best.N-1),best.s.t,f)*(o.ws||1)/2;
+    const wS=widthAt(st,e.end?1:0,e.t,f)*(st.ws||1)/2;
+    const a=unit(e.t), b=unit(best.s.t);
+    const sn=Math.abs(a[0]*b[1]-a[1]*b[0]), cs=a[0]*b[0]+a[1]*b[1];
+    if(sn<0.05) return Infinity;                   /* 幾乎同向，不是 T 字 */
+    return Math.max(0,(wO-wS*Math.abs(cs))/sn);
+  };
   for(const e of E){
     const st=strokes[e.i];
     let best=null;
@@ -5781,7 +5812,34 @@ function markCorners(strokes,f){
       best=o; break;
     }
     const key=e.end?"ej":"hj";
-    if(!best){ st[key]=0; continue; }
+    if(!best){
+      st[key]=0;
+      /* ★★ T 字接點的夾限（v183）
+         `conn` 的延伸量原本是 `自己的筆寬 × 0.46` —— 一個**固定值**，
+         但這一端會不會露出來，是**對方**決定的。這是第三次同一個病
+         （v176 的斜接公式、v179 的裁切門檻都是同一類）。
+
+         實測「月」（黑體）：兩橫的起點在資料裡正好落在撇的中心線 x=279.5，
+         延伸 0.46×筆寬 = 36.4 之後跑到 243.5。而撇是 taperL，往下愈細：
+           y=641.8 撇半寬 35.0 → 露 1.4（實測 1.4）
+           y=416.0 撇半寬 27.9 → 露 8.5（實測 7.5）
+         上面撇夠粗蓋得住，下面就露出來。Noto Sans/Serif 的月在同樣高度
+         左緣是一路不變的 207.0 / 251.0，**一單位都沒有露**。
+
+         判準：延伸出去的那個**端點角**必須還在對方的墨帶裡。
+         端點原本就在對方中心線上，往外走 ext 之後端點離中心線 ext·sinθ，
+         端點角再加上 ±自己半寬×|cosθ|，要求兩者相加 ≤ 對方半寬：
+             ext ≤ (對方半寬 − 自己半寬×|cosθ|) / sinθ
+         θ=90° 的 T 字就退化成「ext ≤ 對方半寬」。
+         ★ 對方半寬一定要取**交會點**的，不能取筆畫中段 ——
+           出鋒（taper）正是它會壞的原因。
+         ★ 端點對端點的折（hj/ej>0）不走這裡：那種接法外側還有一個尖要補，
+           夾下去會讓轉角缺一角，是另一件事。 */
+      const kind = e.end ? st.e : st.h;
+      st[e.end?"eclim":"hclim"] = (kind==="conn") ? tjLimit(st,e) : Infinity;
+      continue;
+    }
+    st[e.end?"eclim":"hclim"]=Infinity;
     const a=unit(e.t), b=unit(best.t);
     const sin=Math.abs(a[0]*b[1]-a[1]*b[0]);      /* 兩切線夾角的 sin */
     const hw2=halfW(strokes[best.i]);
