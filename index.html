@@ -3244,6 +3244,63 @@ function appendKageTail(S,st,f,wScale){
   }
   return {s:out,kind:st.e};
 }
+/* 接點的真實邊界點收集區。strokeOutline 每畫一筆，若頭尾是接點（hj/ej>0）
+   就把那一端的兩個邊界點（L、R）記下來；glyphContours 收集完所有筆畫後
+   讀出來，把「同一個接點的兩筆」配對、找出真正的缺口、補一段貼合邊界的弧。
+   ★ 不是頓（徑向加寬，會做出水滴狀）——是照向量繪圖的「圓角接合」：
+     直接用兩筆各自的真實邊界端點，只在缺口的角度範圍內補弧，不是憑空一個圓。 */
+let JOINT_PTS=[];
+/* 把同一個接點的兩筆配對，用真實邊界點補一段貼合邊界的弧。
+   ★ 不猜半徑、不畫整圓：兩筆各自在接點的邊界點是已知的，
+     缺口就是「兩個邊界點之間，繞遠路（不穿過墨）的那一側」。
+   同一個接點會有兩筆各兩個點（各自的 L 與 R 端），共四個候選點——
+   取「距離最遠的一對」就是缺口的兩端（近的那一對已經被斜接的內側覆蓋掉了）。 */
+function jointArcFill(pts){
+  const out=[];
+  const used=new Set();
+  for(let i=0;i<pts.length;i++){
+    if(used.has(i)) continue;
+    let bj=-1,bd=1e9;
+    for(let j=i+1;j<pts.length;j++){
+      if(used.has(j)) continue;
+      const d=Math.hypot(pts[i].at[0]-pts[j].at[0], pts[i].at[1]-pts[j].at[1]);
+      if(d<bd){ bd=d; bj=j; }
+    }
+    /* ★ 門檻原本設 30，但實測「好」「你」的真正配對距離是 62~63、
+       「很」的三對接點都是 87~88 —— 因為記錄的 at 是骨架端點，
+       不是像 markCorners 那樣的原始未偏移點，兩筆各自的半寬會把它們推開。
+       改成 100，比實測最大值 88 留一點餘裕，同時仍遠小於無關點的最小距離（352）。 */
+    if(bj<0 || bd>100) continue;
+    used.add(i); used.add(bj);
+    const A=pts[i], B=pts[bj];
+    const center=[(A.at[0]+B.at[0])/2, (A.at[1]+B.at[1])/2];
+    /* 四個候選邊界點：A.e, A.f2, B.e, B.f2。取距離最遠的一對＝缺口兩端。 */
+    const cand=[A.e,A.f2,B.e,B.f2];
+    let mp=[0,1],md=-1;
+    for(let a=0;a<4;a++) for(let b=a+1;b<4;b++){
+      const d=Math.hypot(cand[a][0]-cand[b][0], cand[a][1]-cand[b][1]);
+      if(d>md){ md=d; mp=[a,b]; }
+    }
+    if(md<4) continue;                         /* 幾乎沒有缺口，不用補 */
+    const P=cand[mp[0]], Q=cand[mp[1]];
+    const r=(A.half+B.half)/2;
+    /* 從 center 分別指向 P、Q 的角度，補一段弧（不超過半圈，避免補到墨的另一側） */
+    const a1=Math.atan2(P[1]-center[1],P[0]-center[0]);
+    let a2=Math.atan2(Q[1]-center[1],Q[0]-center[0]);
+    let da=a2-a1;
+    while(da>Math.PI) da-=Math.PI*2;
+    while(da<-Math.PI) da+=Math.PI*2;
+    const K=8, ring=[center];
+    for(let k=0;k<=K;k++){
+      const t=a1+da*k/K;
+      ring.push([center[0]+Math.cos(t)*r, center[1]+Math.sin(t)*r]);
+    }
+    const cmds=[["M",ring[0][0],ring[0][1]]];
+    for(let k=1;k<ring.length;k++) cmds.push(["L",ring[k][0],ring[k][1]]);
+    out.push(cmds);
+  }
+  return out;
+}
 function strokeOutline(st,f,wScale,NS){
   const {hw}=widths(f);
   const fillet=((st.kage&&st.t==="zhe")
@@ -3306,7 +3363,18 @@ function strokeOutline(st,f,wScale,NS){
      所以加寬量直接用這個公式，不是拍一個固定值。
      ★ 只在「真的有相接」時作用（hj/ej > 0），獨立的端點完全不受影響。
      ========================================================================== */
-  /* ★★ 接點頓：試作後移除（v170）。
+  /* ★★★ 接點頓：用轉角檢核量過，確定是錯的方向（v173）。
+     強度掃描（120 字平均凹口數，字重 130）：
+       JDUN 0 → 16.55（不作用，最好）
+            0.8 → 18.23
+            1.9 → 20.03
+            5   → 20.23
+     **加寬讓凹口變多**，「嗎」從 1 增到 7 特別明顯。
+     原因推測：端點鼓起來之後，跟鄰筆之間又產生新的夾角 —— 補一個洞、開兩個洞。
+
+     ★ 這次跟 v170 不同的是「有可信的驗收」：v170 是量不出來所以移除，
+       這次是**量出來確定變差**。方向排除，不用再試。 */
+  /* ★★ 舊註解（v170 的失敗紀錄）：
      推論是對的 —— 斜接（hj/ej）填內側、外側楔形要靠「頓」把墨往外鼓，
      那也是書法的作法。墨量確實增加了（好 3009→3022、嗎 2809→2873），方向沒錯。
 
@@ -3425,6 +3493,8 @@ function strokeOutline(st,f,wScale,NS){
   if(fitTol>0) pathFromPts(Rrev,fitTol,cmds,true);
   else for(const q of Rrev) cmds.push(["L",q[0],q[1]]);
   capCmds(C.a,S[0].p,T0,w0,-1,La[0],cmds,f);
+  if(st.hj>0) JOINT_PTS.push({at:S[0].p, half:w0, e:L[0], f2:R[0]});
+  if(st.ej>0) JOINT_PTS.push({at:S[n].p, half:w1, e:L[L.length-1], f2:R[R.length-1]});
   return orient(cmds,-1);
 }
 /* 中空的內圈用專案既有的 reverseContour() 反轉繞向。
@@ -5525,9 +5595,15 @@ function markCorners(strokes,f){
     const tight = st.lat || strokes[best.i].lat;
     st[key]=(f.miter===0) ? 0
       : Math.min(hw2*(tight?1.15:3.2), hw2/Math.max(tight?0.55:0.28, sin));
-    /* ★ 順便記下夾角的 sin，給「接點頓」用。
-       斜接是把兩筆各自往外延長、填的是內側；
-       外側那個楔形要靠「頓」（局部加寬）才補得起來 —— 那也是書法的作法。 */
+    /* ★ 記下**完整的夾角**（度），不是只有 sin。
+       sin 分不出「平順接續」(180°) 和「急折回」(0°)——兩者的 sin 都接近 0，
+       所以 v173 用 sin 算補償時，急折的地方反而算出 0。
+       兩條切線都是「從接點往外指」：
+         180° = 直線接續（不需要補）
+          90° = 直角轉折
+           0° = 完全折回（缺口最深） */
+    const dotv=a[0]*b[0]+a[1]*b[1];
+    st[e.end?"eja":"hja"]=Math.atan2(sin,dotv)*180/Math.PI;
     st[e.end?"ejs":"hjs"]=sin;
   }
   return strokes;
