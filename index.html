@@ -5088,6 +5088,167 @@ function csEnclosedCounterCuts(PCL,marked,rf,minGap,tau,currentUnion){
   return cuts;
 }
 
+/* ==========================================================================
+   最終輪廓管線（v191）
+   SVG / PNG / OTF 全部走這一個出口，不再讓布林運算散落在各個匯出點。
+
+   ★ 為什麼要做：現在的 `dedupContours` 第一行就 `pcFlatten(c,4)` ——
+     每一段曲線先拆成 4 條直線，布林之後也沒有人把曲線接回來。
+     實測 138 字：原始 11,103 節點 / 其中 4,415 段是曲線；
+     去除重疊後 11,995 節點 / 曲線只剩 **4 段**（保留率 0.1%）。
+     v139/v157 的曲線擬合與極值點，跑一次去除重疊就全毀。
+
+   ★ 所以問題不是布林後端不夠成熟（polygon-clipping 就是 Martinez 演算法，
+     成熟度沒問題），是**輸出沒有 refit**。而擬合器我們本來就有
+     （pathFromPts / fitQuad / addQuadWithExtrema），只是它以前只服務 strokeOutline。
+     這條路零新相依，維持單一自足 HTML。
+
+   ★ 可變字型整段跳過。業界標準就是可變字型保留重疊 ——
+     移除重疊會改變輪廓組成，可能讓主體之間無法內插。
+     v187 的 compatible repair 解的是另一個問題，不跟布林綁在一起。
+
+   ★ 視覺守門是整條管線最重要的一件事。v189 的 QA 已經指出：
+     13,117 字裡 5,796 個原始自交，5,740 個是視覺等價，真正有視覺風險只有 2 個 ——
+     也就是**視覺已經是對的**。這輪買到的是「驗證工具不再標紅、檔案更小」，
+     不是「更好看」。所以任何 cleanup 只要讓點陣結果變動超過門檻就必須退回原始，
+     否則又會回到「為了消自交把月、門、手修壞」的老路。
+   ========================================================================== */
+let FINAL_BACKEND="pc-refit";     /* pc-refit | pc | none */
+let FINAL_GUARD_TOL=0.006;        /* 點陣差異超過墨量的 0.6% 就退回原始輪廓 */
+const FINAL_GUARD_N=96;           /* 守門的取樣解析度 */
+
+/* 把布林吐出來的折線重新擬合成曲線。
+   起點先轉到最尖的那個角 —— pathFromPts 一定會在起點斷開，
+   如果起點落在一段平滑曲線中間，那裡就會多一個假轉角。 */
+function refitRing(ring,tol){
+  if(!ring||ring.length<4) return null;
+  let pts=ring.slice();
+  if(pts.length>1){
+    const a=pts[0],b=pts[pts.length-1];
+    if(Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9) pts.pop();
+  }
+  /* 布林輸出常有幾乎重合的點，先清掉，否則擬合的夾角判斷會被雜訊帶歪 */
+  const cl=[pts[0]];
+  for(let i=1;i<pts.length;i++){
+    const p=pts[i],q=cl[cl.length-1];
+    if(Math.hypot(p[0]-q[0],p[1]-q[1])>0.08) cl.push(p);
+  }
+  if(cl.length<3) return null;
+  /* 找最尖的角當起點 */
+  let sharp=0,best=2;
+  for(let i=0;i<cl.length;i++){
+    const a=cl[(i-1+cl.length)%cl.length],b=cl[i],c=cl[(i+1)%cl.length];
+    const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(v1[0],v1[1]),l2=Math.hypot(v2[0],v2[1]);
+    if(l1<1e-6||l2<1e-6) continue;
+    const cs=(v1[0]*v2[0]+v1[1]*v2[1])/(l1*l2);
+    if(cs<best){ best=cs; sharp=i; }
+  }
+  const rot=cl.slice(sharp).concat(cl.slice(0,sharp));
+  rot.push(rot[0]);
+  const out=[];
+  pathFromPts(rot,tol,out,false);
+  return out.length>1?out:null;
+}
+
+/* 單一輪廓自交檢查（線段兩兩求交，輪廓的點數都是幾十個，直接算就好） */
+function ringSelfIntersects(cmds){
+  const r=pcFlatten(cmds,4);
+  if(!r||r.length<5) return false;
+  for(let i=0;i<r.length-1;i++) for(let j=i+2;j<r.length-1;j++){
+    if(i===0&&j===r.length-2) continue;
+    const a=r[i],b=r[i+1],p=r[j],q=r[j+1];
+    const s1=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
+    const s2=(b[0]-a[0])*(q[1]-a[1])-(b[1]-a[1])*(q[0]-a[0]);
+    const s3=(q[0]-p[0])*(a[1]-p[1])-(q[1]-p[1])*(a[0]-p[0]);
+    const s4=(q[0]-p[0])*(b[1]-p[1])-(q[1]-p[1])*(b[0]-p[0]);
+    if(s1*s2<0&&s3*s4<0) return true;
+  }
+  return false;
+}
+/* 點陣遮罩：只做黑白、不做反鋸齒，夠用而且快 */
+function finalMask(cs,N){
+  N=N||FINAL_GUARD_N;
+  const m=new Uint8Array(N*N);
+  const rings=[];
+  for(const c of cs){ const r=pcFlatten(c,6); if(r&&r.length>=4) rings.push(r); }
+  for(let row=0;row<N;row++){
+    const y=(row+0.5)/N*EM;
+    const xs=[];
+    for(const r of rings) for(let i=0;i<r.length-1;i++){
+      const x1=r[i][0],y1=r[i][1],x2=r[i+1][0],y2=r[i+1][1];
+      if((y1<=y&&y2>y)||(y2<=y&&y1>y)) xs.push([x1+(x2-x1)*((y-y1)/(y2-y1)), y2>y1?1:-1]);
+    }
+    if(!xs.length) continue;
+    xs.sort((a,b)=>a[0]-b[0]);
+    let w=0;
+    for(let i=0;i<xs.length-1;i++){
+      w+=xs[i][1];
+      if(w===0) continue;
+      const a=Math.max(0,Math.floor(xs[i][0]/EM*N)), b=Math.min(N-1,Math.ceil(xs[i+1][0]/EM*N));
+      for(let col=a;col<=b;col++) m[row*N+col]=1;
+    }
+  }
+  return m;
+}
+function finalRasterDiff(a,b){
+  const ma=finalMask(a), mb=finalMask(b);
+  let diff=0, ink=0;
+  for(let i=0;i<ma.length;i++){ if(ma[i]) ink++; if(ma[i]!==mb[i]) diff++; }
+  return ink?diff/ink:0;
+}
+
+const FINAL_BACKENDS={
+  "none": cs=>cs,
+  /* 現行行為：布林之後直接輸出折線 */
+  "pc": cs=>dedupContours(cs),
+  /* 布林之後用自己的擬合器把曲線接回來 */
+  "pc-refit": (cs,opt)=>{
+    /* SUB=6 / fitTol=4.5 是實測的甜蜜點（138 字掃描 SUB 6/8 × fitTol 0.9/1.8/3.0/4.5）：
+       輪廓 1395→623（0.45x）、節點 11103→11174（+0.6%）、曲線 4415→5111（116%）、
+       點陣差異平均 0.130%、最大 0.53%。細分再高只會多節點，換不到準確度。 */
+    const d=dedupContours(cs,(opt&&opt.sub)||6,(opt&&opt.tol)!=null?opt.tol:0.35);
+    if(!d||!d.length) return cs;
+    const out=[];
+    for(const c of d){
+      const r=pcFlatten(c,1);          /* 已經是折線，SUB=1 只是攤平成點列 */
+      const fit=refitRing(r,(opt&&opt.fitTol)||4.5);
+      /* ★ 逐輪廓守門：布林的輸出是乾淨的（實測 0/642 自交），
+         自交全部是擬合加回來的 —— `fitQuad` 的誤差量的是「資料點到曲線的距離」，
+         曲線繞出去一大圈、每個資料點仍然很近，所以照樣通過門檻（v176 就踩過）。
+         實測跟容差無關：4.5 有 33 個、1.8 有 35 個、0.9 還有 31 個。
+         所以不調容差，改成**擬合完自己檢查**，會自交就退回那一條折線。
+         只退那一條，其餘輪廓照樣保有曲線。 */
+      out.push((fit && !ringSelfIntersects(fit)) ? fit : c);
+    }
+    return out;
+  }
+};
+
+function finalizeContours(cs,opt){
+  opt=opt||{};
+  if(!cs||!cs.length) return cs;
+  /* 可變字型：保留重疊，直接回原始 */
+  if(opt.variableCompatible) return cs;
+  const be=FINAL_BACKENDS[opt.backend||FINAL_BACKEND];
+  if(!be) return cs;
+  let out;
+  try{ out=be(cs,opt); }catch(e){ return cs; }
+  if(!out||!out.length) return cs;
+  for(const c of out) for(const k of c) for(let i=1;i<k.length;i++)
+    if(!isFinite(k[i])) return cs;                    /* 出現 NaN 一律退回 */
+  if(opt.visualGuard!==false){
+    let d; try{ d=finalRasterDiff(cs,out); }catch(e){ return cs; }
+    if(d>(opt.guardTol!=null?opt.guardTol:FINAL_GUARD_TOL)){
+      if(typeof FINAL_STATS==="object") FINAL_STATS.rejected++;
+      return cs;                                      /* 視覺守門否決 */
+    }
+  }
+  if(typeof FINAL_STATS==="object") FINAL_STATS.accepted++;
+  return out;
+}
+let FINAL_STATS={accepted:0,rejected:0};
+
 function protectCounters(ch, f, minGap, cs){
   const PCL=pcLib(); if(!PCL || !cs) return cs;
   if(!minGap && !(f.cround>0)) return cs;
@@ -7758,7 +7919,7 @@ function getWorker(){
 function cmdsOf(id,NS){
   const out=[];
   let cs=glyphContours(id,FA(),null,NS);
-  if(DEDUP_ON) cs=dedupContours(cs);
+  if(DEDUP_ON) cs=finalizeContours(cs,{variableCompatible:VF_STABLE});
   for(const c of cs){
     for(const k of c){
       if(k[0]==="M") out.push(0,k[1],k[2]);
@@ -7774,7 +7935,7 @@ function cmdsOf(id,NS){
 function cmdsOfF(id,NS,f){
   const out=[];
   let cs=glyphContours(id,f,null,NS);
-  if(DEDUP_ON) cs=dedupContours(cs);
+  if(DEDUP_ON) cs=finalizeContours(cs,{variableCompatible:VF_STABLE});
   for(const c of cs){
     for(const k of c){
       if(k[0]==="M")out.push(0,k[1],k[2]); else if(k[0]==="L")out.push(1,k[1],k[2]);
@@ -7801,7 +7962,7 @@ async function buildFontBig(chars,NS,over){
       const id=chars[i]; if(!G[id]||!G[id].u) continue;
       const m=vertMode(id); if(!m) continue;
       let cs=glyphContours(id,over?over.f:FA(),null,NS);
-      if(DEDUP_ON && cs.length>1) cs=dedupContours(cs);
+      if(DEDUP_ON && cs.length>1) cs=finalizeContours(cs,{variableCompatible:VF_STABLE});
       const out=[];
       for(const c of cs.map(x=>vertXform(x,m))){
         for(const k of c){
