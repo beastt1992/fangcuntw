@@ -3218,7 +3218,38 @@ function fitQuad(pts,i0,i1,tol,out){
     const d=Math.hypot(pts[i][0]-qx,pts[i][1]-qy);
     if(d>err){ err=d; worst=i; }
   }
-  if(err<=tol){ addQuadWithExtrema(A,[cx,cy],B,out); return; }
+  /* ★★ v192：誤差門檻本身不夠 —— 它量的是「資料點到曲線的距離」，
+     控制點飛出去很遠、曲線繞一大圈，每個資料點仍然可能離曲線很近，
+     所以照樣通過。這個缺陷踩過兩次：
+       v176 補角：擬合把 45° 的轉角弧往外衝 46 單位，
+                  再被 addQuadWithExtrema 的極值切割寫成一個真的節點 → 輪廓自交
+       v191 refit：布林輸出本身 0/642 自交，自交全部是擬合加回來的，
+                  而且跟容差無關（4.5→33、1.8→35、0.9→31）
+
+     加一道「不得超出資料」的約束。二次貝茲整條曲線在 {A,C,B} 的凸包內，
+     且離弦的最大偏離（發生在 t=0.5）正好是**控制點偏離的一半**。
+     所以擬合良好時，控制點的垂距 hc 應該約等於資料本身最大垂距 hd 的兩倍。
+       hc > max(tol*2, hd*2.2)  → 曲線鼓出資料之外，判定失敗
+       控制點沿弦的位置跑到 [-0.25, 1.25] 之外 → 會產生尖點或迴圈，判定失敗
+     判定失敗就走下面既有的切開重試，不是退回直線。 */
+  let ok = err<=tol;
+  if(ok){
+    const dx=B[0]-A[0], dy=B[1]-A[1], L=Math.hypot(dx,dy);
+    if(L>1e-9){
+      const ux=dx/L, uy=dy/L;
+      let hd=0;
+      for(let i=i0+1;i<i1;i++){
+        const px=pts[i][0]-A[0], py=pts[i][1]-A[1];
+        const h=Math.abs(-px*uy+py*ux);
+        if(h>hd) hd=h;
+      }
+      const ccx=cx-A[0], ccy=cy-A[1];
+      const s=(ccx*ux+ccy*uy)/L;
+      const hc=Math.abs(-ccx*uy+ccy*ux);
+      if(hc > Math.max(tol*2, hd*2.2) || s < -0.25 || s > 1.25) ok=false;
+    }
+  }
+  if(ok){ addQuadWithExtrema(A,[cx,cy],B,out); return; }
   /* ★ 誤差太大時要切開再試，切點取「最差點」——
      但最差點若落在頭尾第二個位置，舊版就直接退回一整串直線。
      那正好是「長而平緩的曲線」最常見的情況：實測 7137 次退回、只有 3043 次成功，
@@ -5134,17 +5165,31 @@ function refitRing(ring,tol){
     if(Math.hypot(p[0]-q[0],p[1]-q[1])>0.08) cl.push(p);
   }
   if(cl.length<3) return null;
+  /* ★ 先把攤平留下的抖動壓掉（v191b）。
+     布林的輸入是 SUB=6 攤平出來的折線，加上交點，
+     一段本來平滑的曲線會變成十幾個「幾乎共線」的點。
+     這些點不會被 pathFromPts 合併掉 —— 它只在轉角切斷、
+     然後在每一段裡擬合，抖動會讓它切得太碎、節點因此多出來。
+     先用 RDP 把共線的點清掉，擬合器才能拉出長段。
+     ★ 容差是實測掃出來的（見下方數字表），太大會削掉真正的細節。 */
+  /* ★ 試過並移除：refit 前先用 RDP 把「攤平留下的共線抖動」壓掉。
+     實測不划算 —— 節點只從 1.10x 降到 1.08x（容差 0.45），
+     但曲線保留率從 96% 掉到 90%；要壓到 1.00x 得用容差 1.0，
+     曲線只剩 83%、守門否決數變三倍。提高細分也一樣（SUB=14/fitTol=6.5
+     只到 1.04x，點陣差異反而從 0.114% 升到 0.175%）。
+     結論：**那 +10% 是布林在交點產生的真實頂點，不是雜訊，擬合不掉。** */
+  const cl2=cl;
   /* 找最尖的角當起點 */
   let sharp=0,best=2;
-  for(let i=0;i<cl.length;i++){
-    const a=cl[(i-1+cl.length)%cl.length],b=cl[i],c=cl[(i+1)%cl.length];
+  for(let i=0;i<cl2.length;i++){
+    const a=cl2[(i-1+cl2.length)%cl2.length],b=cl2[i],c=cl2[(i+1)%cl2.length];
     const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
     const l1=Math.hypot(v1[0],v1[1]),l2=Math.hypot(v2[0],v2[1]);
     if(l1<1e-6||l2<1e-6) continue;
     const cs=(v1[0]*v2[0]+v1[1]*v2[1])/(l1*l2);
     if(cs<best){ best=cs; sharp=i; }
   }
-  const rot=cl.slice(sharp).concat(cl.slice(0,sharp));
+  const rot=cl2.slice(sharp).concat(cl2.slice(0,sharp));
   rot.push(rot[0]);
   const out=[];
   pathFromPts(rot,tol,out,false);
