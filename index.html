@@ -3040,16 +3040,7 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
       out.push(["L",tip[0]+T[0]*w*2.20*dir-nx*w*0.22,tip[1]+T[1]*w*2.20*dir-ny*w*0.22]);
       out.push(["L",to[0],to[1]]); return;
     }
-    /* 0 ＝ 依筆意：跟隨目前字體的端點語言。
-       圓體／高 cap 時應該是完整圓頭，而不是固定的小喙；
-       一般黑體/楷體才保留原本短促的小喙。 */
-    const rr=(f&&f.cap!=null?f.cap:(f&&f.round!=null?f.round:0));
-    if(rr>0.55){
-      pushQ(out,tip[0]+T[0]*w*1.28*rr*dir,
-                tip[1]+T[1]*w*1.28*rr*dir,
-                to[0],to[1]);
-      return;
-    }
+    /* 0 ＝ 依筆意：原本的短促小喙 */
     const cx=tip[0]+T[0]*w*0.42*dir-nx*w*0.18;
     const cy=tip[1]+T[1]*w*0.42*dir-ny*w*0.18;
     pushQ(out,cx,cy,to[0],to[1]);return;
@@ -3328,12 +3319,8 @@ function jointArcFill(pts){
 }
 function strokeOutline(st,f,wScale,NS){
   const {hw}=widths(f);
-  /* v177 — 「折」的轉角不要先在骨架層磨成大圓弧。
-     正規 stroke expansion 的做法是：中心線保留轉折，內側 offset 在交點裁切，
-     外側再依 join style（round / bevel / miter）補接。以前 fillet 太大，子、了、可
-     這類折筆在進 outline 前就已經失去「轉折」的骨性。 */
   const fillet=((st.kage&&st.t==="zhe")
-    ? hw*(0.012+0.10*f.round)*(st.fr||1)
+    ? hw*(0.035+0.28*f.round)*(st.fr||1)
     : hw*(0.10+0.62*f.round)*(st.fr||1)) * (1+(f.inflate||0)*1.6);
   let SP=st.p;
   if(f.spike>0 && st.p.length>1){
@@ -3486,48 +3473,6 @@ function strokeOutline(st,f,wScale,NS){
     }
   }
   /* ==========================================================================
-     v177：內角先「裁切」，外角才「補 join」
-
-     FontForge / PostScript 的 Expand Stroke 原則：轉角較小的一側，兩條 offset
-     直線會相交，必須把超過交點的部分 trim 掉；較大的 reflex angle 那一側才
-     需要 round / bevel / miter join。舊版只做後半段（外側補弧），所以內側仍會
-     留下一小塊超出去的耳朵，兩條斜線或折筆交會時尤其明顯。
-
-     這裡直接用相鄰兩個 offset 點各自的中心線切線求無限直線交點，將「內側」
-     兩點同時收至交點。只處理 >= 28° 的明顯轉向，而且交點必須落在 3.2 個
-     半筆寬內，避免小半徑回捲／曲線的 offset evolute 被錯誤拉到很遠。
-     ========================================================================== */
-  {
-    const A_MIN=28*Math.PI/180;
-    const cross2=(a,b)=>a[0]*b[1]-a[1]*b[0];
-    for(let i=0;i<n;i++){
-      const a=S[i].t,b=S[i+1].t;
-      const la=Math.hypot(a[0],a[1])||1, lb=Math.hypot(b[0],b[1])||1;
-      const au=[a[0]/la,a[1]/la], bu=[b[0]/lb,b[1]/lb];
-      const dot=Math.max(-1,Math.min(1,au[0]*bu[0]+au[1]*bu[1]));
-      const ang=Math.acos(dot);
-      if(ang<A_MIN) continue;
-      const cr=cross2(au,bu);
-      if(Math.abs(cr)<1e-5) continue;
-      /* 順時針轉：L 是外側、R 是內側；逆時針反之。 */
-      const inner=cr<0?R:L;
-      const P=inner[i], Q=inner[i+1];
-      const qmp=[Q[0]-P[0],Q[1]-P[1]];
-      const s=cross2(qmp,bu)/cr;
-      const X=[P[0]+au[0]*s,P[1]+au[1]*s];
-      const local=Math.max(
-        Math.hypot(L[i][0]-R[i][0],L[i][1]-R[i][1]),
-        Math.hypot(L[i+1][0]-R[i+1][0],L[i+1][1]-R[i+1][1])
-      )/2;
-      if(!Number.isFinite(X[0])||!Number.isFinite(X[1])) continue;
-      if(Math.hypot(X[0]-P[0],X[1]-P[1])>local*3.2) continue;
-      if(Math.hypot(X[0]-Q[0],X[1]-Q[1])>local*3.2) continue;
-      inner[i]=X.slice();
-      inner[i+1]=X.slice();
-    }
-  }
-
-  /* ==========================================================================
      轉角飽滿 —— 同一筆內部的圓角接合（round join）
      使用者的描述是關鍵：「打勾一般都是一筆到底，從上而下 Y 軸一個直線，
      然後往上打勾，轉角處要飽滿」。**打勾是一筆**，不是兩筆之間的接點。
@@ -3628,19 +3573,16 @@ function strokeOutline(st,f,wScale,NS){
      （細縫確實 100% 在端點附近：起筆 54%、收筆 46%、中段 0%，
        但那代表「端點區域的幾何有問題」，不代表「端點該更長」。） */
   const C=caps(st,f);
-  /* 被 v177 的 T-junction 裁切過的端點必須用 butt/flat cap。
-     否則 centerline 雖然截到交點，圓頭／尖頭 cap 又會沿切線長回另一筆外面。 */
+  /* v179：只有跨筆 T-junction 被裁過的開放端切平；hook/bend 不會進到這裡的 trim。 */
   if(st._trimH) C.a="flat";
   if(st._trimE) C.b="flat";
   /* ★ KAGE 的鉤是「骨架延伸出去的曲線」，不是端點造型 ——
      尾端原本一律寫死成 flat（切平），所以鉤造型軸對這一萬三千字完全沒作用。
      現在讓軸接管：0 維持原本的切平，其餘套用選定的收法。 */
   if(tail.kind==="hook"){
-    /* v178：鉤本身就是語意端點，不能在這裡先降級成 flat/pt/數值 cap。
-       交給 capCmds("hook") 統一依 hookst + 當前圓體端點圓度決定收尾。
-       v176/177 這裡用 HK[] 先改寫 C.b，導致 hookst=0（依筆意）直接變 flat，
-       圓體的鉤尾圓頭因此消失。 */
-    C.b="hook";
+    const HK=["flat","pt",1,"flat","pt"];      /* 依筆意／尖鉤／圓鉤／平鉤／長挑 */
+    const k=Math.round(f.hookst||0);
+    C.b=HK[k]!==undefined?HK[k]:"flat";
   }
   else if(tail.kind==="bend") C.b=Math.min(f.round,0.22);
   const T0=unit(S[0].t),T1=unit(S[n].t);
@@ -5730,56 +5672,52 @@ function jointFill(strokes,f){
   }
   return out;
 }
+
 /* ============================================================================
-   v177：端點穿越另一筆時，先在骨架層裁到真正交點。
+   v179 — SAFE CROSS-STROKE TERMINAL TRIM
+   基線：v176 的 hook / same-stroke round-join 幾何完全保留，不再碰它。
 
-   典型情況是亻、女、好、你裡的「一筆在另一筆上收住」。資料／warp 後中心線只要
-   多穿過十幾個 unit，expand stroke 就會把那一小段放大成很明顯的尖耳朵。
-   這不是 round join 能解：它是 topology 問題，應該先把 terminating stroke 截斷。
-
-   規則非常保守：
-   - 只看每筆的第一段 / 最後一段；
-   - 交點必須落在另一筆的「內部」(5%..95%)，避免把共端點誤判成 T-junction；
-   - 超過交點的 overrun 最多 1.7 個半筆寬；
-   - hook / bend 的尾端不動（那是同一筆的語義尾巴）。
+   只處理「兩筆不同 stroke」的 T-junction：若一筆的開放端短距離穿過另一筆中心線，
+   把那個端點裁回真實交點。hook / bend 整筆直接排除，避免再次破壞 v176 已修好的鉤根。
+   這是 topology trim，不是 same-stroke corner join。
    ============================================================================ */
-function trimTerminalCrossings(strokes,f){
-  const cross=(a,b)=>a[0]*b[1]-a[1]*b[0];
-  const hit=(A,B,U,V)=>{
-    const r=[B[0]-A[0],B[1]-A[1]], s=[V[0]-U[0],V[1]-U[1]];
-    const den=cross(r,s); if(Math.abs(den)<1e-7) return null;
-    const q=[U[0]-A[0],U[1]-A[1]];
-    const t=cross(q,s)/den, u=cross(q,r)/den;
+function trimTerminalCrossingsSafe(strokes,f){
+  const hit=(A,B,C,D)=>{
+    const rx=B[0]-A[0], ry=B[1]-A[1], sx=D[0]-C[0], sy=D[1]-C[1];
+    const den=rx*sy-ry*sx;
+    if(Math.abs(den)<1e-8) return null;
+    const qx=C[0]-A[0], qy=C[1]-A[1];
+    const t=(qx*sy-qy*sx)/den, u=(qx*ry-qy*rx)/den;
     if(t<0||t>1||u<0||u>1) return null;
-    return {t,u,p:[A[0]+r[0]*t,A[1]+r[1]*t]};
+    return {t,u,p:[A[0]+rx*t,A[1]+ry*t]};
   };
   const half=st=>{
-    if(!st.p||st.p.length<2) return 12;
-    const n=st.p.length-1, tan=[st.p[n][0]-st.p[0][0],st.p[n][1]-st.p[0][1]];
+    const n=st.p.length-1;
+    const tan=[st.p[n][0]-st.p[0][0],st.p[n][1]-st.p[0][1]];
     return Math.max(6,widthAt(st,0.5,tan,f)*(st.ws||1)/2);
   };
   for(let i=0;i<strokes.length;i++){
-    const st=strokes[i]; if(!st.p||st.p.length<2||st.t==="dot"||st.t==="ring") continue;
-    const n=st.p.length-1, lim=Math.max(18,half(st)*1.7);
+    const st=strokes[i];
+    if(!st.p||st.p.length<2||st.t==="dot"||st.t==="ring") continue;
+    /* ★ v176 的鉤與彎尾整筆凍結：不裁頭、不裁尾、不改 tangent。 */
+    if(st.e==="hook"||st.e==="bend") continue;
+    const n=st.p.length-1, lim=Math.max(14,half(st)*1.45);
     let bestH=null,bestE=null;
     for(let j=0;j<strokes.length;j++){
       if(i===j) continue;
-      const ot=strokes[j]; if(!ot.p||ot.p.length<2||ot.t==="dot"||ot.t==="ring") continue;
+      const ot=strokes[j];
+      if(!ot.p||ot.p.length<2||ot.t==="dot"||ot.t==="ring") continue;
       for(let k=0;k<ot.p.length-1;k++){
         const U=ot.p[k],V=ot.p[k+1];
-        /* 頭端：交點在第一段靠近頭的一側，且另一筆不是自己的端點。 */
         const h=hit(st.p[0],st.p[1],U,V);
-        if(h && h.t>0.015 && h.t<0.46 && h.u>0.05 && h.u<0.95){
+        if(h && h.t>0.02 && h.t<0.40 && h.u>0.06 && h.u<0.94){
           const over=Math.hypot(st.p[0][0]-h.p[0],st.p[0][1]-h.p[1]);
           if(over>1.0 && over<=lim && (!bestH||over<bestH.over)) bestH={...h,over};
         }
-        /* 尾端：交點在最後一段靠近尾的一側。鉤／彎尾本身不能截。 */
-        if(st.e!=="hook"&&st.e!=="bend"){
-          const e=hit(st.p[n-1],st.p[n],U,V);
-          if(e && e.t>0.54 && e.t<0.985 && e.u>0.05 && e.u<0.95){
-            const over=Math.hypot(st.p[n][0]-e.p[0],st.p[n][1]-e.p[1]);
-            if(over>1.0 && over<=lim && (!bestE||over<bestE.over)) bestE={...e,over};
-          }
+        const e=hit(st.p[n-1],st.p[n],U,V);
+        if(e && e.t>0.60 && e.t<0.98 && e.u>0.06 && e.u<0.94){
+          const over=Math.hypot(st.p[n][0]-e.p[0],st.p[n][1]-e.p[1]);
+          if(over>1.0 && over<=lim && (!bestE||over<bestE.over)) bestE={...e,over};
         }
       }
     }
@@ -5862,7 +5800,7 @@ function glyphContours(id,f,variant,NS){
     if(Date.now()-CS_T0 > CS_BUDGET_MS) counterOn=false;
   }
   const outlineNS=counterOn ? Math.max(20,NS||0) : NS;
-  const prepared=trimTerminalCrossings(protectWhite(warp(raw,f),f),f);
+  const prepared=trimTerminalCrossingsSafe(protectWhite(warp(raw,f),f),f);
   for(const st of markCorners(prepared,f)) out.push(...strokeContours(st,f,st.ws,outlineNS));
   /* 內白保護接在唯一的出口，畫面與匯出一次涵蓋。
      出廠 cmin=0 直接跳過，所以不開就完全不影響（也不會呼叫布林運算）。 */
