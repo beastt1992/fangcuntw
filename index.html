@@ -223,6 +223,16 @@
   .qaprow>label{width:82px;flex:none;font-size:10.5px;color:var(--muted);padding-top:5px}
   .qachip{border:1px solid var(--line-2);background:var(--paper);color:var(--ink);padding:3px 7px;font-family:var(--mono);font-size:12px;cursor:pointer}
   .qachip:hover{border-color:var(--ink);background:var(--paper-2)}
+  .qachip.auto{border-color:var(--ok);color:var(--ok)}
+  .qachip.manual{border-color:var(--w2);color:var(--w2)}
+  .qatriage{margin-top:10px;border:1px solid var(--line);background:var(--paper);padding:10px 11px}
+  .qatriage h4{margin:0 0 7px;font-size:11px;letter-spacing:.08em}
+  .qatriage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+  .qatriage-card{border:1px solid var(--line-2);padding:8px 9px;min-width:0}
+  .qatriage-card b{font:500 17px/1 var(--mono);display:block}
+  .qatriage-card span{font-size:10px;color:var(--muted);display:block;margin-top:4px}
+  .qatriage-note{font-size:10.5px;color:var(--muted);line-height:1.65;margin-top:8px}
+  @media(max-width:700px){.qatriage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media(max-width:700px){.qadash{grid-template-columns:repeat(2,minmax(0,1fr))}.qacard:first-child{grid-column:1/-1}.qaprow>label{width:100%}}
 
   .gridwrap{flex:1;min-height:0;overflow:auto;padding:7px}
@@ -1821,6 +1831,17 @@
           <span class="tip" id="qaAllStat">只做幾何檢查：空輪廓、NaN、爆框、自交；不做 40px 光柵比較。</span>
         </div>
         <div class="qaproblems" id="qaProblems" hidden></div>
+        <div class="qatriage" id="qaTriage" hidden>
+          <h4>自動分類 / REPAIR TRIAGE</h4>
+          <div class="qatriage-grid">
+            <div class="qatriage-card"><b id="qaTHook">—</b><span>鉤根 / hook root</span></div>
+            <div class="qatriage-card"><b id="qaTJoin">—</b><span>折角／接合</span></div>
+            <div class="qatriage-card"><b id="qaTAuto">—</b><span>可安全自動清理</span></div>
+            <div class="qatriage-card"><b id="qaTManual">—</b><span>需人工檢查</span></div>
+          </div>
+          <div class="qatriage-note" id="qaTNote">自動清理只做 preflight：Boolean 後必須沒有自交、輪廓面積差在容許範圍內才算「可安全清理」，不會直接改你的骨架資料。</div>
+          <div class="qafullrow"><button class="btn ghost sm" id="qaExportReport" type="button" disabled>匯出 QA 報告 JSON</button></div>
+        </div>
         <div id="qaOut" style="font-family:var(--mono);font-size:11px;line-height:1.75;
              max-height:46vh;overflow:auto;white-space:pre;color:var(--muted)"></div>
       </div>
@@ -9251,6 +9272,55 @@ async function qaRun(){
   else v.innerHTML="結構正常，但有 <b>"+drift+"</b> 個字跟基準不同（最大變化："+worstCh+
                    " 黑度差 "+worst.toFixed(4)+"）。上面標了「← 變了」的就是。"+mstNote;
 }
+/* v188 — QA 自動分類。這裡只做診斷，不直接改骨架。
+   原則：先判斷問題「像哪一類」，再用 Boolean cleanup 做安全 preflight。 */
+function qaStrokeProfile(id){
+  const raw=[];
+  try{collect(id,[0,0,EM,EM],1,raw,7,null,0,F.optic,F.pratio);}catch(e){}
+  let hook=0,zhe=0,ring=0,bend=0;
+  for(const st of raw){
+    if(st.e==="hook")hook++;
+    if(st.t==="zhe")zhe++;
+    if(st.t==="ring")ring++;
+    if(st.e==="bend")bend++;
+  }
+  return {hook,zhe,ring,bend,n:raw.length};
+}
+function qaContourArea(cs){
+  let a=0;
+  for(const c of (cs||[])){const p=pcFlatten(c,3);if(p.length>=3)a+=Math.abs(csSignedAreaSimple(p));}
+  return a;
+}
+function qaSafeCleanupCheck(cs){
+  if(!cs||!cs.length)return {ok:false,reason:"空輪廓"};
+  const before=qaContourArea(cs);
+  const clean=vfBooleanClean(cs);
+  if(!clean||!clean.length)return {ok:false,reason:"Boolean 失敗"};
+  const sx=contoursSelfX(clean,2);
+  if(sx)return {ok:false,reason:"清理後仍自交"};
+  const after=qaContourArea(clean);
+  const drift=before>1?Math.abs(after-before)/before:0;
+  /* 面積差太大代表 Boolean 不只是消掉重疊，可能改了真正造型。 */
+  if(drift>0.08)return {ok:false,reason:"面積改變 "+(drift*100).toFixed(1)+"%",drift,clean};
+  return {ok:true,reason:"可安全清理",drift,clean};
+}
+function qaClassifyIssue(id,cs,kind){
+  const p=qaStrokeProfile(id);
+  if(kind==="overflow")return {cause:"爆框／字面",code:"overflow",profile:p};
+  if(kind==="nan")return {cause:"非有限值",code:"numeric",profile:p};
+  if(kind==="empty")return {cause:"空輪廓／資料",code:"empty",profile:p};
+  if(kind==="err")return {cause:"生成例外",code:"exception",profile:p};
+  if(kind==="selfx"){
+    let cause="一般輪廓自交",code="selfx";
+    if(p.hook){cause="鉤根 / hook root";code="hook";}
+    else if(p.zhe||p.bend){cause="折角／接合";code="join";}
+    else if(p.ring){cause="封閉框／內白";code="counter";}
+    const fix=qaSafeCleanupCheck(cs);
+    return {cause,code,profile:p,auto:!!fix.ok,fixReason:fix.reason,areaDrift:fix.drift||0};
+  }
+  return {cause:kind,code:kind,profile:p};
+}
+let QA_LAST_REPORT=null;
 let QA_LAST_PROBLEMS=null;
 function qaOpenGlyph(ch){
   if(!G[ch])return;
@@ -9275,7 +9345,10 @@ function qaRenderProblems(p){
     const lb=document.createElement("label");lb.textContent=label+" "+arr.length;row.appendChild(lb);
     for(const ch of arr.slice(0,48)){
       const b=document.createElement("button");b.type="button";b.className="qachip";b.textContent=ch;
-      b.title="跳到「"+ch+"」";b.addEventListener("click",()=>qaOpenGlyph(ch));row.appendChild(b);
+      const ri=QA_LAST_REPORT&&QA_LAST_REPORT.items&&QA_LAST_REPORT.items.find(x=>x.ch===ch&&x.kind===k);
+      if(ri&&ri.auto)b.classList.add("auto");else if(ri&&k==="selfx")b.classList.add("manual");
+      b.title=(ri?(ri.cause+(ri.fixReason?" · "+ri.fixReason:"")):"問題字")+"｜點一下跳到「"+ch+"」";
+      b.addEventListener("click",()=>qaOpenGlyph(ch));row.appendChild(b);
     }
     if(arr.length>48){const more=document.createElement("span");more.className="tip";more.textContent="…另 "+(arr.length-48)+" 字";row.appendChild(more);}
     box.appendChild(row);
@@ -9289,38 +9362,66 @@ async function qaScanAll(){
   const ids=ALL.filter(id=>G[id]&&G[id].u&&!G[id].sp);
   let empty=0,nan=0,overflow=0,selfx=0,err=0;
   const samples={empty:[],nan:[],overflow:[],selfx:[],err:[]};
+  const items=[];
+  let hookN=0,joinN=0,autoN=0,manualN=0;
   stat.textContent="掃描 0 / "+ids.length.toLocaleString();
   for(let i=0;i<ids.length;i++){
     const id=ids[i]; let cs;
     try{ cs=glyphContours(id,axesOf("fangcun"),null,8); }
-    catch(e){err++;samples.err.push(id);continue;}
-    if(!cs||!cs.length){empty++;samples.empty.push(id);continue;}
+    catch(e){err++;samples.err.push(id);const q=qaClassifyIssue(id,null,"err");items.push({ch:id,kind:"err",...q,error:String(e.message||e)});continue;}
+    if(!cs||!cs.length){empty++;samples.empty.push(id);items.push({ch:id,kind:"empty",...qaClassifyIssue(id,cs,"empty")});continue;}
     let badNum=false,minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
     for(const c of cs)for(const k of c)for(let j=1;j<k.length;j++){
       const v=k[j]; if(!isFinite(v)){badNum=true;break;}
       if(j%2){minX=Math.min(minX,v);maxX=Math.max(maxX,v);}
       else{minY=Math.min(minY,v);maxY=Math.max(maxY,v);}
     }
-    if(badNum){nan++;samples.nan.push(id);}
+    if(badNum){nan++;samples.nan.push(id);items.push({ch:id,kind:"nan",...qaClassifyIssue(id,cs,"nan")});}
     if(minX<-260||maxX>EM+260||minY<-260||maxY>EM+260){
-      overflow++;samples.overflow.push(id);
+      overflow++;samples.overflow.push(id);items.push({ch:id,kind:"overflow",...qaClassifyIssue(id,cs,"overflow")});
     }
-    if(contoursSelfX(cs,2)>0){selfx++;samples.selfx.push(id);}
+    if(contoursSelfX(cs,2)>0){
+      selfx++;samples.selfx.push(id);const q=qaClassifyIssue(id,cs,"selfx");items.push({ch:id,kind:"selfx",...q});
+      if(q.code==="hook")hookN++; if(q.code==="join")joinN++;
+      if(q.auto)autoN++;else manualN++;
+    }
     if((i&127)===0){stat.textContent="掃描 "+i.toLocaleString()+" / "+ids.length.toLocaleString();await yield_();}
   }
   const summary="全字庫 "+ids.length.toLocaleString()+" 字：空輪廓 "+empty+" · NaN "+nan+
     " · 爆框 "+overflow+" · 自交 "+selfx+" · 例外 "+err;
   stat.textContent=summary;
+  QA_LAST_REPORT={version:"v188",when:new Date().toISOString(),total:ids.length,summary:{empty,nan,overflow,selfx,err,hook:hookN,join:joinN,auto:autoN,manual:manualN},items};
+  if($("qaTHook"))$("qaTHook").textContent=hookN;
+  if($("qaTJoin"))$("qaTJoin").textContent=joinN;
+  if($("qaTAuto"))$("qaTAuto").textContent=autoN;
+  if($("qaTManual"))$("qaTManual").textContent=manualN;
+  if($("qaTriage"))$("qaTriage").hidden=false;
+  if($("qaExportReport"))$("qaExportReport").disabled=false;
   qaRenderProblems(samples);
+  const byCause={};for(const it of items){byCause[it.cause]=(byCause[it.cause]||0)+1;}
+  const causes=Object.entries(byCause).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+" "+v).join(" · ");
   const details=[];
   for(const k of ["empty","nan","overflow","selfx","err"]) if(samples[k].length)
     details.push(k+"："+samples[k].slice(0,12).join(" ")+(samples[k].length>12?" …":""));
-  if(details.length) $("qaOut").textContent=summary+"\n\n"+details.join("\n")+"\n\n（上方問題瀏覽器可直接點字跳回工作台；文字區每類只列前 12 字）";
+  $("qaOut").textContent=summary+(causes?"\
+自動分類："+causes:"")+
+    (details.length?"\
+\
+"+details.join("\
+"):"")+
+    "\
+\
+綠框＝Boolean preflight 可安全消除自交；紅框＝需人工看骨架／join。";
   if($("qaDSelf")) $("qaDSelf").textContent=selfx;
   if($("qaDOverflow")) $("qaDOverflow").textContent=overflow+nan;
   btn.disabled=false;
 }
 $("qaScanAll").addEventListener("click",()=>qaScanAll().catch(e=>{$("qaScanAll").disabled=false;alert("全字庫掃描失敗："+e.message);}));
+$("qaExportReport").addEventListener("click",()=>{
+  if(!QA_LAST_REPORT)return;
+  const b=new Blob([JSON.stringify(QA_LAST_REPORT,null,2)],{type:"application/json"});
+  download(b,"fangcun-qa-v188-"+new Date().toISOString().slice(0,10)+".json");
+});
 
 $("btnQA").addEventListener("click",()=>{ $("qamodal").classList.add("on");
   const b=qaBaseline();
