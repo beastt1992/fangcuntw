@@ -1834,8 +1834,8 @@
         <div class="qatriage" id="qaTriage" hidden>
           <h4>自動分類 / REPAIR TRIAGE</h4>
           <div class="qatriage-grid">
-            <div class="qatriage-card"><b id="qaTHook">—</b><span>鉤根 / hook root</span></div>
-            <div class="qatriage-card"><b id="qaTJoin">—</b><span>折角／接合</span></div>
+            <div class="qatriage-card"><b id="qaTHook">—</b><span>含鉤字 / hook candidate</span></div>
+            <div class="qatriage-card"><b id="qaTJoin">—</b><span>折／彎候選 / join candidate</span></div>
             <div class="qatriage-card"><b id="qaTAuto">—</b><span>可安全自動清理</span></div>
             <div class="qatriage-card"><b id="qaTManual">—</b><span>需人工檢查</span></div>
           </div>
@@ -9291,6 +9291,35 @@ function qaContourArea(cs){
   for(const c of (cs||[])){const p=pcFlatten(c,3);if(p.length>=3)a+=Math.abs(csSignedAreaSimple(p));}
   return a;
 }
+/* v189 — 自交是否真的「視覺有害」，不能只看 polygon 面積。
+   v176/v185 的 true join 會刻意在同一 contour 內形成局部重疊；nonzero fill 顯示可能完全正常，
+   但把自交輪廓 polygonize 後，絕對面積會大幅改變。用面積差判斷會產生大量假警報。
+   這裡直接把原始與 Boolean-clean 後的結果 rasterize，比較最終 nonzero 填色。 */
+function qaRasterMask(cs,N){
+  N=N||48;
+  const cv=document.createElement("canvas");cv.width=cv.height=N;
+  const cx=cv.getContext("2d",{willReadFrequently:true});
+  cx.clearRect(0,0,N,N);
+  cx.setTransform(N/EM,0,0,N/EM,0,0);
+  const p=new Path2D();
+  for(const c of (cs||[]))p.addPath(new Path2D(svgD(c)));
+  cx.fillStyle="#000";cx.fill(p,"nonzero");
+  cx.setTransform(1,0,0,1,0,0);
+  const d=cx.getImageData(0,0,N,N).data,m=new Uint8Array(N*N);
+  for(let i=0;i<m.length;i++)m[i]=d[i*4+3]>20?1:0;
+  return m;
+}
+function qaRasterCompare(a,b,N){
+  const A=qaRasterMask(a,N||48),B=qaRasterMask(b,N||48);
+  let diff=0,uni=0,inter=0;
+  for(let i=0;i<A.length;i++){
+    if(A[i]!==B[i])diff++;
+    if(A[i]||B[i])uni++;
+    if(A[i]&&B[i])inter++;
+  }
+  return {diff:diff/A.length,iou:uni?inter/uni:1};
+}
+
 function qaSafeCleanupCheck(cs){
   if(!cs||!cs.length)return {ok:false,reason:"空輪廓"};
   const before=qaContourArea(cs);
@@ -9300,9 +9329,17 @@ function qaSafeCleanupCheck(cs){
   if(sx)return {ok:false,reason:"清理後仍自交"};
   const after=qaContourArea(clean);
   const drift=before>1?Math.abs(after-before)/before:0;
-  /* 面積差太大代表 Boolean 不只是消掉重疊，可能改了真正造型。 */
-  if(drift>0.08)return {ok:false,reason:"面積改變 "+(drift*100).toFixed(1)+"%",drift,clean};
-  return {ok:true,reason:"可安全清理",drift,clean};
+  const vr=qaRasterCompare(cs,clean,48);
+  /* 以「最後看起來有沒有變」為主，面積差只保留作診斷。
+     <=0.4% 像素差：視覺等價，屬於 benign overlap；
+     <=1.2% 且 IoU >= 0.985：可安全 polygonize；
+     其他才是真的需人工檢查。 */
+  if(vr.diff<=0.004)
+    return {ok:true,benign:true,reason:"視覺等價自交",drift,visualDiff:vr.diff,iou:vr.iou,clean};
+  if(vr.diff<=0.012&&vr.iou>=0.985)
+    return {ok:true,benign:false,reason:"可安全清理",drift,visualDiff:vr.diff,iou:vr.iou,clean};
+  return {ok:false,reason:"清理後視覺差 "+(vr.diff*100).toFixed(2)+"% · IoU "+vr.iou.toFixed(4),
+          drift,visualDiff:vr.diff,iou:vr.iou,clean};
 }
 function qaClassifyIssue(id,cs,kind){
   const p=qaStrokeProfile(id);
@@ -9312,11 +9349,13 @@ function qaClassifyIssue(id,cs,kind){
   if(kind==="err")return {cause:"生成例外",code:"exception",profile:p};
   if(kind==="selfx"){
     let cause="一般輪廓自交",code="selfx";
-    if(p.hook){cause="鉤根 / hook root";code="hook";}
-    else if(p.zhe||p.bend){cause="折角／接合";code="join";}
-    else if(p.ring){cause="封閉框／內白";code="counter";}
+    /* 注意：這只是結構候選，不把「字裡有 hook」誤當成自交一定發生在 hook root。 */
+    if(p.hook){cause="含鉤字（候選）";code="hook";}
+    else if(p.zhe||p.bend){cause="折／彎字（候選）";code="join";}
+    else if(p.ring){cause="封閉框／內白候選";code="counter";}
     const fix=qaSafeCleanupCheck(cs);
-    return {cause,code,profile:p,auto:!!fix.ok,fixReason:fix.reason,areaDrift:fix.drift||0};
+    return {cause,code,profile:p,auto:!!fix.ok,benign:!!fix.benign,fixReason:fix.reason,
+            areaDrift:fix.drift||0,visualDiff:fix.visualDiff||0,iou:fix.iou===undefined?1:fix.iou};
   }
   return {cause:kind,code:kind,profile:p};
 }
@@ -9363,7 +9402,7 @@ async function qaScanAll(){
   let empty=0,nan=0,overflow=0,selfx=0,err=0;
   const samples={empty:[],nan:[],overflow:[],selfx:[],err:[]};
   const items=[];
-  let hookN=0,joinN=0,autoN=0,manualN=0;
+  let hookN=0,joinN=0,autoN=0,manualN=0,benignN=0,harmfulN=0;
   stat.textContent="掃描 0 / "+ids.length.toLocaleString();
   for(let i=0;i<ids.length;i++){
     const id=ids[i]; let cs;
@@ -9384,13 +9423,16 @@ async function qaScanAll(){
       selfx++;samples.selfx.push(id);const q=qaClassifyIssue(id,cs,"selfx");items.push({ch:id,kind:"selfx",...q});
       if(q.code==="hook")hookN++; if(q.code==="join")joinN++;
       if(q.auto)autoN++;else manualN++;
+      if(q.benign)benignN++; else if(!q.auto)harmfulN++;
     }
     if((i&127)===0){stat.textContent="掃描 "+i.toLocaleString()+" / "+ids.length.toLocaleString();await yield_();}
   }
   const summary="全字庫 "+ids.length.toLocaleString()+" 字：空輪廓 "+empty+" · NaN "+nan+
     " · 爆框 "+overflow+" · 自交 "+selfx+" · 例外 "+err;
   stat.textContent=summary;
-  QA_LAST_REPORT={version:"v188",when:new Date().toISOString(),total:ids.length,summary:{empty,nan,overflow,selfx,err,hook:hookN,join:joinN,auto:autoN,manual:manualN},items};
+  QA_LAST_REPORT={version:"v189",when:new Date().toISOString(),total:ids.length,
+    summary:{empty,nan,overflow,selfx,err,hookCandidate:hookN,joinCandidate:joinN,
+             auto:autoN,manual:manualN,benign:benignN,harmful:harmfulN},items};
   if($("qaTHook"))$("qaTHook").textContent=hookN;
   if($("qaTJoin"))$("qaTJoin").textContent=joinN;
   if($("qaTAuto"))$("qaTAuto").textContent=autoN;
@@ -9400,18 +9442,20 @@ async function qaScanAll(){
   qaRenderProblems(samples);
   const byCause={};for(const it of items){byCause[it.cause]=(byCause[it.cause]||0)+1;}
   const causes=Object.entries(byCause).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+" "+v).join(" · ");
+  const visualSummary="視覺等價自交 "+benignN+" · 可清理 "+(autoN-benignN)+" · 真正需人工 "+harmfulN;
   const details=[];
   for(const k of ["empty","nan","overflow","selfx","err"]) if(samples[k].length)
     details.push(k+"："+samples[k].slice(0,12).join(" ")+(samples[k].length>12?" …":""));
-  $("qaOut").textContent=summary+(causes?"\
-自動分類："+causes:"")+
+  $("qaOut").textContent=summary+"\
+"+visualSummary+(causes?"\
+結構候選："+causes:"")+
     (details.length?"\
 \
 "+details.join("\
 "):"")+
     "\
 \
-綠框＝Boolean preflight 可安全消除自交；紅框＝需人工看骨架／join。";
+綠框＝清理後與原畫面視覺等價／近似；紅框＝清理後真的改變字形，才需要人工看。";
   if($("qaDSelf")) $("qaDSelf").textContent=selfx;
   if($("qaDOverflow")) $("qaDOverflow").textContent=overflow+nan;
   btn.disabled=false;
