@@ -2742,6 +2742,13 @@ function makeSegs(pts,bend,fillet,cv,kj){
     } else segs.push({q:0,a:A,b:B});
     return segs;
   }
+  /* v181 — 真正的「同一筆轉角」不能靠把中心線先磨成圓弧來假裝。
+     圓體的折筆要保留原始 corner vertex，outline 階段才做 inner trim + outer round join。
+     fillet<0 代表要求保留精確折點；這是 stroke-level 規則，不是單字特例。 */
+  if(fillet<0){
+    for(let i=0;i<pts.length-1;i++) segs.push({q:0,a:pts[i],b:pts[i+1],hardCorner:1});
+    return segs;
+  }
   let cur=pts[0];
   for(let i=1;i<pts.length-1;i++){
     const P=pts[i],N=pts[i+1];
@@ -2767,6 +2774,13 @@ function sampleSkeleton(pts,bend,fillet,N,cv,kj){
        比例一變四捨五入就跳格，節點數差一個 */
     const n=VF_STABLE ? Math.max(2,Math.round(N/segs.length))
                       : Math.max(2,Math.round(N*L[i]/tot));
+    /* v181：hardCorner 在同一座標保留 incoming / outgoing 兩個 tangent。
+       這和 v176 修好 hook root 的原理相同：join 必須共享真正的圓心，
+       不能拿「轉角前最後一個 sample」去追「轉角後第一個 sample」。 */
+    if(i>0 && s.hardCorner && segs[i-1].hardCorner && dist(segs[i-1].b,s.a)<0.01){
+      const tv=sub(s.b,s.a);
+      out.push({p:[s.a[0],s.a[1]],t:tv,cornerJoinAnchor:true});
+    }
     for(let k=(i===0?0:1);k<=n;k++){
       const t=k/n;
       if(s.c3){const u=1-t;
@@ -3319,9 +3333,13 @@ function jointArcFill(pts){
 }
 function strokeOutline(st,f,wScale,NS){
   const {hw}=widths(f);
-  const fillet=((st.kage&&st.t==="zhe")
+  /* v181：圓體的「折」改走真正 line-join，而不是先把 skeleton fillet 掉。
+     只針對 KAGE zhe 且不是 hook/bend，避免碰 v176 已驗證好的鉤根。
+     round<0.55 仍走舊路，讓黑體/明體不被這次改動波及。 */
+  const exactZheCorner=!!(st.kage&&st.t==="zhe"&&st.e!=="hook"&&st.e!=="bend"&&(f.round||0)>=0.55);
+  const fillet=exactZheCorner ? -1 : (((st.kage&&st.t==="zhe")
     ? hw*(0.035+0.28*f.round)*(st.fr||1)
-    : hw*(0.10+0.62*f.round)*(st.fr||1)) * (1+(f.inflate||0)*1.6);
+    : hw*(0.10+0.62*f.round)*(st.fr||1)) * (1+(f.inflate||0)*1.6));
   let SP=st.p;
   if(f.spike>0 && st.p.length>1){
     /* 尖角：兩端沿切線衝出去，寬度收成尖。標準字那種銳利流線感就是這個。 */
@@ -3473,53 +3491,6 @@ function strokeOutline(st,f,wScale,NS){
     }
   }
   /* ==========================================================================
-     v180：同一筆折角的 INNER TRIM（內側裁角）
-
-     外側需要 round / bevel / miter；內側恰好相反：兩條 offset 邊應該在交點停止。
-     如果只是把每個 sample 的法線點直接連起來，斜折會形成一個超出去的小三角／耳朵。
-     這正是「子」右上折與斜線折角看起來沒有轉折感的主因。
-
-     做法跟向量軟體 Expand Stroke 一樣：
-       1. 用前後兩段 tangent 建立兩條 inner offset line
-       2. 求它們的無限線交點
-       3. 交點在合理 miter 範圍內時，把兩邊都 trim 到這個點
-     外側仍交給下面 v176 的 round-join；所以圓體會是「內側乾淨、外側圓」。
-     hookJoinAnchor 的兩個 sample 同心，特別跳過，完全不碰 v176 已修好的勾根。
-     ========================================================================== */
-  {
-    const lineX=(P,d,Q,e)=>{
-      const den=d[0]*e[1]-d[1]*e[0];
-      if(Math.abs(den)<1e-7) return null;
-      const qx=Q[0]-P[0], qy=Q[1]-P[1];
-      const t=(qx*e[1]-qy*e[0])/den;
-      return [P[0]+d[0]*t,P[1]+d[1]*t];
-    };
-    for(let i=0;i<n;i++){
-      const a=S[i].t,b=S[i+1].t;
-      const la=Math.hypot(a[0],a[1])||1,lb=Math.hypot(b[0],b[1])||1;
-      const ua=[a[0]/la,a[1]/la],ub=[b[0]/lb,b[1]/lb];
-      const dot=clamp(ua[0]*ub[0]+ua[1]*ub[1],-1,1);
-      const turn=Math.acos(dot);
-      if(turn<28*Math.PI/180) continue;
-      /* v176 hook root：同座標、不同 tangent 的 duplicate anchor 是 round-join 專用。 */
-      if(Math.hypot(S[i+1].p[0]-S[i].p[0],S[i+1].p[1]-S[i].p[1])<0.01) continue;
-      const cross=ua[0]*ub[1]-ua[1]*ub[0];
-      const side=cross<0 ? R : L;               /* clockwise 外側 L，所以內側 R；反之亦然 */
-      const X=lineX(side[i],ua,side[i+1],ub);
-      if(!X) continue;
-      const r0=Math.hypot(L[i][0]-R[i][0],L[i][1]-R[i][1])/2;
-      const r1=Math.hypot(L[i+1][0]-R[i+1][0],L[i+1][1]-R[i+1][1])/2;
-      const r=Math.max(1,(r0+r1)/2);
-      const d0=Math.hypot(X[0]-side[i][0],X[1]-side[i][1]);
-      const d1=Math.hypot(X[0]-side[i+1][0],X[1]-side[i+1][1]);
-      /* 急到快折回時 miter 會跑非常遠；那不是「裁角」而是尖刺，直接不採用。 */
-      const miterLimit=3.2*r;
-      if(d0>miterLimit||d1>miterLimit) continue;
-      side[i]=[X[0],X[1]];
-      side[i+1]=[X[0],X[1]];
-    }
-  }
-  /* ==========================================================================
      轉角飽滿 —— 同一筆內部的圓角接合（round join）
      使用者的描述是關鍵：「打勾一般都是一筆到底，從上而下 Y 軸一個直線，
      然後往上打勾，轉角處要飽滿」。**打勾是一筆**，不是兩筆之間的接點。
@@ -3550,7 +3521,7 @@ function strokeOutline(st,f,wScale,NS){
        所以每一步要 32 度以上，半步才有 16 度、才過得了 15 度那道門檻。
      轉角小於 60 度不補（那樣連一個點都放不下）：那些是彎尾的緩彎，
      弧高只有半徑的 3~6%，本來就看不出來；要補的是打勾那種 94 度的急轉。 */
-  const JOIN_MIN=60*Math.PI/180;   /* 小於這個角度不補 */
+  const JOIN_MIN=60*Math.PI/180;   /* 舊路徑：小於這個角度不補 */
   const JOIN_STEP=32*Math.PI/180;  /* 每一步至少這麼大 */
   {
     const jL=[],jR=[];
@@ -3559,7 +3530,10 @@ function strokeOutline(st,f,wScale,NS){
       if(i>=n) continue;
       const a=S[i].t,b=S[i+1].t;
       const la=Math.hypot(a[0],a[1])||1, lb=Math.hypot(b[0],b[1])||1;
-      if((a[0]*b[0]+a[1]*b[1])/(la*lb) > Math.cos(JOIN_MIN)) continue;
+      const isExactCorner=Math.hypot(S[i+1].p[0]-S[i].p[0],S[i+1].p[1]-S[i].p[1])<0.01 &&
+                          !!(S[i+1].cornerJoinAnchor||S[i].cornerJoinAnchor||S[i+1].hookJoinAnchor);
+      const joinMin=isExactCorner ? 18*Math.PI/180 : JOIN_MIN;
+      if((a[0]*b[0]+a[1]*b[1])/(la*lb) > Math.cos(joinMin)) continue;
       /* 外積 <0 ＝順時針轉，外側在 L；>0 則外側在 R */
       const cw=(a[0]*b[1]-a[1]*b[0])/(la*lb) < 0;
       const side=cw?jL:jR, src=cw?L:R;
@@ -3572,7 +3546,7 @@ function strokeOutline(st,f,wScale,NS){
       let da=Math.atan2(v1[1],v1[0])-a0;
       while(da> Math.PI) da-=Math.PI*2;
       while(da<-Math.PI) da+=Math.PI*2;
-      if(Math.abs(da)<JOIN_MIN) continue;
+      if(Math.abs(da)<joinMin) continue;
       const JOIN_K=Math.max(2,Math.floor(Math.abs(da)/JOIN_STEP));
       /* 真正的 round join：圓心固定在骨架轉角、半徑固定為該處半寬。
          （第一版把圓心跟著往前挪、半徑跟著內插，等於又把角切掉一點 ——
@@ -3620,7 +3594,7 @@ function strokeOutline(st,f,wScale,NS){
      （細縫確實 100% 在端點附近：起筆 54%、收筆 46%、中段 0%，
        但那代表「端點區域的幾何有問題」，不代表「端點該更長」。） */
   const C=caps(st,f);
-  /* v180：跨筆 T-junction 已裁到 receiving stroke 的近側邊界；端點切平，hook/bend 不進 trim。 */
+  /* v179：只有跨筆 T-junction 被裁過的開放端切平；hook/bend 不會進到這裡的 trim。 */
   if(st._trimH) C.a="flat";
   if(st._trimE) C.b="flat";
   /* ★ KAGE 的鉤是「骨架延伸出去的曲線」，不是端點造型 ——
@@ -5729,15 +5703,6 @@ function jointFill(strokes,f){
    這是 topology trim，不是 same-stroke corner join。
    ============================================================================ */
 function trimTerminalCrossingsSafe(strokes,f){
-  /* v180 — topology-aware T junction.
-     v179 把 terminating skeleton 截到「另一筆中心線」；這仍然會穿過 receiving stroke
-     半個筆寬，所以斜筆會在另一側露出一個小耳朵。真正要截的是 receiving stroke 的
-     **近側邊界**。若兩中心線夾角 theta、receiving 半寬 r，terminator 沿自身方向要
-     從中心交點退回 d=r/|sin(theta)| 才剛好碰到邊界。這就是斜線相交時要 difference
-     掉超出部分的解析解；不用先把所有曲線 polygon 化再做昂貴 boolean。
-
-     只處理 endpoint -> interior 的 T junction；X-cross（兩筆都從中段穿過）完全不裁。
-     hook / bend 仍凍結，保留 v176 已驗證的鉤根 join。 */
   const hit=(A,B,C,D)=>{
     const rx=B[0]-A[0], ry=B[1]-A[1], sx=D[0]-C[0], sy=D[1]-C[1];
     const den=rx*sy-ry*sx;
@@ -5747,58 +5712,42 @@ function trimTerminalCrossingsSafe(strokes,f){
     if(t<0||t>1||u<0||u>1) return null;
     return {t,u,p:[A[0]+rx*t,A[1]+ry*t]};
   };
-  const halfAt=(st,u,tan)=>Math.max(3,widthAt(st,clamp(u,0,1),tan,f)*(st.ws||1)/2);
-  const norm=(v)=>{const L=Math.hypot(v[0],v[1])||1;return [v[0]/L,v[1]/L];};
-
+  const half=st=>{
+    const n=st.p.length-1;
+    const tan=[st.p[n][0]-st.p[0][0],st.p[n][1]-st.p[0][1]];
+    return Math.max(6,widthAt(st,0.5,tan,f)*(st.ws||1)/2);
+  };
   for(let i=0;i<strokes.length;i++){
     const st=strokes[i];
     if(!st.p||st.p.length<2||st.t==="dot"||st.t==="ring") continue;
-    if(st.e==="hook"||st.e==="bend") continue;       /* v176 hook baseline */
-    const n=st.p.length-1;
-    const ownTan=[st.p[n][0]-st.p[0][0],st.p[n][1]-st.p[0][1]];
-    const ownHalf=Math.max(6,halfAt(st,0.5,ownTan));
-    const lim=Math.max(16,ownHalf*2.25);
+    /* ★ v176 的鉤與彎尾整筆凍結：不裁頭、不裁尾、不改 tangent。 */
+    if(st.e==="hook"||st.e==="bend") continue;
+    const n=st.p.length-1, lim=Math.max(14,half(st)*1.45);
     let bestH=null,bestE=null;
-
     for(let j=0;j<strokes.length;j++){
       if(i===j) continue;
       const ot=strokes[j];
       if(!ot.p||ot.p.length<2||ot.t==="dot"||ot.t==="ring") continue;
       for(let k=0;k<ot.p.length-1;k++){
-        const U=ot.p[k],V=ot.p[k+1], recv=[V[0]-U[0],V[1]-U[1]];
-        const recvU=(k+0.5)/Math.max(1,ot.p.length-1);
-        const recvHalf=halfAt(ot,recvU,recv);
-
-        const consider=(A,B,isHead)=>{
-          const h=hit(A,B,U,V); if(!h) return null;
-          /* receiver 必須是中段；碰到 receiver 自己的端點是 endpoint join，不是 T。 */
-          if(h.u<=0.055||h.u>=0.945) return null;
-          if(isHead ? !(h.t>0.015&&h.t<0.46) : !(h.t>0.54&&h.t<0.985)) return null;
-          const dir=norm([B[0]-A[0],B[1]-A[1]]), rd=norm(recv);
-          const sin=Math.abs(dir[0]*rd[1]-dir[1]*rd[0]);
-          if(sin<0.20) return null;                    /* 幾乎平行，不做不穩定裁切 */
-          const end=isHead?A:B;
-          const over=Math.hypot(end[0]-h.p[0],end[1]-h.p[1]);
-          const retreat=recvHalf/sin;                 /* 中心交點 -> receiving 近側邊界 */
-          if(over<=retreat+0.8 || over>lim+retreat) return null;
-          /* 對 head，dir 是 endpoint -> interior；對 tail，dir 是 interior -> endpoint。
-             兩種的近側都要往「原端點那側」退，因此 tail 取 +dir、head 取 -dir。 */
-          const sgn=isHead?-1:1;
-          const cut=[h.p[0]+dir[0]*retreat*sgn, h.p[1]+dir[1]*retreat*sgn];
-          return {p:cut,over,retreat,recvT:rd,recvHalf,hit:h.p};
-        };
-
-        const h=consider(st.p[0],st.p[1],true);
-        if(h && (!bestH||h.over<bestH.over)) bestH=h;
-        const e=consider(st.p[n-1],st.p[n],false);
-        if(e && (!bestE||e.over<bestE.over)) bestE=e;
+        const U=ot.p[k],V=ot.p[k+1];
+        const h=hit(st.p[0],st.p[1],U,V);
+        if(h && h.t>0.02 && h.t<0.40 && h.u>0.06 && h.u<0.94){
+          const over=Math.hypot(st.p[0][0]-h.p[0],st.p[0][1]-h.p[1]);
+          if(over>1.0 && over<=lim && (!bestH||over<bestH.over)) bestH={...h,over};
+        }
+        const e=hit(st.p[n-1],st.p[n],U,V);
+        if(e && e.t>0.60 && e.t<0.98 && e.u>0.06 && e.u<0.94){
+          const over=Math.hypot(st.p[n][0]-e.p[0],st.p[n][1]-e.p[1]);
+          if(over>1.0 && over<=lim && (!bestE||over<bestE.over)) bestE={...e,over};
+        }
       }
     }
-    if(bestH){ st.p[0]=bestH.p; st._trimH=1; st._trimMetaH=bestH; }
-    if(bestE){ st.p[n]=bestE.p; st._trimE=1; st._trimMetaE=bestE; }
+    if(bestH){ st.p[0]=bestH.p; st._trimH=1; }
+    if(bestE){ st.p[n]=bestE.p; st._trimE=1; }
   }
   return strokes;
 }
+
 function markCorners(strokes,f){
   const E=[];
   for(let i=0;i<strokes.length;i++){
