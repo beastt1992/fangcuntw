@@ -3236,7 +3236,27 @@ function appendKageTail(S,st,f,wScale){
   /* 長挑（鉤造型 4）額外拉長 —— 瘦金體那種細長往外挑的鉤，
      光換端點形狀不夠，鉤本身的長度也要加。 */
   const hkLong = Math.round(f.hookst||0)===4 ? 1.55 : 1;
-  const m=clamp(widths(f).hw*wScale*1.62,40,210)*(f.hook===undefined?1:f.hook)*hkLong;
+  let m=clamp(widths(f).hw*wScale*1.62,40,210)*(f.hook===undefined?1:f.hook)*hkLong;
+  /* ★★ v185：鉤不能比筆畫自己還窄還短。
+     實機回報「篆書跟隸書的鉤會裂開」。這兩個預設的鉤長是 0.10 / 0.22 ——
+     算出來的尾巴只有 10 / 22 單位，而該筆的半寬是 31 / 39。
+     **整條鉤都還埋在自己的筆畫裡**，等距偏移在這種尺度必定翻折
+     （實測 κw = 1.76，尖點條件是 κw > 1），繞向反過來、nonzero 抵銷成白叉。
+     鉤根的圓角接合弧半徑也等於半寬，比整條尾巴還大，同樣會穿出去。
+
+     這不是靠夾曲率能救的（試過，只減輕不根治）—— 尺度本身就不成立。
+     所以分兩段處理：
+       m < 半寬×0.80  → **完全不接鉤**（使用者顯然就是不要鉤；
+                        書法上也正確：篆書不鉤、隸書幾乎不鉤）
+       否則           → 把 m 抬到至少 半寬×1.25，保證幾何成立
+     中間那一跳是刻意的：與其畫一個破的鉤，不如給一個小但正確的鉤，
+     或乾脆沒有。 */
+  {
+    const mid=S[Math.floor(S.length/2)]||S[0];
+    const wHalf=Math.max(1, widthAt(st,0.5,mid.t,f)*wScale/2);
+    if(m < wHalf*0.80) return {s:S,kind:null};
+    if(m < wHalf*1.25) m = wHalf*1.25;
+  }
   let C,B;
   if(st.e==="hook"){
     /* 左上挑鉤。往左的量要遠大於往上，才是 18° 那種橫掃的鉤。
