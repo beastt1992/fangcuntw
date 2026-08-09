@@ -5712,10 +5712,21 @@ function trimTerminalCrossingsSafe(strokes,f){
     if(t<0||t>1||u<0||u>1) return null;
     return {t,u,p:[A[0]+rx*t,A[1]+ry*t]};
   };
+  /* ★★ 可變字型的門檻不能跟著字重走（v182 修）。
+     `lim` 原本是 max(14, 半寬×1.45)，半寬隨字重變 ——
+     同一個 T 字接點在字重 60 不裁、在 150 裁，各主體的**骨架**就不一樣，
+     節點數跟著對不上，gvar 直接壞掉。實測 137 字有 **16 字**不一致
+     （這來道過後麼多然還發經公長水結永）。
+     裁切的**位置**是純幾何的（骨架線交點），沒有問題；壞的只有「裁不裁」這個判定。
+     所以可變字型模式一律用出廠軸值算門檻，決定就跨主體一致，幾何仍然照裁。 */
+  const fLim = VF_STABLE ? {...f, weight:F_DEFAULT.weight, contrast:F_DEFAULT.contrast,
+                            taper:F_DEFAULT.taper, press:F_DEFAULT.press,
+                            diag:F_DEFAULT.diag, inflate:F_DEFAULT.inflate,
+                            spike:F_DEFAULT.spike, wobble:F_DEFAULT.wobble} : f;
   const half=st=>{
     const n=st.p.length-1;
     const tan=[st.p[n][0]-st.p[0][0],st.p[n][1]-st.p[0][1]];
-    return Math.max(6,widthAt(st,0.5,tan,f)*(st.ws||1)/2);
+    return Math.max(6,widthAt(st,0.5,tan,fLim)*(st.ws||1)/2);
   };
   for(let i=0;i<strokes.length;i++){
     const st=strokes[i];
