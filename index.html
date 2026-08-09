@@ -3040,7 +3040,16 @@ function capCmds(kind,tip,T,w,dir,to,out,f){
       out.push(["L",tip[0]+T[0]*w*2.20*dir-nx*w*0.22,tip[1]+T[1]*w*2.20*dir-ny*w*0.22]);
       out.push(["L",to[0],to[1]]); return;
     }
-    /* 0 ＝ 依筆意：原本的短促小喙 */
+    /* 0 ＝ 依筆意：跟隨目前字體的端點語言。
+       圓體／高 cap 時應該是完整圓頭，而不是固定的小喙；
+       一般黑體/楷體才保留原本短促的小喙。 */
+    const rr=(f&&f.cap!=null?f.cap:(f&&f.round!=null?f.round:0));
+    if(rr>0.55){
+      pushQ(out,tip[0]+T[0]*w*1.28*rr*dir,
+                tip[1]+T[1]*w*1.28*rr*dir,
+                to[0],to[1]);
+      return;
+    }
     const cx=tip[0]+T[0]*w*0.42*dir-nx*w*0.18;
     const cy=tip[1]+T[1]*w*0.42*dir-ny*w*0.18;
     pushQ(out,cx,cy,to[0],to[1]);return;
@@ -3627,9 +3636,11 @@ function strokeOutline(st,f,wScale,NS){
      尾端原本一律寫死成 flat（切平），所以鉤造型軸對這一萬三千字完全沒作用。
      現在讓軸接管：0 維持原本的切平，其餘套用選定的收法。 */
   if(tail.kind==="hook"){
-    const HK=["flat","pt",1,"flat","pt"];      /* 依筆意／尖鉤／圓鉤／平鉤／長挑 */
-    const k=Math.round(f.hookst||0);
-    C.b=HK[k]!==undefined?HK[k]:"flat";
+    /* v178：鉤本身就是語意端點，不能在這裡先降級成 flat/pt/數值 cap。
+       交給 capCmds("hook") 統一依 hookst + 當前圓體端點圓度決定收尾。
+       v176/177 這裡用 HK[] 先改寫 C.b，導致 hookst=0（依筆意）直接變 flat，
+       圓體的鉤尾圓頭因此消失。 */
+    C.b="hook";
   }
   else if(tail.kind==="bend") C.b=Math.min(f.round,0.22);
   const T0=unit(S[0].t),T1=unit(S[n].t);
