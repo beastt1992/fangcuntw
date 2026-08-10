@@ -1031,7 +1031,7 @@
   /* ★ 用 class 不用 hidden 屬性：.scbar 與 .scposter-wrap 都設了 display:flex，
      作者樣式會蓋掉瀏覽器對 hidden 的預設處理，那個屬性等於沒作用。
      踩過兩次了，改用 class 一勞永逸。 */
-  #scPosterBar{display:flex !important}
+  #scPosterBar{display:flex !important; position:relative}
   #scPosterBar .scposter-wrap.is-off{display:none !important}
 
   /* ==========================================================================
@@ -1308,6 +1308,12 @@
       flex:none !important;
       white-space:nowrap !important;
     }
+    /* ★★ v195：面板打開時父層必須讓出 overflow。
+       #scPosterBar 自己有 overflow-x:auto／overflow-y:hidden（給工具列左右滑用），
+       而面板是 position:absolute; top:100% —— 跳出去的部分**剛好被自己的父層裁掉**，
+       實機症狀是「手機點了沒反應」。電腦版沒有那條 overflow 所以看得到。
+       打開時把 overflow 放開；面板選完會自動收起，工具列的左右滑不受影響。 */
+    #scPosterBar.poster-open{ overflow:visible !important; }
     /* 範例縮圖開啟時放到下一列；平常 is-off 不佔任何高度 */
     #scPosterBar .scposter-wrap:not(.is-off){
       position:absolute;
@@ -1480,16 +1486,16 @@
 
   <section id="showcase">
     <div class="scbar scbar-studio" id="scPosterBar">
-      <div class="g scposter-wrap is-off"><label data-zh="範例模板">範例模板</label>
-        <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
-             純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
-        <div class="posterthumbs" id="scPoster"></div>
-        <label class="postertxt"><input type="checkbox" id="scPosterText"><span data-zh="含範例文字">含範例文字</span></label></div>
       <div class="g"><label data-zh="畫布">畫布</label><div class="seg wrapseg" id="scCanvas">
             <button data-k="free" class="on" data-zh="自由">自由</button><button data-k="square">1:1</button
             ><button data-k="45">4:5</button><button data-k="34">3:4</button
             ><button data-k="916">9:16</button><button data-k="169">16:9</button><button data-k="a4">A4</button>
           </div></div>
+      <div class="g scposter-wrap is-off"><label data-zh="範例模板">範例模板</label>
+        <!-- 縮圖版：每個模板畫出自己的底色、墨色與版面走向，
+             純文字按鈕看不出差別，要點過才知道。縮圖由 scBuildPosterThumbs() 填。 -->
+        <div class="posterthumbs" id="scPoster"></div>
+        <label class="postertxt"><input type="checkbox" id="scPosterText"><span data-zh="含範例文字">含範例文字</span></label></div>
       <div class="g"><label data-zh="底稿">底稿</label>
         <input type="file" id="scRefIn" accept=".otf,.ttf,.OTF,.TTF" hidden>
         <button class="btn ghost sm" id="scRefBtn" type="button" title="載入現有字型當描圖底稿（不會改變你的字，只是畫在下層參考）" data-zh="選字型">選字型</button>
@@ -8925,15 +8931,33 @@ const SC_POSTERS={
      因為它們整頁共用同一組軸值。這裡靠 axRow 逐列覆寫字重，
      所以拉任何一根**其他**的軸（對比、圓角、出鋒…），整張表會一起變，
      只有字重那一欄維持梯度。錄影拍的就是這個。 */
-  spec:{txt:"永春字型\n永春字型\n永春字型\n永春字型\n永春字型\n永春字型\n方寸",
-    canvas:"34",lay:"huge",dir:"h",align:"left",margin:.10,scale:.52,gx:-.02,gy:.16,
+  /* ★ 規格表（v195 加厚）：照字型樣張的規格排 ——
+     抬頭一行、六級字重梯度、字符樣本區、底部大字。
+     樣本用千字文：**一千個字不重複**，是字型樣張的標準做法，
+     一眼就看得出覆蓋率與整段排起來的質感，不像隨便打幾個字看不出東西。
+     字數約 120，再多會讓每次拉軸的重畫變慢（每個字都要跑一次引擎）。 */
+  spec:{txt:"方寸 參數化中文字型\n"+
+            "永春字型天地玄黃\n永春字型天地玄黃\n永春字型天地玄黃\n"+
+            "永春字型天地玄黃\n永春字型天地玄黃\n永春字型天地玄黃\n"+
+            "天地玄黃宇宙洪荒日月盈昃辰宿列張\n"+
+            "寒來暑往秋收冬藏閏餘成歲律呂調陽\n"+
+            "雲騰致雨露結為霜金生麗水玉出崑岡\n"+
+            "一萬三千餘字　骨架生成　可匯出\n"+
+            "方寸",
+    canvas:"34",lay:"huge",dir:"h",align:"left",margin:.08,scale:.40,gx:-.04,gy:-.06,
     pal:"mo",col:"mono",blend:"normal",bg:"#0b0b0e",ink:"#f5f2ec",weight:100,round:.10,
-    /* 六級字重 ＋ 底部大字。列數與 trRow 的倍率是實機要微調的兩個數字：
-       行距由引擎依畫布與列數自己算，沙盒裡驗不了，模擬時八列會擠爆，所以先收到七列。 */
-    axRow:{0:{weight:26},1:{weight:52},2:{weight:80},3:{weight:112},
-           4:{weight:148},5:{weight:190}},
-    trRow:{6:{s:1.90,r:0}},
-    offRow:{6:[0,.10]}},
+    /* 抬頭與資訊行縮小、字重梯度六級、樣本區中等、底部大字放大。
+       列數／倍率是實機唯一要微調的東西 —— 行距由引擎依畫布與列數自己算，沙盒裡驗不了。 */
+    /* ★ 移除了「〇」—— 它是符號不是漢字，字庫裡沒有，會缺一個空位。
+       樣本從四行千字文收到三行：實測整頁重畫一次 798ms，拉軸會頓；
+       每個字都要跑一次引擎，字數就是效能。 */
+    axRow:{1:{weight:26},2:{weight:52},3:{weight:80},4:{weight:112},
+           5:{weight:148},6:{weight:190},
+           7:{weight:44},8:{weight:44},9:{weight:44},
+           0:{weight:38},10:{weight:38}},
+    trRow:{0:{s:.52,r:0},7:{s:.58,r:0},8:{s:.58,r:0},9:{s:.58,r:0},
+           10:{s:.52,r:0},11:{s:2.6,r:0}},
+    offRow:{11:[0,.06]}},
   magazine:{txt:"永春\n參數化中文字型工作室\n\n用骨架與參數\n設計整套繁體中文字型\n免費 開源 離線可用\n匯出 OTF 直接安裝",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.20,scale:.74,gx:.10,gy:.16,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:60,round:0,
     /* 雜誌：刊頭兩個字放到兩倍、副標中、資訊行最小；刊頭刻意錯開一點 */
     tr:{"0|0|永":{s:2.05,r:0},"0|1|春":{s:2.05,r:0},
@@ -9083,6 +9107,8 @@ if($("scPosterToggle")) $("scPosterToggle").addEventListener("click",()=>{
   const wrap=document.querySelector("#scPosterBar .scposter-wrap"); if(!wrap) return;
   const off=wrap.classList.toggle("is-off");
   $("scPosterToggle").classList.toggle("on",!off);
+  /* 手機版要一起放開父層的 overflow，否則跳出來的面板會被裁掉（見 CSS 的說明） */
+  const bar=$("scPosterBar"); if(bar) bar.classList.toggle("poster-open",!off);
 });
 $("scPoster").addEventListener("click",e=>{
   const b=e.target.closest("button[data-poster]"); if(!b) return;
@@ -9099,7 +9125,8 @@ $("scPoster").addEventListener("click",e=>{
   scApplyPoster(b.dataset.poster, wantText);
   /* 套用完就收起來，把畫面還給作品 */
   const wrap=document.querySelector("#scPosterBar .scposter-wrap");
-  if(wrap){ wrap.classList.add("is-off"); if($("scPosterToggle")) $("scPosterToggle").classList.remove("on"); }
+  if(wrap){ wrap.classList.add("is-off"); if($("scPosterToggle")) $("scPosterToggle").classList.remove("on");
+            const bar=$("scPosterBar"); if(bar) bar.classList.remove("poster-open"); }
 });
 
 let scHistory=[],scFuture=[],scHistApplying=false,scTextHistAt=0;
