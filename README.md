@@ -1,92 +1,241 @@
-# 方寸 FANGCUN
+# FANGCUN 方寸
 
-**以骨架與參數設計繁體中文字型的瀏覽器工作台。**
+**A parametric Traditional Chinese type design system and synthetic glyph dataset.**
 
-線上使用：https://fangcuntw.vercel.app/
+[English](./README.md) · [繁體中文](./README.zh-TW.md)
 
-方寸可在瀏覽器中拖曳字形骨架，調整字重、對比、圓角、字面率等設計軸，預覽黑體、圓體、明體與手寫等風格，並輸出可安裝使用的 OTF 字型。
+> **One skeleton system. 13,000+ Traditional Chinese glyphs. A typeface you can shape.**
 
-## 主要功能
+FANGCUN generates Traditional Chinese glyphs from stroke skeletons with a parametric renderer.
 
-- 繁體中文字形與 GlyphWiki／KAGE 資料匯入。
-- 骨架、部件框與變體編輯。
-- 字重、對比、圓角、字面率、字寬、書寫感等參數。
-- 工作台、展示與原樣對照模式。
-- OTF、SVG、筆順動畫與專案檔匯出。
-- Service Worker 離線快取，可作為 PWA 使用。
+Instead of treating a font as a fixed set of outlines, FANGCUN exposes a controllable design space: weight, contrast, roundness, stroke endings, corner treatment, brush pressure, and other style parameters can be changed while the underlying glyph skeleton remains editable.
 
-## 本機啟動
+The same engine can produce **vector outlines, installable OTF fonts, and parameter-labelled synthetic training data**.
 
-方寸是靜態網頁，不需要建置工具。請以本機 HTTP 伺服器開啟，避免瀏覽器對 `file://` 的限制：
-
-```bash
-python3 -m http.server 8080
-```
-
-瀏覽器開啟：
-
-```text
-http://localhost:8080/
-```
-
-部署時請至少提供：
-
-```text
-index.html
-sw.js
-manifest.webmanifest
-icon.svg
-icon-192.png
-icon-512.png
-```
-
-## 授權
-
-方寸的原創程式碼依 **Mozilla Public License 2.0（MPL-2.0）**授權。完整條款請見 [`LICENSE`](LICENSE)。
-
-簡要而言：
-
-- 可以免費使用，包括商業使用。
-- 可以修改及散布。
-- 散布修改過的 MPL 檔案時，該檔案及修改內容仍須依 MPL-2.0 提供原始碼。
-- 與方寸放在不同檔案中的獨立程式或服務，不會只因組合使用而自動改採 MPL。
-- MPL 不授予「方寸」、`FANGCUN`、Logo 或官方視覺的品牌使用權。
-
-這只是方便閱讀的摘要，實際權利與義務以 `LICENSE` 全文為準。
-
-## 第三方程式與字形資料
-
-本專案包含或使用：
-
-- `opentype.js`：MIT License。
-- GlyphWiki 字形資料：GlyphWiki Data and Article Usage Licence。
-- Noto CJK、CNS11643／TW-Kai：只作開發校準參考，本發行包未包含其字型檔。
-- 官方 KAGE engine：只作開發比對參考，本發行包未包含 GPL 程式碼。
-
-完整資訊請見 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 與 [`LICENSES/`](LICENSES/)。
-
-## 匯出字型的使用
-
-匯出的 OTF 安裝到電腦後，可在 Word、PowerPoint 等軟體中選用；也可在 Illustrator 中排版並轉成外框，成為可編輯的向量圖形。
-
-MPL-2.0 不會僅因使用方寸就自動套用到匯出的字型，但輸出內容若包含 GlyphWiki 資料或其他第三方素材，仍須遵守其來源條款。
-
-## 品牌政策
-
-「方寸」、「FANGCUN」、官方 Logo、App 圖示及宣傳視覺不包含在 MPL-2.0 的品牌授權中。非官方分支請使用不同名稱並清楚標示來源。詳見 [`TRADEMARKS.md`](TRADEMARKS.md)。
-
-## 發行前檢查
-
-- 保留 `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`。
-- 保留 `index.html` 中 opentype.js 的 MIT 聲明。
-- 新增第三方套件或字形來源時更新授權清單。
-- 若未來直接內嵌 GPL 的官方 KAGE engine，先重新評估整體授權。
-
-## 作者
-
-DBeast  
-https://github.com/beastt1992
+> ⚠️ Before release, every value marked `[VERIFY]` or `[FILL]` below should be checked against the current generator and dataset.
 
 ---
 
-本專案仍在開發階段。字形完整度、標點、字距與不同作業系統的字型相容性仍需要持續測試。
+## What makes FANGCUN different
+
+Most font files give you only the final result: outlines or pixels.
+
+FANGCUN keeps the **construction logic** visible:
+
+```text
+GlyphWiki / KAGE stroke skeletons
+        ↓
+FANGCUN parametric stroke renderer
+        ↓
+editable glyph outlines
+        ↓
+Boolean cleanup + visual guard
+        ↓
+SVG / OTF / dataset samples
+```
+
+Each generated dataset sample can keep both:
+
+- the **glyph output**
+- the **parameters that produced it**
+
+That makes FANGCUN useful not only as a type-design experiment, but also as a source of paired data for studying the relationship between glyph structure, style parameters, and visual output.
+
+---
+
+## Core ideas
+
+### Skeleton-based generation
+
+Glyphs are generated from stroke skeleton data rather than edited as thousands of unrelated final outlines.
+
+This makes it possible to apply shared design rules across a large Traditional Chinese character set while still allowing individual glyphs to be inspected and adjusted.
+
+### Parametric type design
+
+The renderer exposes multiple design axes. Examples include:
+
+| Axis | Example range | What it changes |
+|---|---:|---|
+| `weight` | 20–200 | stroke thickness |
+| `contrast` | 0.6–1.6 | horizontal vs. vertical stroke contrast |
+| `round` | 0–1 | corner rounding |
+| `taper` | 0–1.6 | how much strokes thin toward the end |
+| `hook` | 0–2 | hook-terminal length |
+| … | | |
+
+`[FILL]` Replace this table with the complete current axis list from the app.
+
+### Editable vector workflow
+
+FANGCUN is designed around vector geometry.
+
+Generated glyphs can be inspected as outlines, exported as SVG, or packaged into OTF fonts for use in normal design workflows. The skeleton remains useful as an editable representation before final outline generation.
+
+---
+
+## Dataset
+
+Synthetic Traditional Chinese glyphs generated from stroke skeletons by the FANGCUN parametric engine.
+
+Every sample can include the parameters that produced it as ground truth.
+
+### Why generate a dataset?
+
+Existing font datasets are constrained by the fonts that can be legally obtained and redistributed. Font files also usually provide only the final output, without a record of the design parameters that produced it.
+
+A generated dataset can provide:
+
+- style variation without requiring a separate source font for every sample
+- **generation parameters as ground truth**
+- **vector outlines**, not only raster images
+- repeatable regeneration when the renderer improves
+
+`[VERIFY]` Before claiming uniqueness, search current CJK/font-generation datasets. If similar datasets exist, use wording such as “one of the few” rather than “the first”.
+
+---
+
+## Dataset schema
+
+One sample per record:
+
+| Field | Type | Notes |
+|---|---|---|
+| `char` | string | character |
+| `codepoint` | int | Unicode code point |
+| `params` | dict[str, float] | generation parameters |
+| `svg_path` | string | SVG outline path data |
+| `image` | image | optional raster render — `[FILL: resolution]` |
+| `n_contours` | int | contour count |
+| `n_nodes` | int | node count |
+| `upem` | int | units per em (`1000`) |
+
+---
+
+## Generation pipeline
+
+```text
+GlyphWiki / KAGE stroke skeletons
+        ↓
+FANGCUN parametric stroke renderer
+        ↓
+raw outlines
+        ↓
+Boolean union + curve refit
+        ↓
+visual guard: reject cleanup that changes the raster beyond threshold
+        ↓
+SVG path / OTF
+```
+
+Generator: `[FILL: GitHub URL]`  
+Interactive app: `[FILL: app URL]`
+
+### Sampling strategy
+
+`[FILL]` Document the actual sampling strategy used by the released dataset:
+
+- Are parameters sampled uniformly?
+- Are samples based on fixed style presets plus random perturbation?
+- How many variants are generated per character?
+- Are extreme or degenerate parameter combinations excluded?
+
+Do not describe the dataset as uniformly sampled across the full design space unless that is actually how it is generated.
+
+---
+
+## Coverage and limitations
+
+FANGCUN is experimental software and a synthetic dataset, not a finished retail typeface family.
+
+### One underlying skeleton source
+
+The current skeletons come from GlyphWiki / KAGE data and are Mincho-oriented.
+
+The parameters can change **weight, contrast, roundness, stroke endings, corner treatment, brush pressure**, and other rendering characteristics, but they do not automatically provide a completely different underlying glyph architecture.
+
+This is useful for studying **style variation**, but should not be presented as broad structural diversity.
+
+### Character coverage
+
+| | CJK glyph coverage |
+|---|---:|
+| FANGCUN dataset | `[VERIFY: 13,148]` |
+| Noto Sans CJK TC | `[VERIFY: 30,285]` |
+
+The current dataset covers fewer characters than a large production CJK font. Its contribution is primarily **parametric style variation and editable generation**, not rare-character coverage.
+
+### Synthetic output
+
+Generated outlines are not the same thing as a professionally finished retail typeface.
+
+Even when contours are technically valid, type designers may still want to refine proportions, rhythm, spacing, local optical corrections, or individual glyph details.
+
+### Quality figures
+
+`[VERIFY]` Re-run these on the release build before publishing:
+
+- self-intersecting contours after cleanup: `[VERIFY]`
+- rasterisation difference introduced by cleanup: `[VERIFY]`
+- glyphs failing generation: `[VERIFY]`
+
+Keep these as measured values, not estimates.
+
+---
+
+## Intended uses
+
+Potential uses include:
+
+- parametric type-design research
+- font style transfer / style disentanglement
+- Chinese character generation research
+- data augmentation for OCR and handwriting recognition
+- studying relationships between stroke parameters and perceived style
+- vector glyph generation experiments
+- controllable typography interfaces
+
+### Out of scope
+
+- rare / missing character coverage
+- a substitute for professionally designed typefaces
+- guaranteed structural diversity across unrelated typeface architectures
+
+---
+
+## Licensing
+
+**Dataset:** `[FILL: final dataset licence]`
+
+**Generator:** MPL-2.0
+
+**Underlying glyph data:** derived from GlyphWiki.
+
+The current project notes state that GlyphWiki permits reuse, modification and redistribution of its glyph data, including use as source material for new fonts.
+
+⚠️ Before release, read the complete current GlyphWiki licence page and make sure this summary is accurate.
+
+Source: https://glyphwiki.org/wiki/GlyphWiki:データ・記事のライセンス
+
+> This README is not legal advice. If you plan to redistribute the dataset or use it commercially, review the original licences yourself.
+
+---
+
+## Citation
+
+```bibtex
+@misc{fangcun_dataset,
+  title  = {FANGCUN: A Parametric Traditional Chinese Glyph Dataset},
+  author = {[FILL]},
+  year   = {[FILL]},
+  url    = {[FILL]}
+}
+```
+
+---
+
+## Contact / feedback
+
+`[FILL: GitHub Issues / contact]`
+
+If you find a systematic defect in generated outlines, please open an issue. One advantage of a parametric generator is that a renderer-level fix can improve many glyphs at once, and the dataset can then be regenerated.
