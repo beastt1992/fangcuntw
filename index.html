@@ -8921,6 +8921,19 @@ const SC_POSTERS={
         "4|0|展":{s:.60,r:0},"4|1|場":{s:.60,r:0},"4|3|指":{s:.60,r:0},"4|4|標":{s:.60,r:0},
         "5|0|包":{s:.60,r:0},"5|1|裝":{s:.60,r:0},"5|3|標":{s:.60,r:0},"5|4|題":{s:.60,r:0}},
     off:{"0|0|永":[0,-.06],"0|1|春":[0,-.06]}},
+  /* ★ 規格表（v194）：一整頁同時出現多個字重 —— 這是別的範本做不到的，
+     因為它們整頁共用同一組軸值。這裡靠 axRow 逐列覆寫字重，
+     所以拉任何一根**其他**的軸（對比、圓角、出鋒…），整張表會一起變，
+     只有字重那一欄維持梯度。錄影拍的就是這個。 */
+  spec:{txt:"永春字型\n永春字型\n永春字型\n永春字型\n永春字型\n永春字型\n方寸",
+    canvas:"34",lay:"huge",dir:"h",align:"left",margin:.10,scale:.52,gx:-.02,gy:.16,
+    pal:"mo",col:"mono",blend:"normal",bg:"#0b0b0e",ink:"#f5f2ec",weight:100,round:.10,
+    /* 六級字重 ＋ 底部大字。列數與 trRow 的倍率是實機要微調的兩個數字：
+       行距由引擎依畫布與列數自己算，沙盒裡驗不了，模擬時八列會擠爆，所以先收到七列。 */
+    axRow:{0:{weight:26},1:{weight:52},2:{weight:80},3:{weight:112},
+           4:{weight:148},5:{weight:190}},
+    trRow:{6:{s:1.90,r:0}},
+    offRow:{6:[0,.10]}},
   magazine:{txt:"永春\n參數化中文字型工作室\n\n用骨架與參數\n設計整套繁體中文字型\n免費 開源 離線可用\n匯出 OTF 直接安裝",canvas:"34",lay:"huge",dir:"h",align:"left",margin:.20,scale:.74,gx:.10,gy:.16,pal:"mo",col:"mono",blend:"normal",bg:"#f7f3e9",ink:"#16130d",weight:60,round:0,
     /* 雜誌：刊頭兩個字放到兩倍、副標中、資訊行最小；刊頭刻意錯開一點 */
     tr:{"0|0|永":{s:2.05,r:0},"0|1|春":{s:2.05,r:0},
@@ -8955,6 +8968,22 @@ function scApplyPoster(k, withText){
   if(withText){
     if(p.tr)  for(const k in p.tr)  scTr[k]={...p.tr[k]};
     if(p.off) for(const k in p.off) scOff[k]=p.off[k].slice();
+    /* ★ 整列套用（v194）。逐字寫鍵值在字數一改就全對不上，
+       規格表有八列、每列四個字，用列來套才不會壞。
+       鍵值格式跟逐字調整完全一樣（列|欄|字），所以套完還是可以自己再拖再改。 */
+    if(typeof p.txt==="string" && (p.axRow||p.trRow||p.offRow)){
+      p.txt.split("\n").forEach((line,r)=>{
+        const ax=p.axRow&&p.axRow[r], tr=p.trRow&&p.trRow[r], of=p.offRow&&p.offRow[r];
+        if(!ax&&!tr&&!of) return;
+        [...line].forEach((ch,c)=>{
+          if(ch===" ") return;
+          const k=r+"|"+c+"|"+ch;
+          if(ax) scAxOvr[k]={...ax};
+          if(tr) scTr[k]={...tr};
+          if(of) scOff[k]=of.slice();
+        });
+      });
+    }
   }
   document.querySelectorAll("#scCanvas button").forEach(x=>x.classList.toggle("on",x.dataset.k===scCanvas));
   document.querySelectorAll("#scLayout button").forEach(x=>x.classList.toggle("on",x.dataset.k===scLay));
@@ -8974,7 +9003,7 @@ function scApplyPoster(k, withText){
    純文字按鈕看不出差別，要點過才知道。畫的是版面示意，不是真的排字
    （真的排字要跑整套引擎，六張縮圖會讓面板開啟明顯變慢）。 */
 const SC_POSTER_NAMES={minimal:"極簡海報",sign:"招牌標題",magazine:"雜誌版式",
-                       matrix:"字陣樣張",night:"夜市海報",vertical:"直排文青"};
+                       matrix:"字陣樣張",night:"夜市海報",vertical:"直排文青",spec:"字重規格表"};
 function scPosterThumb(p){
   const W=64,H=46;
   const bg=p.bg||"#f4f0e7", ink=p.ink||"#17130e";
