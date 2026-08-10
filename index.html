@@ -9089,7 +9089,12 @@ $("scPoster").addEventListener("click",e=>{
   const p=SC_POSTERS[b.dataset.poster];
   /* 有逐字大小／位移的模板一定要連文字帶入 ——
      那些設定是綁在「第幾列第幾欄的哪個字」上的，文字不同就完全對不上。 */
-  const needsText = !!(p && (p.tr || p.off));
+  /* ★ v194b：新增 axRow／trRow／offRow 之後忘了更新這一行 ——
+     規格表的字重梯度是綁在「第幾列第幾欄的哪個字」上的，
+     沒帶文字進來就整段跳過（那段在 scApplyPoster 的 if(withText) 裡），
+     實機症狀是「點了沒反應」：只換了底色，梯度沒出現。
+     加欄位就要回頭看這個守門，不然新範本會靜靜地失效。 */
+  const needsText = !!(p && (p.tr || p.off || p.axRow || p.trRow || p.offRow));
   const wantText = needsText || !!($("scPosterText") && $("scPosterText").checked);
   scApplyPoster(b.dataset.poster, wantText);
   /* 套用完就收起來，把畫面還給作品 */
