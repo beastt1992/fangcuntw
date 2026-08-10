@@ -6549,6 +6549,26 @@ function applyPreset(k){
   for(const ax of AXKEYS) if(F_DEFAULT[ax]!==undefined) F[ax]=F_DEFAULT[ax];
   Object.assign(F,pre);
 }
+/* ★★ v197：套預設要看「只調這個字」的模式。
+   實機回報：開了單字模式按預設，整版都變，而且剛調好的那個字反而被清掉。
+   原因是三個入口（展示頁預設列、座標盤縮圖、工作台預設列）都直接
+   `applyPreset(k)` 寫全域 F，然後還 `delete scAxOvr[scAxKey]` ——
+   跟使用者的預期正好相反。`$("scReset")` 是唯一寫對的，所以更容易讓人以為
+   模式有生效。
+   ★ 這種「有模式但某些動作不理它」的 bug 一定不只一處 —— 加任何會改全域軸的
+     入口，都要回頭走這個函式，不要再自己呼叫 applyPreset。 */
+function applyPresetScoped(k){
+  if(typeof scAxMode!=="undefined" && scAxMode && scAxKey){
+    /* 單字模式：整套寫進這個字的覆寫，全域完全不動。
+       用 presetFull 而不是 PRESETS[k]，缺的軸才會補出廠值 —— 直接讀 PRESETS
+       會讓沒列到的軸留在全域值，變成一半預設一半全域的混血。 */
+    scAxOvr[scAxKey]=presetFull(k);
+    return true;                 /* true＝只動了這個字 */
+  }
+  applyPreset(k);
+  if(typeof scAxOvr!=="undefined") scAxOvr={};   /* 全域換整套，單字設定一併清掉 */
+  return false;
+}
 /* ★ 取「補齊過的預設」。
    預設只列出它在意的軸 —— 18 個預設各缺 5~20 根（新加的軸只有五個書法預設有）。
    任何「遍歷預設的鍵」的程式碼都會踩到同一個坑：
@@ -7377,8 +7397,13 @@ function syncShowAxes(){
 document.querySelectorAll("#scPoster button").forEach(x=>x.classList.toggle("on",x.dataset.poster==="minimal"));
 $("presets").addEventListener("click",e=>{
   const b=e.target.closest("button[data-p]");if(!b)return;
-  applyPreset(b.dataset.p); presetKey=b.dataset.p;
-  document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x===b));
+  /* 工作台這一列以前完全沒看單字模式（見 applyPresetScoped 的說明） */
+  const one=applyPresetScoped(b.dataset.p);
+  if(!one){
+    presetKey=b.dataset.p;
+    document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x===b));
+  }
+  if(typeof scAxLabel==="function") try{ scAxLabel(); }catch(e){}
   syncShowAxes();
   if(MODE==="show") scDraw();
   else schedule();
@@ -10628,12 +10653,15 @@ function smapBuildThumbs(){
     b.innerHTML='<span class="t-g"></span><span class="t-n" data-pname="'+k+'">'+pn2+'</span>';
     b.classList.toggle("on",k===presetKey);
     b.addEventListener("click",()=>{
-      scCommit(); applyPreset(k); presetKey=k;
-      document.querySelectorAll("#smapThumbs button").forEach(x=>x.classList.toggle("on",x===b));
-      smapCenter(b);
-      document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
-      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];
-      syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+      scCommit();
+      const one=applyPresetScoped(k);
+      if(!one){
+        presetKey=k;
+        document.querySelectorAll("#smapThumbs button").forEach(x=>x.classList.toggle("on",x===b));
+        smapCenter(b);
+        document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
+      }
+      scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
     });
     box.appendChild(b);
   }
@@ -10787,13 +10815,13 @@ function scBuildPresets(){
     const pn=(typeof LANG!=="undefined"&&LANG==="en")?(PNAME_EN[k]||k):(PNAME[k]||k);
     b.innerHTML='<span class="pth-g"></span><span class="pth-n" data-pname="'+k+'">'+pn+'</span>';
     b.addEventListener("click",()=>{
-      applyPreset(k); presetKey=k;
-      /* 套預設＝整版換一套，每字的單獨設定要清掉，否則畫面不動 */
-      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey]; else scAxOvr={};
-      document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
-      document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
-      if(scAxMode&&scAxKey) delete scAxOvr[scAxKey];   /* 套預設＝回到全域，清掉這個字的單獨設定 */
-      syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
+      const one=applyPresetScoped(k);
+      if(!one){
+        presetKey=k;
+        document.querySelectorAll("#scPreset button").forEach(x=>x.classList.toggle("on",x===b));
+        document.querySelectorAll("#presets button").forEach(x=>x.classList.toggle("on",x.dataset.p===k));
+      }
+      scAxLabel(); syncShowAxes(); scDraw(); scheduleSlow(); saveLocal();
     });
     seg.appendChild(b);
   }
