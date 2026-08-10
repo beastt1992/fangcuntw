@@ -5486,6 +5486,24 @@ let MASTERS={};                 /* { 來源字形名: 母版字形名 } */
    3) 字尾太細的變體（u3687-jv）—— 一節一節剝掉，再退到 -t / 無字尾 / -j
    實測：96 次缺件 100% 補上，缺部件的字 96 → 0 */
 const FB_CACHE=new Map();
+/* ★★ v193：可以對應成「打得出來的字」的碼位範圍。
+   舊版寫死 0x3400–0x9FFF（基本多文種平面），所以擴充 B 區以上的字
+   **資料載得進去、但打不出來** —— 實機回報：閩語／客語外字、部分異體字都在那裡。
+   （粵語常用字大多在基本區，所以沒踩到。）
+
+   放寬之後要確認的三件事，都查過了：
+   ① `[...id].length===1` 用的是展開運算子，照**碼位**算，補充平面正確回 1 ✅
+   ② cmap 匯出本來就有 `runs.filter(r=>r.endC<=0xFFFF)` 給 format 4、
+      format 12 拿全部 —— 超出 BMP 的匯出路徑早就準備好了 ✅
+   ③ 字形名的正規表示式是 `[0-9a-f]{4,5}`，五位十六進位到 0xFFFFF，裝得下 ✅
+
+   範圍取聯集就好，中間的空隙本來就不會有字形資料。 */
+function cjkMappable(cp){
+  return (cp>=0x3400 && cp<=0x9FFF)     /* 擴充A ＋ 基本區 */
+      || (cp>=0xF900 && cp<=0xFAFF)     /* 相容漢字 */
+      || (cp>=0x20000 && cp<=0x323AF);  /* 擴充B～H ＋ 相容補充 */
+}
+
 function resolveFallback(id){
   if(G[id]) return id;
   if(FB_CACHE.has(id)) return FB_CACHE.get(id);
@@ -5509,7 +5527,7 @@ function resolveFallback(id){
       if(!hit) for(const c of [hex+"-t",hex,hex+"-j"]) if(G[c]){ hit=c; break; }
       if(!hit){
         const cp=parseInt(m[1],16);
-        if(cp>=0x3400&&cp<=0x9fff){ const ch=String.fromCodePoint(cp); if(G[ch]) hit=ch; }
+        if(cjkMappable(cp)){ const ch=String.fromCodePoint(cp); if(G[ch]) hit=ch; }
       }
     }
   }
@@ -7742,7 +7760,7 @@ async function loadPack(json,keepMine,quiet){
   let mapped=0,usedT=0;
   for(const name of names){
     const m=/^u([0-9a-f]{4,5})$/.exec(name); if(!m) continue;
-    const cp=parseInt(m[1],16); if(cp<0x3400||cp>0x9fff) continue;
+    const cp=parseInt(m[1],16); if(!cjkMappable(cp)) continue;
     const ch=String.fromCodePoint(cp);
     if(mine.has(ch)) continue;                       /* 只保留使用者自己調過的字 */
     const t=name+"-t";
