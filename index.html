@@ -6693,6 +6693,8 @@ $("mobilePaneNav").addEventListener("click",e=>{
 
 /* 匯入的 KAGE 原始資料 —— 它就是基準線，「還原」一律退回到這裡 */
 let PACKRAW=null;
+/* 載入字庫時「這個字用哪個字形」的決定，讀專案時要照著重放，不能重算 */
+let PACKMAP=null;
 /* 明確記錄改過哪些字，比每次深層比對 17,000 個字形快得多 */
 const EDITED=new Set();
 const isEdited=id=>EDITED.has(id);
@@ -6705,7 +6707,19 @@ function pristine(id){
       const cp=id.codePointAt(0);
       const nm="u"+cp.toString(16).toLowerCase();
       const t=nm+"-t";
-      const src = PACKRAW[t] ? t : (PACKRAW[nm] ? nm : null);
+      /* ★★★ 使用者回報：讀回專案檔之後「變成臺教標，骨架變爛」。
+         病因就在這一行。載入字庫時（loadPack）挑來源是看
+           G[t] ? t : G[nm]          ← -t 有沒有**轉換成功**
+         這裡卻是看
+           PACKRAW[t] ? t : PACKRAW[nm]   ← -t 在**原始資料**裡有沒有
+         `-t` 就是 GlyphWiki 的台灣／教育部標準字形。原始資料有、但轉換失敗的
+         那些字，載入時正確地退回 nm，讀專案時卻被改指到 t ——
+         於是整批字換成臺教標，甚至指到空字形（骨架變爛）。
+         正解：把載入當時的決定記在 PACKMAP，之後一律照它，不要重算。 */
+      const src = (PACKMAP && PACKMAP[id]) ? PACKMAP[id]
+                : ((G[t]&&(G[t].s||G[t].c)) ? t
+                : ((G[nm]&&(G[nm].s||G[nm].c)) ? nm
+                : (PACKRAW[t] ? t : (PACKRAW[nm] ? nm : null))));
       if(src) return {u:cp, c:[{r:src, box:[0,0,EM,EM]}]};
     }
     if(PACKRAW[id]){                           /* GlyphWiki 字形名 → 直接重轉 */
@@ -7098,6 +7112,12 @@ function snapshot(){
     const g=G[id],e={};
     if(g.s){e.s=g.s.map(st=>st.p); if(g.v)e.v=g.v;}
     if(g.c){e.c=g.c.map(p=>({box:p.box,v:p.v||null}));}
+    /* ★★ 舊格式只存「每一筆的座標」，而且是照索引寫回去的。
+       只要編輯改動過**結構**（筆數變了、組合字改成手繪、部件換過），
+       讀回來時 g.s／g.c 對不上就整段**靜靜地跳過** —— 使用者的工作直接消失。
+       full 存完整字形定義，讀回時直接換掉，結構怎麼變都救得回來。
+       舊欄位保留，舊檔仍然讀得進來。 */
+    e.full = JSON.parse(JSON.stringify({s:g.s, c:g.c, v:g.v, aw:g.aw, u:g.u}));
     edits[id]=e;
   }
   const ax={}; for(const k of AXKEYS) ax[k]=F[k];
@@ -7111,7 +7131,7 @@ function snapshot(){
     ovr:{...scOvr}, custom:{...scCustom}, off:{...scOff}, tr:{...scTr}, axovr:{...scAxOvr}
   };
   const spec=($("specIn")&&$("specIn").value)||"";
-  return {v:22,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,
+  return {v:23,family:FAMILY,latin:LATIN,axes:ax,preset:presetKey,
           masters:{...MASTERS},edits,show,spec};
 }
 function restore(data){
@@ -7121,9 +7141,25 @@ function restore(data){
   if(data.family!==undefined){FAMILY=data.family;const i=$("famIn");if(i)i.value=FAMILY;}
   if(data.latin!==undefined){LATIN=data.latin;const i=$("latIn");if(i)i.value=LATIN;}
   presetKey=data.preset||null;
-  for(const id of ALL) resetGlyph(id);
+  /* ★★ 只重置「需要重置的字」：現在被改過的 ＋ 這份專案要套用的。
+     舊版是 for(const id of ALL) resetGlyph(id) —— 把全部四萬多個字
+     全部走一次 pristine() 重建。那條路徑跟載入字庫時不同，
+     於是「讀一次專案」就會讓整個字庫悄悄變樣
+     （實測使用者回報：手繪部件 5959→5981、組合字 43451→43408）。
+     沒被碰過的字本來就該原封不動。 */
+  const need=new Set([...EDITED, ...Object.keys(data.edits||{})]);
+  for(const id of need) if(G[id]) resetGlyph(id);
   for(const id in (data.edits||{})){
     const e=data.edits[id],g=G[id]; if(!g) continue;
+    if(e.full){
+      /* 新格式：整個字形換掉，結構改過也救得回來 */
+      delete g.s; delete g.c; delete g.v;
+      if(e.full.s) g.s=JSON.parse(JSON.stringify(e.full.s));
+      if(e.full.c) g.c=JSON.parse(JSON.stringify(e.full.c));
+      if(e.full.v) g.v=e.full.v;
+      if(e.full.aw!==undefined) g.aw=e.full.aw;
+      continue;
+    }
     if(e.s&&g.s) e.s.forEach((p,i)=>{if(g.s[i])g.s[i].p=p;});
     if(e.v) g.v=e.v;
     if(e.c&&g.c) e.c.forEach((it,i)=>{
@@ -7771,7 +7807,7 @@ async function loadPack(json,keepMine,quiet){
   busy(true,"載入資料包","轉換 "+names.length.toLocaleString()+" 個字形…",0);
   KAGE_EXACT=true;
   const mine=new Set(keepMine ? [...EDITED] : []);
-  PACKRAW=pack;                    /* 這份原始資料就是新的基準線 */
+  PACKRAW=pack; PACKMAP={};        /* 這份原始資料就是新的基準線 */
   let ok=0,i=0;
   for(const name of names){
     const r=kageToGlyph(pack[name]);
@@ -7798,6 +7834,7 @@ async function loadPack(json,keepMine,quiet){
     const src=G[t]?t:(G[name]?name:null); if(!src) continue;
     if(src===t) usedT++;
     G[ch]={u:cp,c:[{r:src,box:[0,0,EM,EM]}]};
+    PACKMAP[ch]=src;                                 /* 記下決定，pristine 要照著走 */
     if(!ALL.includes(ch)) ALL.push(ch);
     mapped++;
   }
